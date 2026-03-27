@@ -38,4 +38,4 @@ RETRY_DELAY = 30
 REPORT_INTERVAL = 3600  # 1時間ごと
 
 # ターゲットテーブル名（空ならSpeed Baccaratを自動選択）
-TARGET_TABLE = os.getenv("TARGET_TABLE", "")
+TARGET_TABLE = os.getenv("TARGET_TABLE", "Japanese Baccarat")

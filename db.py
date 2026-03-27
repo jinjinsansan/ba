@@ -34,10 +34,28 @@ def init_db():
             created_at TEXT NOT NULL       -- ISO8601 JST
         );
 
+        CREATE TABLE IF NOT EXISTS shoes (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            table_name TEXT NOT NULL,
+            shoe_number INTEGER NOT NULL,
+            hand_count INTEGER NOT NULL,
+            player_count INTEGER NOT NULL,
+            banker_count INTEGER NOT NULL,
+            tie_count INTEGER NOT NULL,
+            result_sequence TEXT NOT NULL,   -- 例: PPBBPPBBBT
+            max_banker_streak INTEGER DEFAULT 0,
+            max_player_streak INTEGER DEFAULT 0,
+            started_at TEXT,
+            ended_at TEXT NOT NULL,
+            created_at TEXT NOT NULL
+        );
+
         CREATE INDEX IF NOT EXISTS idx_rounds_table ON rounds(table_name);
         CREATE INDEX IF NOT EXISTS idx_rounds_created ON rounds(created_at);
         CREATE INDEX IF NOT EXISTS idx_rounds_result ON rounds(result);
         CREATE UNIQUE INDEX IF NOT EXISTS idx_rounds_unique ON rounds(table_name, round_id);
+        CREATE INDEX IF NOT EXISTS idx_shoes_table ON shoes(table_name);
+        CREATE INDEX IF NOT EXISTS idx_shoes_created ON shoes(created_at);
     """)
     conn.commit()
     conn.close()
@@ -74,6 +92,45 @@ def insert_round(
         inserted = conn.total_changes > 0
         return inserted
     except sqlite3.IntegrityError:
+        return False
+    finally:
+        conn.close()
+
+
+def insert_shoe(summary: dict) -> bool:
+    """シューのサマリーを保存"""
+    now = datetime.now(JST).isoformat()
+    conn = get_connection()
+    try:
+        conn.execute(
+            """INSERT INTO shoes
+               (table_name, shoe_number, hand_count, player_count, banker_count,
+                tie_count, result_sequence, max_banker_streak, max_player_streak,
+                started_at, ended_at, created_at)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+            (
+                summary["table_name"],
+                summary["shoe_number"],
+                summary["hand_count"],
+                summary["player_count"],
+                summary["banker_count"],
+                summary["tie_count"],
+                summary["result_sequence"],
+                summary["max_banker_streak"],
+                summary["max_player_streak"],
+                summary.get("started_at", ""),
+                summary.get("ended_at", now),
+                now,
+            ),
+        )
+        conn.commit()
+        logger.info(
+            f"シュー #{summary['shoe_number']} 保存: "
+            f"{summary['hand_count']}ハンド {summary['result_sequence'][:20]}..."
+        )
+        return True
+    except Exception as e:
+        logger.error(f"シュー保存エラー: {e}")
         return False
     finally:
         conn.close()
