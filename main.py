@@ -1,0 +1,198 @@
+"""バカラモニター — メインエントリポイント
+
+Stake.com経由でEvolutionライブバカラのテーブルを24時間監視し、
+全ラウンドの結果（Player/Banker/Tie）をSQLiteに記録する。
+
+Usage:
+    python main.py                  # 通常起動
+    python main.py --stats          # 統計表示のみ
+    python main.py --dry            # Telegram通知なし
+    python main.py --table "Speed Baccarat A"  # テーブル指定
+"""
+import sys
+import time
+import signal
+import logging
+import argparse
+import threading
+
+import config
+from db import init_db, get_stats, get_streak, get_recent_results
+from scraper import BaccaratScraper
+from notify import TelegramNotifier
+
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s [%(name)s] %(levelname)s: %(message)s",
+    handlers=[
+        logging.StreamHandler(),
+        logging.FileHandler("baccarat.log", encoding="utf-8"),
+    ],
+)
+logger = logging.getLogger("baccarat")
+
+
+def show_stats():
+    """統計を表示して終了"""
+    init_db()
+    stats = get_stats(hours=24)
+    if stats["total"] == 0:
+        print("データがありません。")
+        return
+
+    streak = get_streak()
+    recent = get_recent_results(limit=20)
+
+    print("━━━ バカラモニター 24時間統計 ━━━")
+    print(f"\n📊 合計 {stats['total']} ラウンド")
+    print(f"  🔵 Player: {stats['player']:>4} ({stats['player_pct']}%)")
+    print(f"  🔴 Banker: {stats['banker']:>4} ({stats['banker_pct']}%)")
+    print(f"  🟢 Tie:    {stats['tie']:>4} ({stats['tie_pct']}%)")
+    print(f"  ペア: Player={stats['player_pair']} Banker={stats['banker_pair']}")
+    print(f"\n現在の連続: {streak['current']} × {streak['count']}")
+
+    print("\n直近20ラウンド:")
+    symbols = {"player": "🔵", "banker": "🔴", "tie": "🟢"}
+    row = ""
+    for r in reversed(recent):
+        row += symbols.get(r["result"], "?")
+    print(f"  {row}")
+
+
+def run_monitor(table: str = "", dry: bool = False):
+    """メイン監視ループ"""
+    init_db()
+
+    # Telegram
+    notifier = TelegramNotifier(
+        "" if dry else config.TELEGRAM_BOT_TOKEN,
+        "" if dry else config.TELEGRAM_CHAT_ID,
+    )
+
+    scraper = BaccaratScraper()
+    if table:
+        scraper.table_name = table
+
+    running = True
+
+    def shutdown(signum, frame):
+        nonlocal running
+        logger.info("停止シグナル受信...")
+        running = False
+
+    signal.signal(signal.SIGINT, shutdown)
+    signal.signal(signal.SIGTERM, shutdown)
+
+    # 起動
+    try:
+        scraper.start()
+    except Exception as e:
+        logger.error(f"起動失敗: {e}")
+        scraper.take_screenshot("startup_error")
+        scraper.stop()
+        return
+
+    # WebSocket傍受を設定
+    scraper.setup_ws_intercept()
+
+    notifier.notify_startup(scraper.table_name)
+    logger.info(f"監視開始: {scraper.table_name}")
+
+    last_report = time.time()
+    last_result_time = time.time()
+    no_result_warning = False
+    retry_count = 0
+
+    while running:
+        try:
+            # 1. WebSocket結果をチェック
+            ws_results = scraper.get_ws_results()
+            if ws_results:
+                new = scraper.process_results(ws_results)
+                if new > 0:
+                    last_result_time = time.time()
+                    no_result_warning = False
+
+            # 2. DOM結果をチェック（WSが取れない場合のフォールバック）
+            if time.time() - last_result_time > 120:  # 2分間WSから結果なし
+                try:
+                    dom_results = scraper.poll_dom_results()
+                    if dom_results:
+                        new = scraper.process_results(dom_results)
+                        if new > 0:
+                            last_result_time = time.time()
+                            logger.info("DOM経由で結果取得")
+                except Exception as e:
+                    logger.debug(f"DOMポーリングエラー: {e}")
+
+            # 3. 長時間結果なしの警告
+            elapsed = time.time() - last_result_time
+            if elapsed > 300 and not no_result_warning:  # 5分
+                logger.warning(f"5分間結果なし — テーブルが休止中またはセッション切れの可能性")
+                scraper.take_screenshot("no_results")
+                no_result_warning = True
+
+            # 4. セッション生存チェック
+            if elapsed > 600:  # 10分
+                if not scraper.is_alive():
+                    logger.error("セッション切れ — 再接続中...")
+                    retry_count += 1
+                    if retry_count > config.MAX_RETRIES:
+                        logger.error("最大リトライ回数超過 — 停止")
+                        notifier.notify_shutdown("最大リトライ超過")
+                        break
+
+                    scraper.stop()
+                    time.sleep(config.RETRY_DELAY)
+                    scraper = BaccaratScraper()
+                    if table:
+                        scraper.table_name = table
+                    scraper.start()
+                    scraper.setup_ws_intercept()
+                    last_result_time = time.time()
+                    no_result_warning = False
+                    logger.info(f"再接続成功 (retry {retry_count}/{config.MAX_RETRIES})")
+
+            # 5. 定期レポート
+            if time.time() - last_report >= config.REPORT_INTERVAL:
+                stats = get_stats(table_name=scraper.table_name, hours=24)
+                streak = get_streak(table_name=scraper.table_name)
+                notifier.notify_report(scraper.table_name, stats, streak)
+                last_report = time.time()
+
+                # ログにも出力
+                logger.info(
+                    f"レポート: {stats['total']}R "
+                    f"P={stats['player']}({stats['player_pct']}%) "
+                    f"B={stats['banker']}({stats['banker_pct']}%) "
+                    f"T={stats['tie']}({stats['tie_pct']}%)"
+                )
+
+            # ポーリング間隔
+            time.sleep(config.POLL_INTERVAL)
+
+        except KeyboardInterrupt:
+            break
+        except Exception as e:
+            logger.error(f"メインループエラー: {e}", exc_info=True)
+            time.sleep(10)
+
+    # 停止
+    logger.info("監視停止中...")
+    stats = get_stats(table_name=scraper.table_name, hours=24)
+    notifier.notify_shutdown(f"合計{stats['total']}ラウンド記録")
+    scraper.stop()
+    logger.info("完了")
+
+
+if __name__ == "__main__":
+    parser = argparse.ArgumentParser(description="バカラモニター")
+    parser.add_argument("--stats", action="store_true", help="統計表示のみ")
+    parser.add_argument("--dry", action="store_true", help="Telegram通知なし")
+    parser.add_argument("--table", default="", help="テーブル名指定")
+    args = parser.parse_args()
+
+    if args.stats:
+        show_stats()
+    else:
+        run_monitor(table=args.table, dry=args.dry)
