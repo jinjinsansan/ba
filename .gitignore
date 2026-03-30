@@ -9,3 +9,8 @@ dist/
 build/
 *.spec
 config.ini
+*_dumps/
+*_dumps*/
+inspect_*.py
+analyze_*.py
+parse_*.py
