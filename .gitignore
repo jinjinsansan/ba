@@ -5,3 +5,7 @@ __pycache__/
 *.pyc
 auth_state/
 screenshots/
+dist/
+build/
+*.spec
+config.ini

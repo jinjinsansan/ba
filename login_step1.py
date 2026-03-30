@@ -75,7 +75,19 @@ def wait_for_code_file(timeout: int = 300) -> str:
 def main(args):
     print("=== Stake.com ログイン (Camoufox) ===\n")
 
-    with Camoufox(headless=True) as browser:
+    # Windows Store版Python対応: realpathでCamoufox実行パスを解決
+    launch_opts = {"headless": True}
+    try:
+        from camoufox.pkgman import get_path, LAUNCH_FILE, OS_NAME
+        import os as _os
+        path = get_path(LAUNCH_FILE[OS_NAME])
+        real = _os.path.realpath(path)
+        if real != path and _os.path.isfile(real):
+            launch_opts["executable_path"] = real
+    except Exception:
+        pass
+
+    with Camoufox(**launch_opts) as browser:
         page = browser.new_page()
 
         # 1. Stake.comにアクセス

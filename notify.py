@@ -39,13 +39,7 @@ class TelegramNotifier:
         )
 
     def notify_shoe_complete(self, summary: dict):
-        """シュー終了時の通知 — メイン通知"""
-        seq = summary["result_sequence"]
-        # 出目を見やすく色付き絵文字に変換
-        display_seq = self._format_sequence(seq)
-
-        # バンカー連続の詳細
-        banker_streaks = self._get_banker_streak_detail(summary["result_sequence"])
+        """シュー終了時の通知 — メイン通知 + 分析結果"""
 
         msg = (
             f"━━━━━━━━━━━━━━━━━━━\n"
@@ -57,16 +51,42 @@ class TelegramNotifier:
             f"  🔵 Player: {summary['player_count']}\n"
             f"  🔴 Banker: {summary['banker_count']}\n"
             f"  🟢 Tie:    {summary['tie_count']}\n"
-            f"\n"
-            f"📝 出目:\n"
-            f"  {display_seq}\n"
-            f"\n"
-            f"🔥 バンカー最大連続: {summary['max_banker_streak']}回\n"
-            f"⚡ プレイヤー最大連続: {summary['max_player_streak']}回\n"
         )
 
-        if banker_streaks:
-            msg += f"\n📈 バンカー連続詳細:\n{banker_streaks}\n"
+        # 規則性判定
+        regularity = summary.get("regularity", "")
+        reg_score = summary.get("regularity_score", 0)
+        if regularity:
+            reg_emoji = "✅" if regularity == "規則性" else "⚠️"
+            msg += (
+                f"\n{reg_emoji} 判定: {regularity} (スコア: {reg_score})\n"
+            )
+
+        # パターン分析
+        patterns = summary.get("pattern_breakdown", {})
+        dominant = summary.get("dominant_pattern", "")
+        if patterns:
+            msg += f"📋 パターン分析:\n"
+            for name, pct in sorted(patterns.items(), key=lambda x: -x[1]):
+                bar = "█" * (pct // 10)
+                marker = " ◀" if name == dominant else ""
+                msg += f"  {name}: {pct}% {bar}{marker}\n"
+
+        # 流れ分割
+        flow_type = summary.get("flow_type", "")
+        if flow_type:
+            msg += f"🔄 流れ: {flow_type}\n"
+
+        # 出目順
+        seq = summary.get("result_sequence", "")
+        if seq:
+            display_seq = self._format_sequence(seq)
+            msg += f"\n📝 出目:\n  {display_seq}\n"
+
+        msg += (
+            f"\n🔥 B最大連続: {summary['max_banker_streak']}回\n"
+            f"⚡ P最大連続: {summary['max_player_streak']}回\n"
+        )
 
         msg += f"━━━━━━━━━━━━━━━━━━━"
 
@@ -132,3 +152,66 @@ class TelegramNotifier:
             streaks.append(f"  Hand {start_pos}〜: {current}連続🔴")
 
         return "\n".join(streaks) if streaks else ""
+
+    # === BET通知 ===
+
+    def notify_bet_placed(self, bet_info: dict):
+        """BET実行通知"""
+        side_emoji = "🔵" if bet_info["side"] == "player" else "🔴"
+        side_name = "Player" if bet_info["side"] == "player" else "Banker"
+        self.send(
+            f"🎯 BET実行\n"
+            f"📍 {bet_info.get('table_name', '')}\n"
+            f"{side_emoji} {side_name} ${bet_info.get('amount', 0):.2f}\n"
+            f"📋 {bet_info.get('reason', '')}\n"
+            f"📊 規則性: {bet_info.get('regularity_score', 0)}"
+        )
+
+    def notify_bet_result(self, bet_result: dict):
+        """BET結果通知"""
+        result = bet_result.get("result", "")
+        profit = bet_result.get("profit", 0)
+        emoji = "✅" if result == "win" else "❌" if result == "lose" else "➖"
+        self.send(
+            f"{emoji} BET結果: {result.upper()}\n"
+            f"📍 {bet_result.get('table_name', '')}\n"
+            f"💰 収支: ${profit:+.2f}\n"
+            f"📊 累計: ${bet_result.get('cumulative_profit', 0):+.2f}"
+        )
+
+    def notify_session_summary(self, session: dict):
+        """セッション収支通知"""
+        self.send(
+            f"━━━━━━━━━━━━━━━━━━━\n"
+            f"💰 BETレポート\n"
+            f"━━━━━━━━━━━━━━━━━━━\n"
+            f"\n"
+            f"📊 セッション結果\n"
+            f"  BET回数: {session.get('total_bets', 0)}\n"
+            f"  勝ち: {session.get('wins', 0)} "
+            f"({session.get('win_rate', 0):.1f}%)\n"
+            f"  負け: {session.get('losses', 0)}\n"
+            f"  収支: ${session.get('total_profit', 0):+.2f}\n"
+            f"\n"
+            f"🎯 戦略: {session.get('strategy', '')}\n"
+            f"\n"
+            f"💵 資金状況\n"
+            f"  開始: ${session.get('starting_balance', 0):.2f}\n"
+            f"  現在: ${session.get('ending_balance', 0):.2f}\n"
+            f"━━━━━━━━━━━━━━━━━━━"
+        )
+
+    def notify_daily_limit(self, limit_type: str, amount: float):
+        """日次制限到達通知"""
+        if limit_type == "loss":
+            self.send(
+                f"🛑 日次損失上限到達\n"
+                f"損失額: ${abs(amount):.2f}\n"
+                f"自動停止します"
+            )
+        elif limit_type == "profit":
+            self.send(
+                f"🎉 日次利益目標達成\n"
+                f"利益額: ${amount:.2f}\n"
+                f"自動停止します"
+            )

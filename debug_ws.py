@@ -100,7 +100,18 @@ def main():
     init_db()
 
     logger.info("Camoufox起動中...")
-    with Camoufox(headless=True) as browser:
+    # Windows Store版Python対応
+    launch_opts = {"headless": True}
+    try:
+        from camoufox.pkgman import get_path, LAUNCH_FILE, OS_NAME
+        path = get_path(LAUNCH_FILE[OS_NAME])
+        real = os.path.realpath(path)
+        if real != path and os.path.isfile(real):
+            launch_opts["executable_path"] = real
+    except Exception:
+        pass
+
+    with Camoufox(**launch_opts) as browser:
         page = browser.new_page()
 
         # Cookie復元
