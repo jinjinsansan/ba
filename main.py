@@ -157,7 +157,7 @@ def run_monitor(table: str = "", dry: bool = False, bet_mode: bool = False, dry_
         executor_config = dict(config.EXECUTOR_CONFIG)
         if dry_bet:
             executor_config["demo_mode"] = True
-        executor = BetExecutor(scraper.page, humanizer, executor_config)
+        executor = BetExecutor(scraper.page, executor_config)
         session_id = start_session(0.0)
 
     # WebSocket傍受を設定
@@ -274,14 +274,7 @@ def run_monitor(table: str = "", dry: bool = False, bet_mode: bool = False, dry_
                     tname = scraper._target_table_names.get(tid, tid)
                     logger.info(f"BET対象テーブル発見: {tname} - {bet_info['reason']}")
 
-                    # テーブル入場 (sync wrapper for async)
-                    import asyncio
-                    loop = asyncio.new_event_loop()
-                    try:
-                        entered = loop.run_until_complete(executor.enter_table(tid, tname))
-                    finally:
-                        loop.close()
-
+                    entered = executor.enter_table(tid, tname)
                     if not entered:
                         continue
 
@@ -292,11 +285,7 @@ def run_monitor(table: str = "", dry: bool = False, bet_mode: bool = False, dry_
 
                     # BETスキップ判断
                     if humanizer and humanizer.should_skip_bet():
-                        loop = asyncio.new_event_loop()
-                        try:
-                            loop.run_until_complete(executor.exit_table())
-                        finally:
-                            loop.close()
+                        executor.exit_table()
                         continue
 
                     # BET額決定
@@ -306,13 +295,7 @@ def run_monitor(table: str = "", dry: bool = False, bet_mode: bool = False, dry_
                     bet_amount = max(config.BET_MIN, min(config.BET_MAX, bet_amount))
 
                     # BET実行
-                    loop = asyncio.new_event_loop()
-                    try:
-                        bet_placed = loop.run_until_complete(
-                            executor.place_bet(bet_info["side"], bet_amount)
-                        )
-                    finally:
-                        loop.close()
+                    bet_placed = executor.place_bet(bet_info["side"], bet_amount)
 
                     if bet_placed:
                         logger.info(f"BET実行: {bet_info['side']} ${bet_amount:.2f}")
@@ -344,15 +327,9 @@ def run_monitor(table: str = "", dry: bool = False, bet_mode: bool = False, dry_
 
                         # デモモードでは仮想結果を判定
                         if dry_bet or executor.demo_mode:
-                            # 次のWS結果を待って判定 (同期的にはできないのでスキップ)
                             logger.info("[DEMO] BET記録完了 — 結果は次のWS更新で判定")
                         else:
-                            # 結果待ち
-                            loop = asyncio.new_event_loop()
-                            try:
-                                result = loop.run_until_complete(executor.wait_for_result(60))
-                            finally:
-                                loop.close()
+                            result = executor.wait_for_result(60)
 
                             if result and bet_id:
                                 if result == "tie":
@@ -388,11 +365,7 @@ def run_monitor(table: str = "", dry: bool = False, bet_mode: bool = False, dry_
 
                     # テーブル退出
                     if executor.should_leave_table(executor.shoes_at_table):
-                        loop = asyncio.new_event_loop()
-                        try:
-                            loop.run_until_complete(executor.exit_table())
-                        finally:
-                            loop.close()
+                        executor.exit_table()
                     break  # 1テーブルずつ
 
             # 3. シュー完了チェック（タイムアウトベース — 全テーブル）
@@ -447,7 +420,7 @@ def run_monitor(table: str = "", dry: bool = False, bet_mode: bool = False, dry_
                         executor_config = dict(config.EXECUTOR_CONFIG)
                         if dry_bet:
                             executor_config["demo_mode"] = True
-                        executor = BetExecutor(scraper.page, humanizer, executor_config)
+                        executor = BetExecutor(scraper.page, executor_config)
 
                     shoes.clear()
                     for tid in scraper._target_table_ids:
