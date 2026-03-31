@@ -54,6 +54,10 @@ class BaccaratScraper:
         self._last_ws_message_time: float = 0.0
         self._consecutive_reload_fails: int = 0
 
+        # ゲーム内WS監視
+        from game_ws import GameWSMonitor
+        self.game_ws = GameWSMonitor()
+
         # マルチテーブル監視
         self._target_table_ids: set[str] = set()  # 監視対象テーブルID群
         self._target_table_names: dict[str, str] = {}  # table_id → table_name
@@ -128,52 +132,60 @@ class BaccaratScraper:
             logger.info("すでにログイン済み")
             return
 
-        # ログインフォームを開く
+        # ログインフォームを開く (JSクリック — Playwright click()はStakeボタンでタイムアウトするため)
         logger.info("ログインフォームを開く...")
         try:
-            login_link = self.page.locator(
-                'a:has-text("Login"), '
-                'button:has-text("Login"), '
-                'a:has-text("Sign in"), '
-                'button:has-text("Sign in"), '
-                'a:has-text("Sign In"), '
-                'button:has-text("Sign In")'
-            )
-            if login_link.count() > 0:
-                login_link.first.click()
-                time.sleep(3)
+            self.page.evaluate("""() => {
+                const btn = document.querySelector('[data-testid="login-link"]');
+                if (btn) { btn.click(); return true; }
+                const els = Array.from(document.querySelectorAll('button, a'));
+                for (const el of els) {
+                    if (/sign.?in|log.?in/i.test(el.textContent)) { el.click(); return true; }
+                }
+                return false;
+            }""")
+            time.sleep(3)
         except Exception as e:
             logger.warning(f"ログインリンク検索: {e}")
 
         # メールアドレス入力
+        # 認証情報を入力 (全てJS + keyboard — Playwright click/fillはStake.comでタイムアウトする)
         logger.info("認証情報を入力中...")
-        email_input = self.page.locator(
-            'input[name="email"], input[type="email"], '
-            'input[placeholder*="mail" i], input[placeholder*="Email"]'
-        )
-        if email_input.count() > 0:
-            email_input.first.fill(config.STAKE_USERNAME)
-        else:
-            inputs = self.page.locator('input[type="text"], input:not([type])')
-            if inputs.count() > 0:
-                inputs.first.fill(config.STAKE_USERNAME)
+
+        # Google One Tapポップアップ除去
+        self.page.evaluate("""() => {
+            document.querySelectorAll('iframe[src*="google"]').forEach(f => f.remove());
+            document.querySelectorAll('#credential_picker_container').forEach(d => d.remove());
+        }""")
         time.sleep(0.5)
 
-        # パスワード入力
-        pw_input = self.page.locator('input[type="password"]')
-        if pw_input.count() > 0:
-            pw_input.first.fill(config.STAKE_PASSWORD)
+        # Email入力
+        self.page.evaluate("""() => {
+            const el = document.querySelector('input[name="emailOrName"], input[name="email"], input[type="email"]');
+            if (el) { el.focus(); el.click(); }
+        }""")
+        time.sleep(0.3)
+        self.page.keyboard.type(config.STAKE_USERNAME, delay=30)
         time.sleep(0.5)
 
-        # ログインボタン送信
-        submit = self.page.locator(
-            'button[type="submit"], '
-            'button:has-text("Sign in"), '
-            'button:has-text("Log in"), '
-            'button:has-text("Login")'
-        )
-        if submit.count() > 0:
-            submit.first.click()
+        # Tab → パスワード入力
+        self.page.keyboard.press("Tab")
+        time.sleep(0.3)
+        self.page.keyboard.type(config.STAKE_PASSWORD, delay=30)
+        time.sleep(0.5)
+
+        # ログインボタン送信 (JSクリック)
+        self.page.evaluate("""() => {
+            const btn = document.querySelector('button[type="submit"], [data-testid="button-login"]');
+            if (btn) { btn.click(); return true; }
+            const els = Array.from(document.querySelectorAll('button'));
+            for (const el of els) {
+                if (/sign.?in|log.?in/i.test(el.textContent) && el.type !== 'button') {
+                    el.click(); return true;
+                }
+            }
+            return false;
+        }""")
         time.sleep(5)
 
         # Email Code（2FA）
@@ -216,13 +228,11 @@ class BaccaratScraper:
         code_input.first.fill(email_code)
         time.sleep(0.5)
 
-        submit = self.page.locator(
-            'button:has-text("Sign in"), '
-            'button:has-text("Sign In"), '
-            'button[type="submit"]'
-        )
-        if submit.count() > 0:
-            submit.first.click()
+        self.page.evaluate("""() => {
+            const btn = document.querySelector('button[type="submit"], [data-testid="button-login"]');
+            if (btn) { btn.click(); return true; }
+            return false;
+        }""")
         time.sleep(8)
 
     def _save_cookies(self):
@@ -239,13 +249,11 @@ class BaccaratScraper:
     def _is_logged_in(self) -> bool:
         """ログイン状態を確認"""
         try:
-            indicators = self.page.locator(
-                '[data-test="balance"], '
-                'button:has-text("Wallet"), '
-                '[class*="balance"], '
-                '[class*="user-menu"]'
-            )
-            return indicators.count() > 0
+            return self.page.evaluate("""() => {
+                const body = document.body.innerText;
+                if (/wallet/i.test(body) && /\\d+\\.\\d{2,}/.test(body)) return true;
+                return !!document.querySelector('[data-test="balance"], [class*="wallet"], [data-testid="user-menu"], [data-testid="balance"]');
+            }""")
         except Exception:
             return False
 
@@ -277,10 +285,16 @@ class BaccaratScraper:
 
         def on_ws(ws: WebSocket):
             url = ws.url
-            logger.info(f"WebSocket接続検出: {url[:120]}")
+            # EvolutionロビーWSのみ対象 (chat/tableは除外)
+            is_evo = "evo-games.com" in url or "evolution" in url.lower()
+            is_lobby = "lobby/socket" in url
+            is_chat = "chat/table" in url
 
-            # EvolutionロビーWSのみ対象
-            if "evo-games.com" in url or "evolution" in url.lower():
+            if not is_evo:
+                logger.info(f"WebSocket接続検出: {url[:120]}")
+
+            if is_evo and is_lobby:
+                # ロビーWS — 履歴データ処理
                 logger.info(f"✅ EvolutionロビーWS検出: {url[:120]}")
                 self._evo_ws_connected = True
 
@@ -300,6 +314,16 @@ class BaccaratScraper:
                 ws.on("framereceived", on_message)
                 ws.on("framesent", on_sent)
                 ws.on("close", on_close)
+
+            elif is_evo and not is_chat:
+                # ゲーム内WS — game_wsモニターにメッセージ転送 + サイレンス判定更新
+                def _forward_to_game_ws(data):
+                    self._last_ws_message_time = time.time()
+                    raw = data if isinstance(data, str) else str(data)
+                    self.game_ws.on_ws_message(raw)
+
+                ws.on("framesent", _forward_to_game_ws)
+                ws.on("framereceived", _forward_to_game_ws)
 
         self.page.on("websocket", on_ws)
         logger.info("WebSocket傍受設定完了")
@@ -368,8 +392,6 @@ class BaccaratScraper:
                 baccarat_tables.append(f"{title} ({table_id})")
 
         logger.info(f"Evolutionバカラテーブル: {len(baccarat_tables)}件検出")
-        for t in baccarat_tables[:20]:
-            logger.debug(f"  {t}")
 
         # ターゲットテーブルIDを決定
         self._resolve_target_table()
@@ -383,38 +405,40 @@ class BaccaratScraper:
                 self._evo_table_configs[table_id] = cfg
 
     def _resolve_target_table(self):
-        """ターゲットテーブルを解決 — Japanese系は全テーブルをマッチ"""
+        """ターゲットテーブルを解決。
+
+        table_name が空 or "all" → 全バカラテーブル (Salon Prive除外)
+        それ以外 → 名前フィルタ
+        """
         target_name = self.table_name.lower().strip()
+        match_all = not target_name or target_name == "all"
         self._target_table_ids.clear()
         self._target_table_names.clear()
+
+        EXCLUDE = ("salon", "prive", "first person", "rng",
+                   "lightning", "prosperity", "golden wealth",
+                   "peek", "control squeeze", "no commission")
 
         for tid, cfg in self._evo_table_configs.items():
             title = cfg.get("title", "")
             title_lower = title.lower()
 
-            # Japanese系テーブルを全てマッチ
-            if target_name and all(w in title_lower for w in target_name.split()):
+            if any(ex in title_lower for ex in EXCLUDE):
+                continue
+
+            if match_all or all(w in title_lower for w in target_name.split()):
                 self._target_table_ids.add(tid)
                 self._target_table_names[tid] = title
                 if tid not in self._shoe_epochs:
                     self._shoe_epochs[tid] = int(time.time())
                     self._new_shoe_signals[tid] = False
 
-        # 後方互換: 最初のテーブルを代表として設定
         if self._target_table_ids:
             first_id = next(iter(self._target_table_ids))
             self._target_table_id = first_id
-            logger.info(
-                f"ターゲットテーブル {len(self._target_table_ids)}件マッチ: "
-                + ", ".join(
-                    f"{self._target_table_names[t]} ({t})"
-                    for t in sorted(self._target_table_ids)
-                )
-            )
+            logger.info(f"監視テーブル: {len(self._target_table_ids)}件 (全バカラ, Salon Prive除外)")
         else:
-            logger.warning(f"ターゲットテーブル '{self.table_name}' が見つかりません")
-            for tid, cfg in list(self._evo_table_configs.items())[:10]:
-                logger.info(f"  利用可能: {cfg.get('title', tid)} ({tid})")
+            logger.warning(f"テーブルが見つかりません (フィルタ: '{self.table_name}')")
 
     def _process_histories(self, args: dict):
         """lobby.histories → 全ターゲットテーブルの差分チェック"""
@@ -514,6 +538,7 @@ class BaccaratScraper:
 
     def _parse_evo_bead_entry(self, entry: dict | str, table_id: str) -> dict | None:
         """Evolution Big Road/BeadのエントリからResult情報を抽出"""
+        tname = self._target_table_names.get(table_id, table_id)
         # BacBo形式（文字列リスト）
         if isinstance(entry, str):
             mapping = {"player": "player", "banker": "banker", "tie": "tie"}
@@ -522,6 +547,8 @@ class BaccaratScraper:
                 return {
                     "round_id": f"evo_{table_id}_{int(time.time()*1000)}",
                     "result": result,
+                    "table_id": table_id,
+                    "table_name": tname,
                     "player_score": None,
                     "banker_score": None,
                     "player_pair": False,
@@ -535,7 +562,6 @@ class BaccaratScraper:
         pos = entry.get("pos", [0, 0])
 
         shoe_epoch = self._shoe_epochs.get(table_id, int(time.time()))
-        tname = self._target_table_names.get(table_id, table_id)
 
         # Tie更新の場合 — 結果を "tie" として返す
         if entry.get("_is_tie_update"):

@@ -35,17 +35,29 @@ from strategy import BetStrategy
 from humanize import Humanizer
 from executor import BetExecutor
 
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s [%(name)s] %(levelname)s: %(message)s",
-    handlers=[
-        logging.StreamHandler(),
-        logging.FileHandler(
-            os.path.join(os.path.dirname(os.path.abspath(__file__)), "baccarat.log"),
-            encoding="utf-8",
-        ),
-    ],
+import io
+
+# コンソール (PowerShell) — UTF-8強制
+_console = logging.StreamHandler(
+    stream=io.TextIOWrapper(sys.stdout.buffer, encoding="utf-8", errors="replace")
 )
+_console.setFormatter(logging.Formatter("%(asctime)s %(message)s", datefmt="%H:%M:%S"))
+
+# ファイル — 全ログ
+_file = logging.FileHandler(
+    os.path.join(os.path.dirname(os.path.abspath(__file__)), "baccarat.log"),
+    encoding="utf-8",
+)
+_file.setFormatter(logging.Formatter("%(asctime)s [%(name)s] %(levelname)s: %(message)s"))
+
+logging.basicConfig(level=logging.INFO, handlers=[_console, _file])
+
+# scraper内部の詳細ログ (Round #N, 履歴ロード等) はファイルのみ
+logging.getLogger("baccarat.scraper").handlers = [_file]
+logging.getLogger("baccarat.scraper").propagate = False
+logging.getLogger("baccarat.game_ws").handlers = [_file]
+logging.getLogger("baccarat.game_ws").propagate = False
+
 logger = logging.getLogger("baccarat")
 
 
@@ -76,6 +88,122 @@ def show_stats():
     print(f"  {row}")
 
 
+def _run_table_session(
+    executor, strategy, shoe, tid, tname,
+    notifier, config_mod, stats, dry_bet, running_flag,
+):
+    """テーブル内で1-2-3打法を実行。
+
+    フロー:
+      1. BETフェーズ待機 (WS)
+      2. BET実行
+      3. 結果待ち (WS)
+      4. 勝敗判定 → 1-2-3打法更新
+      5. 条件が続けば次ラウンドへ、なければ終了
+    """
+    MAX_ROUNDS = 10
+
+    for round_num in range(1, MAX_ROUNDS + 1):
+        if not running_flag():
+            break
+
+        # BET額 (1-2-3打法)
+        bet_amount = strategy.current_bet_amount
+        bet_amount = max(config_mod.BET_MIN, min(config_mod.BET_MAX, bet_amount))
+        side = "player"
+        level = strategy.get_status()["bet_level"]
+
+        # BETフェーズを待つ
+        if not executor.wait_for_betting_phase(timeout=60):
+            logger.warning("BETフェーズに入れません — テーブル退出")
+            break
+
+        # BET実行
+        if not executor.place_bet(side, bet_amount):
+            logger.warning("BET失敗 — テーブル退出")
+            break
+
+        # DB記録
+        bet_id = insert_bet(
+            table_name=tname, table_id=tid,
+            shoe_number=shoe.shoe_number, hand_number=shoe.hand_count,
+            bet_side=side, bet_amount=bet_amount,
+            strategy_name="player_3dan",
+            strategy_reason=f"1-2-3打法 {level}回目",
+            regularity_score=0,
+        )
+        stats["total_bets"] += 1
+
+        if dry_bet or executor.demo_mode:
+            logger.info("[DEMO] BET記録完了")
+            break
+
+        # 結果待ち
+        result_info = executor.wait_for_result(timeout=90)
+        if not result_info or not result_info.get("result"):
+            logger.warning("結果取得失敗 — テーブル退出")
+            break
+
+        result = result_info["result"]
+        balance = result_info.get("balance", 0)
+        shoe.add_result(result)
+
+        # 勝敗判定
+        if result == "tie":
+            outcome = "tie"
+            profit = 0.0
+        elif result == side:
+            outcome = "win"
+            profit = bet_amount
+        else:
+            outcome = "lose"
+            profit = -bet_amount
+
+        if bet_id:
+            update_bet_result(bet_id, outcome, profit)
+        stats["total_profit"] += profit
+        if outcome == "win":
+            stats["wins"] += 1
+        elif outcome == "lose":
+            stats["losses"] += 1
+
+        # ログ (友人BOTスタイル)
+        outcome_jp = {"win": "勝利!", "lose": "負け", "tie": "TIE (引き分け)"}[outcome]
+        logger.info(f"結果: {outcome_jp} 収支: ${profit:+.0f} 残高: ${balance:.2f}")
+
+        if config_mod.NOTIFY_EVERY_BET:
+            notifier.notify_bet_result({
+                "result": outcome, "profit": profit,
+                "table_name": tname, "cumulative_profit": stats["total_profit"],
+            })
+
+        # 1-2-3打法更新
+        if outcome == "tie":
+            logger.info("TIE → 同額で再BET")
+            continue
+        elif outcome == "win":
+            strategy.record_result(True)
+        else:
+            strategy.record_result(False)
+
+        # 1-2-3打法が継続中なら同じテーブルで次のBET
+        status = strategy.get_status()
+        if status["bet_level"] > 1:
+            # まだ2回目 or 3回目が残っている → 同テーブルで続行
+            next_amount = strategy.current_bet_amount
+            logger.info(f"次: ${next_amount:.0f} BET (1-2-3: {status['bet_level']}回目)")
+            continue
+        else:
+            # 1-2-3打法リセット済み or 1回目に戻った → テーブル退出
+            logger.info("1-2-3打法完了 → テーブル退出")
+            break
+
+    logger.info(
+        f"テーブルセッション終了: {stats['total_bets']}BET "
+        f"累計${stats['total_profit']:+.2f}"
+    )
+
+
 def _handle_shoe_complete(shoe: ShoeTracker, notifier: TelegramNotifier):
     """シュー完了時の処理: DB保存 + Telegram通知"""
     if shoe.hand_count == 0:
@@ -89,12 +217,9 @@ def _handle_shoe_complete(shoe: ShoeTracker, notifier: TelegramNotifier):
     # Telegram通知
     notifier.notify_shoe_complete(summary)
 
-    logger.info(
-        f"シュー #{summary['shoe_number']} 完了: "
-        f"{summary['hand_count']}ハンド "
-        f"P={summary['player_count']} B={summary['banker_count']} T={summary['tie_count']} "
-        f"出目={summary['result_sequence'][:30]}... "
-        f"B最大連続={summary['max_banker_streak']}"
+    logging.getLogger("baccarat.scraper").info(
+        f"シュー #{summary['shoe_number']} 完了: {summary['table_name']} "
+        f"{summary['hand_count']}手 P={summary['player_count']} B={summary['banker_count']} T={summary['tie_count']}"
     )
 
 
@@ -102,15 +227,14 @@ def run_monitor(table: str = "", dry: bool = False, bet_mode: bool = False, dry_
     """メイン監視ループ (BETモード対応)"""
     init_db()
 
-    # Telegram
-    notifier = TelegramNotifier(
-        "" if dry else config.TELEGRAM_BOT_TOKEN,
-        "" if dry else config.TELEGRAM_CHAT_ID,
-    )
+    # Telegram (BETモードでは通知無効)
+    if is_betting or dry:
+        notifier = TelegramNotifier("", "")
+    else:
+        notifier = TelegramNotifier(config.TELEGRAM_BOT_TOKEN, config.TELEGRAM_CHAT_ID)
 
     scraper = BaccaratScraper()
-    if table:
-        scraper.table_name = table
+    scraper.table_name = table if table else "all"
 
     # BET関連の初期化
     is_betting = bet_mode or dry_bet
@@ -129,16 +253,26 @@ def run_monitor(table: str = "", dry: bool = False, bet_mode: bool = False, dry_
         executor_config = dict(config.EXECUTOR_CONFIG)
         if dry_bet:
             executor_config["demo_mode"] = True
+        elif bet_mode:
+            executor_config["demo_mode"] = False
 
-        logger.info(f"BETモード: {'DEMO' if dry_bet or executor_config.get('demo_mode') else 'LIVE'}")
-        logger.info(f"戦略: {config.BET_STRATEGY}, 最低規則性: {config.STRATEGY_CONFIG.get('min_regularity_score', 60)}")
+        logger.info(f"BETモード: {'DEMO' if executor_config.get('demo_mode') else 'LIVE'}")
+        logger.info(f"戦略: {config.BET_STRATEGY}, P2連続以上でBET")
 
     running = True
+    _shutdown_count = 0
 
     def shutdown(signum, frame):
-        nonlocal running
-        logger.info("停止シグナル受信...")
+        nonlocal running, _shutdown_count
+        _shutdown_count += 1
+        import traceback
+        logger.info(f"停止シグナル受信 (signum={signum}, count={_shutdown_count})")
+        logger.info(f"  呼び出し元: {''.join(traceback.format_stack(frame, limit=3))}")
         running = False
+        if _shutdown_count >= 2:
+            logger.info("強制終了します")
+            import os
+            os._exit(1)
 
     signal.signal(signal.SIGINT, shutdown)
     signal.signal(signal.SIGTERM, shutdown)
@@ -157,7 +291,9 @@ def run_monitor(table: str = "", dry: bool = False, bet_mode: bool = False, dry_
         executor_config = dict(config.EXECUTOR_CONFIG)
         if dry_bet:
             executor_config["demo_mode"] = True
-        executor = BetExecutor(scraper.page, executor_config)
+        elif bet_mode:
+            executor_config["demo_mode"] = False
+        executor = BetExecutor(scraper.page, scraper.game_ws, executor_config)
         session_id = start_session(0.0)
 
     # WebSocket傍受を設定
@@ -175,8 +311,7 @@ def run_monitor(table: str = "", dry: bool = False, bet_mode: bool = False, dry_
     table_count = len(scraper._target_table_ids)
     mode_str = " [BET: DEMO]" if dry_bet else " [BET: LIVE]" if bet_mode else ""
     notifier.notify_startup(
-        f"{scraper.table_name} ({table_count}テーブル){mode_str}" if table_count > 1
-        else (scraper.table_name or "(テーブル未確定)") + mode_str
+        f"全バカラ ({table_count}テーブル){mode_str}"
     )
     logger.info(f"監視開始: {table_count}テーブル{mode_str}")
 
@@ -186,7 +321,21 @@ def run_monitor(table: str = "", dry: bool = False, bet_mode: bool = False, dry_
         tname = scraper._target_table_names.get(tid, tid)
         shoes[tid] = ShoeTracker(table_name=tname)
         shoes[tid].shoe_number = 1
-        logger.info(f"シュー #1 開始: {tname}")
+        # 履歴データをshoeに投入
+        hist = scraper._evo_table_histories.get(tid, [])
+        for entry in hist:
+            if isinstance(entry, dict):
+                color = entry.get("c", "")
+                r = {"B": "banker", "R": "player"}.get(color)
+                if r:
+                    shoes[tid].add_result(r)
+                if entry.get("ties", 0) > 0:
+                    shoes[tid].add_result("tie")
+            elif isinstance(entry, str):
+                r = {"player": "player", "banker": "banker", "tie": "tie"}.get(entry.lower())
+                if r:
+                    shoes[tid].add_result(r)
+        logging.getLogger("baccarat.scraper").info(f"シュー #1 開始: {tname} (履歴{shoes[tid].hand_count}手)")
 
     last_report = time.time()
     last_result_time = time.time()
@@ -214,15 +363,23 @@ def run_monitor(table: str = "", dry: bool = False, bet_mode: bool = False, dry_
                     no_result_warning = False
 
                     # テーブルごとにシューへ結果追加
+                    added_to_shoes = 0
+                    missed = 0
                     for r in ws_results:
                         result = r.get("result")
                         tid = r.get("table_id", "")
-                        if result in ("player", "banker", "tie") and tid in shoes:
-                            shoes[tid].add_result(result)
+                        if result in ("player", "banker", "tie"):
+                            if tid in shoes:
+                                shoes[tid].add_result(result)
+                                added_to_shoes += 1
+                            else:
+                                missed += 1
+                    if added_to_shoes > 0 or missed > 0:
+                        logging.getLogger("baccarat.scraper").info(f"結果→シュー追加: {added_to_shoes}件, 未登録{missed}件")
 
-            # 1.5. WSキープアライブ
+            # 1.5. WSキープアライブ (BET中はリロードしない)
             ws_silent = scraper.seconds_since_last_ws_message()
-            if ws_silent > config.WS_SILENCE_THRESHOLD:
+            if ws_silent > config.WS_SILENCE_THRESHOLD and not (executor and executor.in_table):
                 logger.warning(f"WSメッセージ{int(ws_silent)}秒沈黙 — ロビーリロード")
                 if scraper.reload_lobby():
                     for _ in range(15):
@@ -253,120 +410,53 @@ def run_monitor(table: str = "", dry: bool = False, bet_mode: bool = False, dry_
                         running = False
                         break
 
-                # 休憩判断
-                session_minutes = (time.time() - session_start_time) / 60
-                if humanizer and humanizer.should_take_break(session_minutes):
-                    break_time = humanizer.get_break_duration()
-                    logger.info(f"休憩: {break_time / 60:.1f}分")
-                    time.sleep(break_time)
-                    session_start_time = time.time()
-                    strategy.reset_losses()
-
                 # テーブル巡回: BET条件一致テーブルを探す
+                found_target = False
+                candidates = []
                 for tid, shoe in shoes.items():
-                    if shoe.hand_count < 10:
+                    if shoe.hand_count < 3:
                         continue
-
-                    bet_info = strategy.evaluate(shoe)
-                    if not bet_info:
-                        continue
-
                     tname = scraper._target_table_names.get(tid, tid)
-                    logger.info(f"BET対象テーブル発見: {tname} - {bet_info['reason']}")
+                    bet_info = strategy.evaluate(shoe)
+                    if bet_info:
+                        candidates.append((tid, shoe, tname, bet_info))
+
+                if candidates:
+                    # 複数一致 → 最もhand_countが多い(=データ多い)テーブルを優先
+                    candidates.sort(key=lambda x: x[1].hand_count, reverse=True)
+                    tid, shoe, tname, bet_info = candidates[0]
+                    found_target = True
+                    logger.info(
+                        f">>> BET: {tname} ({shoe.hand_count}手) "
+                        f"{bet_info['reason']} 出目={shoe.result_sequence[-8:]}"
+                    )
+                    if len(candidates) > 1:
+                        others = ", ".join(c[2].replace("Japanese ","J.")[:20] for c in candidates[1:3])
+                        logger.info(f"    他の候補: {others}")
 
                     entered = executor.enter_table(tid, tname)
                     if not entered:
                         continue
 
-                    # 1ターン見送り
-                    time.sleep(random.uniform(config.HUMANIZE_CONFIG["bet_interval_min"],
-                                              config.HUMANIZE_CONFIG["bet_interval_max"]))
-                    logger.info("1ターン見送り完了")
+                    # テーブル内で1-2-3打法実行
+                    _run_table_session(
+                        executor, strategy, shoe, tid, tname,
+                        notifier, config,
+                        bet_session_stats, dry_bet,
+                        lambda: running,
+                    )
+                    daily_profit = bet_session_stats["total_profit"]
 
-                    # BETスキップ判断
-                    if humanizer and humanizer.should_skip_bet():
-                        executor.exit_table()
-                        continue
+                    executor.exit_table()
+                    strategy.reset_losses()  # 1-2-3打法リセット (テーブル間持ち越し防止)
+                    logger.info("監視を再開します")
+                    last_result_time = time.time()
+                    continue  # メインループ先頭に戻る
 
-                    # BET額決定
-                    bet_amount = config.BET_MIN
-                    if humanizer:
-                        bet_amount = humanizer.randomize_bet_amount(bet_amount)
-                    bet_amount = max(config.BET_MIN, min(config.BET_MAX, bet_amount))
-
-                    # BET実行
-                    bet_placed = executor.place_bet(bet_info["side"], bet_amount)
-
-                    if bet_placed:
-                        logger.info(f"BET実行: {bet_info['side']} ${bet_amount:.2f}")
-
-                        # DB記録
-                        bet_id = insert_bet(
-                            table_name=tname,
-                            table_id=tid,
-                            shoe_number=shoe.shoe_number,
-                            hand_number=shoe.hand_count,
-                            bet_side=bet_info["side"],
-                            bet_amount=bet_amount,
-                            strategy_name=bet_info.get("strategy_name", ""),
-                            strategy_reason=bet_info.get("reason", ""),
-                            regularity_score=bet_info.get("regularity_score", 0),
-                        )
-
-                        # Telegram通知
-                        if config.NOTIFY_EVERY_BET:
-                            notifier.notify_bet_placed({
-                                "side": bet_info["side"],
-                                "amount": bet_amount,
-                                "table_name": tname,
-                                "reason": bet_info.get("reason", ""),
-                                "regularity_score": bet_info.get("regularity_score", 0),
-                            })
-
-                        bet_session_stats["total_bets"] += 1
-
-                        # デモモードでは仮想結果を判定
-                        if dry_bet or executor.demo_mode:
-                            logger.info("[DEMO] BET記録完了 — 結果は次のWS更新で判定")
-                        else:
-                            result = executor.wait_for_result(60)
-
-                            if result and bet_id:
-                                if result == "tie":
-                                    outcome = "tie_push"
-                                    profit = 0.0
-                                elif result == bet_info["side"]:
-                                    outcome = "win"
-                                    profit = bet_amount * (0.95 if bet_info["side"] == "banker" else 1.0)
-                                else:
-                                    outcome = "lose"
-                                    profit = -bet_amount
-
-                                update_bet_result(bet_id, outcome, profit)
-                                daily_profit += profit
-                                bet_session_stats["total_profit"] += profit
-
-                                if outcome == "win":
-                                    bet_session_stats["wins"] += 1
-                                    strategy.record_result(True)
-                                elif outcome == "lose":
-                                    bet_session_stats["losses"] += 1
-                                    strategy.record_result(False)
-
-                                logger.info(f"BET結果: {outcome} 収支: ${profit:+.2f} 累計: ${daily_profit:+.2f}")
-
-                                if config.NOTIFY_EVERY_BET:
-                                    notifier.notify_bet_result({
-                                        "result": outcome,
-                                        "profit": profit,
-                                        "table_name": tname,
-                                        "cumulative_profit": daily_profit,
-                                    })
-
-                    # テーブル退出
-                    if executor.should_leave_table(executor.shoes_at_table):
-                        executor.exit_table()
-                    break  # 1テーブルずつ
+                if not found_target:
+                    total_tables = len(shoes)
+                    with_data = sum(1 for s in shoes.values() if s.hand_count >= 3)
+                    logger.debug(f"BET条件一致なし ({with_data}/{total_tables}テーブル評価済み)")
 
             # 3. シュー完了チェック（タイムアウトベース — 全テーブル）
             time_since_last = time.time() - last_result_time
@@ -411,8 +501,7 @@ def run_monitor(table: str = "", dry: bool = False, bet_mode: bool = False, dry_
                     scraper.stop()
                     time.sleep(config.RETRY_DELAY)
                     scraper = BaccaratScraper()
-                    if table:
-                        scraper.table_name = table
+                    scraper.table_name = table if table else "all"
                     scraper.start()
                     scraper.setup_ws_intercept()
 
@@ -420,7 +509,9 @@ def run_monitor(table: str = "", dry: bool = False, bet_mode: bool = False, dry_
                         executor_config = dict(config.EXECUTOR_CONFIG)
                         if dry_bet:
                             executor_config["demo_mode"] = True
-                        executor = BetExecutor(scraper.page, executor_config)
+                        elif bet_mode:
+                            executor_config["demo_mode"] = False
+                        executor = BetExecutor(scraper.page, scraper.game_ws, executor_config)
 
                     shoes.clear()
                     for tid in scraper._target_table_ids:
@@ -446,11 +537,16 @@ def run_monitor(table: str = "", dry: bool = False, bet_mode: bool = False, dry_
             logger.error(f"メインループエラー: {e}", exc_info=True)
             time.sleep(10)
 
-    # 停止 — 残りのシューデータを保存
+    # 停止 — 残りのシューデータを保存 (ログ抑制)
     logger.info("監視停止中...")
+    saved = 0
     for tid, shoe in shoes.items():
         if shoe.hand_count > 0:
-            _handle_shoe_complete(shoe, notifier)
+            summary = shoe.get_summary()
+            insert_shoe(summary)
+            saved += 1
+    if saved:
+        logger.info(f"シューデータ保存: {saved}件")
 
     # BETセッション終了
     if is_betting and session_id:

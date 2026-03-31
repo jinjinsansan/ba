@@ -59,7 +59,7 @@ POLL_INTERVAL = _ini_getint("monitor", "poll_interval", 5)
 MAX_RETRIES = _ini_getint("monitor", "max_retries", 10)
 RETRY_DELAY = _ini_getint("monitor", "retry_delay", 30)
 REPORT_INTERVAL = _ini_getint("monitor", "report_interval", 3600)
-WS_SILENCE_THRESHOLD = _ini_getint("monitor", "ws_silence_threshold", 120)
+WS_SILENCE_THRESHOLD = _ini_getint("monitor", "ws_silence_threshold", 300)
 TARGET_TABLE = os.getenv(
     "TARGET_TABLE",
     _ini_get("casino", "target_tables", "Japanese Baccarat"),

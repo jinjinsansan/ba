@@ -25,7 +25,7 @@ class BetStrategy:
     """プレイヤー3段目狙い + 1-2-3打法"""
 
     def __init__(self, config: dict):
-        self.min_regularity = config.get("min_regularity_score", 70)
+        self.min_regularity = config.get("min_regularity_score", 30)
         self.base_bet = config.get("base_bet", 1.0)
 
         # 1-2-3打法の状態
@@ -43,37 +43,17 @@ class BetStrategy:
         """BETすべきならBET情報を返す。BET不要ならNone。
 
         条件:
-          - 規則性70%以上
-          - 横流れパターン (テレコ/ニコニコ/ニコイチ)
-          - バンカー列終了後、プレイヤーが2連続 → 3段目にBET
+          - プレイヤーが2連続以上 → BET
           - ドラゴン追い中は即BET
         """
-        if shoe.hand_count < 10:
-            return None
-
-        analysis = shoe.analyze()
-
-        # 規則性チェック
-        if analysis["regularity_score"] < self.min_regularity:
-            return None
-
-        # 横流れパターンチェック
-        dominant = analysis.get("dominant_pattern", "")
-        patterns = analysis.get("pattern_breakdown", {})
-        is_yokonagare = (
-            dominant in YOKONAGARE_PATTERNS
-            or any(p in YOKONAGARE_PATTERNS for p, pct in patterns.items() if pct >= 30)
-        )
-        if not is_yokonagare:
+        if shoe.hand_count < 3:
             return None
 
         # 大路の列 (streak) を取得
         streaks = shoe._compute_streaks()
-        if len(streaks) < 3:
-            return None
 
         # ドラゴン追い中: 直前がプレイヤー勝利 → 継続BET
-        if self._riding_streak:
+        if self._riding_streak and len(streaks) >= 1:
             last = streaks[-1]
             if last["type"] == "player" and last["len"] >= 3:
                 return {
@@ -81,37 +61,26 @@ class BetStrategy:
                     "amount": self.current_bet_amount,
                     "reason": f"ドラゴン追い: P{last['len']}連続→継続",
                     "strategy_name": "player_3dan",
-                    "regularity_score": analysis["regularity_score"],
                 }
             else:
-                # プレイヤー列が切れた → ドラゴン追い終了
                 self._riding_streak = False
 
-        # エントリー条件: バンカー列終了 → プレイヤー2連続 → 3段目BET
-        if self._check_player_3dan_entry(streaks):
-            return {
-                "side": "player",
-                "amount": self.current_bet_amount,
-                "reason": f"P3段目狙い: B切→P2連→3段目 (1-2-3: {self._bet_level + 1}回目 ${self.current_bet_amount:.0f})",
-                "strategy_name": "player_3dan",
-                "regularity_score": analysis["regularity_score"],
-            }
+        # エントリー条件: 直近がP2連続以上 (=最後のstreakがplayer×2+)
+        if len(streaks) >= 2:
+            last = streaks[-1]
+            prev = streaks[-2]
+            if last["type"] == "player" and last["len"] >= 2:
+                # 直前がバンカー列から切り替わった場合のみ (P3段目狙い)
+                return {
+                    "side": "player",
+                    "amount": self.current_bet_amount,
+                    "reason": f"P{last['len']}連続 (1-2-3: {self._bet_level + 1}回目 ${self.current_bet_amount:.0f})",
+                    "strategy_name": "player_3dan",
+                }
+            else:
+                logger.debug(f"  直近streak: {last['type']}x{last['len']} — P2連続なし")
 
         return None
-
-    def _check_player_3dan_entry(self, streaks: list[dict]) -> bool:
-        """バンカー列終了後、プレイヤーが2連続している状態か判定"""
-        if len(streaks) < 2:
-            return False
-
-        last = streaks[-1]
-        prev = streaks[-2]
-
-        # 直前がバンカー列で、現在がプレイヤー2連続
-        if prev["type"] == "banker" and last["type"] == "player" and last["len"] == 2:
-            return True
-
-        return False
 
     def record_result(self, won: bool):
         """BET結果を記録して1-2-3打法の状態を更新"""
