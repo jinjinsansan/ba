@@ -2,10 +2,12 @@
 
 ブラウザ操作を人間的にするためのユーティリティ。
 ベジェ曲線マウス移動、ランダム待機、BETスキップ、休憩判断。
+async/sync 両対応。
 """
 import math
 import random
 import asyncio
+import time as _time
 import logging
 
 logger = logging.getLogger("baccarat.humanize")
@@ -141,3 +143,52 @@ class Humanizer:
         """BET額に5-15%のランダム変動を加える"""
         variation = random.uniform(0.85, 1.15)
         return round(base_amount * variation, 2)
+
+    # === Sync版 (executor.py用) ===
+
+    def move_mouse_sync(self, page, target_x: int, target_y: int):
+        """ベジェ曲線でマウス移動 (sync版)"""
+        if not self.enabled:
+            page.mouse.move(target_x, target_y)
+            return
+
+        try:
+            current = page.evaluate("() => ({x: window._mouseX || 0, y: window._mouseY || 0})")
+            start_x = current.get("x", random.randint(100, 500))
+            start_y = current.get("y", random.randint(100, 400))
+        except Exception:
+            start_x = random.randint(100, 500)
+            start_y = random.randint(100, 400)
+
+        points = self._bezier_curve(start_x, start_y, target_x, target_y)
+        duration = random.uniform(self.mouse_speed_min, self.mouse_speed_max) / 1000
+        step_delay = duration / len(points) if points else 0
+
+        for px, py in points:
+            page.mouse.move(px, py)
+            _time.sleep(step_delay)
+
+        try:
+            page.evaluate(f"() => {{ window._mouseX = {target_x}; window._mouseY = {target_y}; }}")
+        except Exception:
+            pass
+
+    def click_with_offset_sync(self, page, x: int, y: int):
+        """sync版: 中心から微小オフセットを加えてクリック"""
+        offset = self.click_offset_px
+        final_x = x + random.randint(-offset, offset)
+        final_y = y + random.randint(-offset, offset)
+
+        self.move_mouse_sync(page, final_x, final_y)
+        _time.sleep(random.uniform(0.05, 0.2))
+        page.mouse.click(final_x, final_y)
+
+    def wait_before_bet_sync(self):
+        """sync版: BET前の自然な待機"""
+        wait = random.uniform(self.bet_interval_min, self.bet_interval_max)
+        logger.debug(f"BET前待機: {wait:.1f}秒")
+        _time.sleep(wait)
+
+    def wait_human_like_sync(self, min_sec: float = 0.5, max_sec: float = 2.0):
+        """sync版: 汎用の人間的待機"""
+        _time.sleep(random.uniform(min_sec, max_sec))

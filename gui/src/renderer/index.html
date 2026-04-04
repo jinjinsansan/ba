@@ -1,0 +1,138 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Valhalla II</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <!-- Custom Title Bar -->
+  <div class="title-bar" id="titleBar">
+    <div class="title-bar-left">
+      <span class="title-bar-logo">&#9670;</span>
+      <span class="title-bar-text">VALHALLA II</span>
+      <span class="title-bar-version">v0.1.0</span>
+    </div>
+    <div class="title-bar-controls">
+      <button class="title-btn" id="btnMinimize">&#x2500;</button>
+      <button class="title-btn" id="btnMaximize">&#x25A1;</button>
+      <button class="title-btn title-btn-close" id="btnClose">&times;</button>
+    </div>
+  </div>
+
+  <!-- Main Content -->
+  <div class="main-content">
+
+    <!-- Browser Status -->
+    <div class="section">
+      <div class="section-header">Browser</div>
+      <div class="browser-status" id="browserStatus">
+        <span class="browser-dot" id="browserDot"></span>
+        <span id="browserText">Not started</span>
+      </div>
+    </div>
+
+    <!-- Status Bar -->
+    <div class="section">
+      <div class="section-header">Session</div>
+      <div class="stats-grid">
+        <div class="stat-group">
+          <span class="stat-label">Status</span>
+          <div class="stat-row">
+            <span class="status-indicator" id="statusDot"></span>
+            <span class="stat-value" id="statusText">Idle</span>
+          </div>
+        </div>
+        <div class="stat-group">
+          <span class="stat-label">Balance</span>
+          <span class="stat-value" id="balance">$0.00</span>
+        </div>
+        <div class="stat-group">
+          <span class="stat-label">Session P&L</span>
+          <span class="stat-value" id="sessionPnl">$0.00</span>
+        </div>
+        <div class="stat-group">
+          <span class="stat-label">Bets</span>
+          <span class="stat-value" id="betCount">0W / 0L</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Progress / Current Set -->
+    <div class="section">
+      <div class="section-header">Current Set</div>
+      <div class="progress-bar">
+        <div class="turn-display" id="turnDisplay">
+          <span class="turn-dot empty"></span>
+          <span class="turn-dot empty"></span>
+          <span class="turn-dot empty"></span>
+          <span class="turn-dot empty"></span>
+          <span class="turn-dot empty"></span>
+          <span class="turn-dot empty"></span>
+          <span class="turn-dot empty"></span>
+        </div>
+        <span class="turn-label" id="turnLabel">Waiting to start...</span>
+      </div>
+      <div class="round-info" id="roundInfo">--</div>
+    </div>
+
+    <!-- Buttons -->
+    <div class="button-row">
+      <button class="btn btn-primary" id="btnStart">
+        <span class="btn-icon">&#x25B6;</span> START
+      </button>
+      <button class="btn btn-danger" id="btnStop" disabled>
+        <span class="btn-icon">&#x25A0;</span> STOP
+      </button>
+      <button class="btn btn-secondary" id="btnSettings">
+        <span class="btn-icon">&#x2699;</span> SETTINGS
+      </button>
+    </div>
+
+    <!-- License Info + Log Toggle -->
+    <div class="license-bar">
+      <span class="license-text" id="licenseText">License: Not activated</span>
+      <span class="log-toggle" id="logToggle">Show Log &#x25BC;</span>
+    </div>
+
+    <!-- Log Panel -->
+    <div class="log-panel hidden" id="logPanel">
+      <div class="log-content" id="logContent"></div>
+    </div>
+  </div>
+
+  <!-- Settings Modal -->
+  <div class="modal hidden" id="settingsModal">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h2>Settings</h2>
+        <button class="modal-close" id="settingsClose">&times;</button>
+      </div>
+      <div class="modal-body">
+        <div class="form-group">
+          <label>License Key</label>
+          <input type="text" id="inputLicense" placeholder="XXXX-XXXX-XXXX-XXXX">
+        </div>
+        <div class="form-group">
+          <label>Chip Base ($)</label>
+          <input type="number" id="inputChipBase" value="1" min="0.5" step="0.5">
+        </div>
+        <div class="form-group">
+          <label>Loss Cut (chips)</label>
+          <input type="number" id="inputLossCut" value="200" min="50" step="50">
+        </div>
+        <div class="form-group">
+          <label>Telegram Chat ID</label>
+          <input type="text" id="inputTelegramChat" placeholder="Optional">
+        </div>
+        <button class="btn btn-primary" id="btnSaveSettings" style="width:100%;margin-top:16px;">
+          SAVE
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>

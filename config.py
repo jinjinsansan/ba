@@ -40,6 +40,9 @@ def _ini_getbool(section: str, key: str, fallback: bool = False) -> bool:
     return _ini.getboolean(section, key, fallback=fallback)
 
 
+# --- Profile (複数プロセス同時実行の分離用) ---
+PROFILE_NAME = os.getenv("PROFILE_NAME", _ini_get("monitor", "profile_name", "default"))
+
 # --- Stake.com ---
 STAKE_USERNAME = os.getenv("STAKE_USERNAME", "")
 STAKE_PASSWORD = os.getenv("STAKE_PASSWORD", "")

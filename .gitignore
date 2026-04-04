@@ -15,3 +15,7 @@ config.ini
 inspect_*.py
 analyze_*.py
 parse_*.py
+browser_data/
+state_valhalla.json
+gui/node_modules/
+gui/dist/

@@ -206,14 +206,18 @@ def insert_shoe(summary: dict) -> bool:
         conn.close()
 
 
-def get_stats(table_name: str = "", hours: int = 24) -> dict:
-    """統計情報を取得"""
+def get_stats(table_name: str = "", hours: int = 24, table_names: list[str] | None = None) -> dict:
+    """統計情報を取得。table_names指定時はそのテーブル群のみ集計"""
     conn = get_connection()
     cutoff = (datetime.now(JST) - timedelta(hours=hours)).isoformat()
 
     where = "WHERE created_at >= ?"
     params: list = [cutoff]
-    if table_name:
+    if table_names:
+        placeholders = ",".join("?" for _ in table_names)
+        where += f" AND table_name IN ({placeholders})"
+        params.extend(table_names)
+    elif table_name:
         where += " AND table_name = ?"
         params.append(table_name)
 
@@ -258,12 +262,16 @@ def get_stats(table_name: str = "", hours: int = 24) -> dict:
     }
 
 
-def get_recent_results(table_name: str = "", limit: int = 20) -> list[dict]:
+def get_recent_results(table_name: str = "", limit: int = 20, table_names: list[str] | None = None) -> list[dict]:
     """直近の結果を取得"""
     conn = get_connection()
     where = ""
     params: list = []
-    if table_name:
+    if table_names:
+        placeholders = ",".join("?" for _ in table_names)
+        where = f"WHERE table_name IN ({placeholders})"
+        params.extend(table_names)
+    elif table_name:
         where = "WHERE table_name = ?"
         params.append(table_name)
 
@@ -275,9 +283,9 @@ def get_recent_results(table_name: str = "", limit: int = 20) -> list[dict]:
     return [dict(r) for r in rows]
 
 
-def get_streak(table_name: str = "") -> dict:
+def get_streak(table_name: str = "", table_names: list[str] | None = None) -> dict:
     """現在の連勝・連続記録"""
-    results = get_recent_results(table_name, limit=100)
+    results = get_recent_results(table_name, limit=100, table_names=table_names)
     if not results:
         return {"current": "", "count": 0}
 

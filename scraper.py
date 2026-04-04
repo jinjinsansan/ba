@@ -58,11 +58,12 @@ class BaccaratScraper:
         from game_ws import GameWSMonitor
         self.game_ws = GameWSMonitor()
 
-        # マルチテーブル監視
+        # マルチテーブル監視 (全て _lock で保護)
         self._target_table_ids: set[str] = set()  # 監視対象テーブルID群
         self._target_table_names: dict[str, str] = {}  # table_id → table_name
         self._shoe_epochs: dict[str, int] = {}  # table_id → shoe epoch
         self._new_shoe_signals: dict[str, bool] = {}  # table_id → signal
+        self._last_result_per_table: dict[str, float] = {}  # table_id → last result time
 
         # 後方互換用
         self._target_table_id: str = ""
@@ -83,7 +84,7 @@ class BaccaratScraper:
 
     def start(self):
         """ブラウザ起動 → ログイン → WS傍受設定 → ロビーに移動"""
-        logger.info("Camoufox起動中...")
+        logger.info(f"Camoufox起動中... (profile={config.PROFILE_NAME})")
         exe_path = self._resolve_executable_path()
         launch_opts = {"headless": config.HEADLESS}
         if exe_path:
@@ -159,11 +160,23 @@ class BaccaratScraper:
         }""")
         time.sleep(0.5)
 
+        self.page.screenshot(path=str(config.SCREENSHOTS_DIR / "login_01_before_input.png"))
+
         # Email入力
-        self.page.evaluate("""() => {
+        found_email = self.page.evaluate("""() => {
             const el = document.querySelector('input[name="emailOrName"], input[name="email"], input[type="email"]');
-            if (el) { el.focus(); el.click(); }
+            if (el) { el.focus(); el.click(); return el.name || el.type; }
+            return null;
         }""")
+        logger.info(f"Email入力フィールド: {found_email}")
+        if not found_email:
+            logger.warning("Emailフィールドが見つかりません — DOM確認")
+            inputs = self.page.evaluate("""() => {
+                return Array.from(document.querySelectorAll('input:not([type="hidden"])')).map(
+                    el => ({name: el.name, type: el.type, placeholder: el.placeholder, visible: el.offsetParent !== null})
+                ).slice(0, 10);
+            }""")
+            logger.info(f"ページ上のinput要素: {inputs}")
         time.sleep(0.3)
         self.page.keyboard.type(config.STAKE_USERNAME, delay=30)
         time.sleep(0.5)
@@ -174,19 +187,24 @@ class BaccaratScraper:
         self.page.keyboard.type(config.STAKE_PASSWORD, delay=30)
         time.sleep(0.5)
 
+        self.page.screenshot(path=str(config.SCREENSHOTS_DIR / "login_02_after_input.png"))
+
         # ログインボタン送信 (JSクリック)
-        self.page.evaluate("""() => {
+        submitted = self.page.evaluate("""() => {
             const btn = document.querySelector('button[type="submit"], [data-testid="button-login"]');
-            if (btn) { btn.click(); return true; }
+            if (btn) { btn.click(); return 'submit:' + btn.textContent.trim(); }
             const els = Array.from(document.querySelectorAll('button'));
             for (const el of els) {
                 if (/sign.?in|log.?in/i.test(el.textContent) && el.type !== 'button') {
-                    el.click(); return true;
+                    el.click(); return 'matched:' + el.textContent.trim();
                 }
             }
-            return false;
+            return null;
         }""")
+        logger.info(f"ログインボタン: {submitted}")
         time.sleep(5)
+
+        self.page.screenshot(path=str(config.SCREENSHOTS_DIR / "login_03_after_submit.png"))
 
         # Email Code（2FA）
         if not self._is_logged_in():
@@ -225,7 +243,37 @@ class BaccaratScraper:
             logger.error("認証コードが取得できませんでした")
             return
 
-        code_input.first.fill(email_code)
+        # コード入力 (fill → JS → keyboard の順でフォールバック)
+        try:
+            code_input.first.fill(email_code, timeout=10000)
+            logger.info("2FAコード入力完了 (fill)")
+        except Exception:
+            logger.warning("fill()タイムアウト — JS入力にフォールバック")
+            try:
+                self.page.evaluate(f"""() => {{
+                    const sels = ['input[placeholder*="Code" i]', 'input[name*="code" i]',
+                                  'input[type="text"]:not([name*="email"]):not([name*="password"])'];
+                    for (const s of sels) {{
+                        const el = document.querySelector(s);
+                        if (el && el.offsetParent !== null) {{
+                            el.focus(); el.value = '{email_code}';
+                            el.dispatchEvent(new Event('input', {{bubbles: true}}));
+                            el.dispatchEvent(new Event('change', {{bubbles: true}}));
+                            return true;
+                        }}
+                    }}
+                    return false;
+                }}""")
+                logger.info("2FAコード入力完了 (JS)")
+            except Exception:
+                logger.warning("JS入力失敗 — keyboard入力にフォールバック")
+                try:
+                    self.page.keyboard.type(email_code, delay=50)
+                    logger.info("2FAコード入力完了 (keyboard)")
+                except Exception as e:
+                    logger.error(f"2FAコード入力全て失敗: {e}")
+                    return
+
         time.sleep(0.5)
 
         self.page.evaluate("""() => {
@@ -325,6 +373,19 @@ class BaccaratScraper:
                 ws.on("framesent", _forward_to_game_ws)
                 ws.on("framereceived", _forward_to_game_ws)
 
+            else:
+                # 全ての非ロビーWSにもリスナーを登録 (stake.com等)
+                def _forward_any_ws(data, ws_url=url):
+                    self._last_ws_message_time = time.time()
+                    raw = data if isinstance(data, str) else str(data)
+                    # BET/BALANCE/SETTLED関連のメッセージのみ転送
+                    if any(k in raw for k in ["CLIENT_BET", "CLIENT_BALANCE", "SETTLED", "MULTIPLIER"]):
+                        logger.info(f"非EvoWS転送 ({ws_url[:40]}): {raw[:100]}")
+                        self.game_ws.on_ws_message(raw)
+
+                ws.on("framesent", _forward_any_ws)
+                ws.on("framereceived", _forward_any_ws)
+
         self.page.on("websocket", on_ws)
         logger.info("WebSocket傍受設定完了")
 
@@ -342,7 +403,14 @@ class BaccaratScraper:
             time.sleep(1)
         else:
             logger.warning("EvolutionロビーWSが検出されませんでした — ページをリロードして再試行")
-            self.page.reload(wait_until="domcontentloaded", timeout=60000)
+            try:
+                self.page.reload(wait_until="domcontentloaded", timeout=120000)
+            except Exception:
+                logger.warning("リロードタイムアウト — ロビーに再遷移")
+                try:
+                    self.page.goto(config.BACCARAT_LOBBY_URL, wait_until="domcontentloaded", timeout=120000)
+                except Exception:
+                    pass
             time.sleep(10)
             # リロード後にもう一度待機
             for _ in range(30):
@@ -417,7 +485,8 @@ class BaccaratScraper:
 
         EXCLUDE = ("salon", "prive", "first person", "rng",
                    "lightning", "prosperity", "golden wealth",
-                   "peek", "control squeeze", "no commission")
+                   "peek", "control squeeze", "no commission",
+                   "elite vip")
 
         for tid, cfg in self._evo_table_configs.items():
             title = cfg.get("title", "")
@@ -441,7 +510,11 @@ class BaccaratScraper:
             logger.warning(f"テーブルが見つかりません (フィルタ: '{self.table_name}')")
 
     def _process_histories(self, args: dict):
-        """lobby.histories → 全ターゲットテーブルの差分チェック"""
+        """lobby.histories → 一括ロード (リコネクト時にも送られる)
+
+        リコネクト時にシューリセットも検出する。
+        old_results >= 30 かつ new_results < 5 → シューリセットと判定。
+        """
         histories = args.get("histories", {})
 
         for table_id, hist_data in histories.items():
@@ -451,11 +524,15 @@ class BaccaratScraper:
                 old_results = self._evo_table_histories.get(table_id, [])
                 tname = self._target_table_names.get(table_id, table_id)
 
-                if old_results and new_results and len(new_results) < len(old_results) - 5:
-                    self._shoe_epochs[table_id] = int(time.time())
-                    self._new_shoe_signals[table_id] = True
+                # シューリセット検出 (histories でも判定する)
+                if (old_results and len(old_results) >= 30
+                        and len(new_results) < 5):
+                    with self._lock:
+                        self._shoe_epochs[table_id] = int(time.time())
+                        self._new_shoe_signals[table_id] = True
                     logger.info(f"シューリセット検出 (histories): {tname} {len(old_results)}→{len(new_results)}")
 
+                # 差分のみ追加
                 added = self._diff_results(old_results, new_results)
                 if added:
                     for entry in added:
@@ -463,6 +540,7 @@ class BaccaratScraper:
                         if result_info:
                             with self._lock:
                                 self._ws_results.append(result_info)
+                                self._last_result_per_table[table_id] = time.time()
 
             self._evo_table_histories[table_id] = new_results
 
@@ -484,9 +562,11 @@ class BaccaratScraper:
             old_results = self._evo_table_histories.get(table_id, [])
             tname = self._target_table_names.get(table_id, table_id)
 
-            if old_results and len(new_results) < len(old_results) - 5:
-                self._shoe_epochs[table_id] = int(time.time())
-                self._new_shoe_signals[table_id] = True
+            if (old_results and len(old_results) >= 30
+                    and len(new_results) < 5):
+                with self._lock:
+                    self._shoe_epochs[table_id] = int(time.time())
+                    self._new_shoe_signals[table_id] = True
                 logger.info(f"シューリセット検出 (historyUpdated): {tname} {len(old_results)}→{len(new_results)}")
 
             added = self._diff_results(old_results, new_results)
@@ -498,13 +578,20 @@ class BaccaratScraper:
                     if result_info:
                         with self._lock:
                             self._ws_results.append(result_info)
+                            self._last_result_per_table[table_id] = time.time()
 
     def _diff_results(self, old: list, new: list) -> list:
-        """前回と今回の履歴を比較して新しいエントリを返す"""
-        if not old:
+        """前回と今回の履歴を比較して新しいエントリを返す。
+
+        old が空の場合: 初回ロードまたはブラウザ再起動後。
+        main.py側で初期履歴を直接shoe に読み込むため、ここでは空を返す。
+        ただし _evo_table_histories は更新されるので、次回以降の差分は正しく検出される。
+        """
+        if not new:
             return []
 
-        if not new:
+        if not old:
+            # 初回ロード — main.py / monitor が直接 shoe に読み込むため空を返す
             return []
 
         old_len = len(old)
@@ -632,12 +719,13 @@ class BaccaratScraper:
 
     def get_new_shoe_signals(self) -> dict[str, bool]:
         """新シュー信号があるテーブルをチェックして消費する"""
-        signals = {}
-        for tid, sig in self._new_shoe_signals.items():
-            if sig:
-                signals[tid] = True
-                self._new_shoe_signals[tid] = False
-        return signals
+        with self._lock:
+            signals = {}
+            for tid, sig in self._new_shoe_signals.items():
+                if sig:
+                    signals[tid] = True
+                    self._new_shoe_signals[tid] = False
+            return signals
 
     def has_new_shoe_signal(self) -> bool:
         """後方互換: いずれかのテーブルで新シュー信号があるか"""
@@ -691,6 +779,11 @@ class BaccaratScraper:
         if self._last_ws_message_time == 0:
             return 999
         return time.time() - self._last_ws_message_time
+
+    def get_last_result_per_table(self) -> dict[str, float]:
+        """テーブルごとの最終結果受信時刻を返す"""
+        with self._lock:
+            return dict(self._last_result_per_table)
 
     def reload_lobby(self):
         """ロビーページをリロードしてWS再接続する
@@ -761,10 +854,27 @@ class BaccaratScraper:
         return False
 
     def is_alive(self) -> bool:
-        """ブラウザセッションが生きているか"""
+        """ブラウザセッションが生きているか。
+
+        ページ応答可能かつ、WS接続中 or 最後のWSメッセージから5分以内であれば alive。
+        WS再接続中の一時的な切断で偽陰性を防ぐ。
+        """
         try:
             self.page.evaluate("1 + 1")
-            return self._evo_ws_connected
+            if self._evo_ws_connected:
+                return True
+            # WS切断中でも、最後のメッセージから5分以内なら再接続の可能性がある
+            if self._last_ws_message_time > 0:
+                return (time.time() - self._last_ws_message_time) < 300
+            return False
+        except Exception:
+            return False
+
+    def is_page_alive(self) -> bool:
+        """ページ自体が応答するか (WS接続は問わない)"""
+        try:
+            self.page.evaluate("1 + 1")
+            return True
         except Exception:
             return False
 

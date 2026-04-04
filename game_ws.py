@@ -166,39 +166,42 @@ class GameWSMonitor:
                 self._status_changed.wait(timeout=min(remaining, 1.0))
         return self.status == target
 
-    def wait_for_betting_phase(self, timeout: float = 120, dom_checker=None) -> bool:
-        """1ラウンド見送り後、次のBETフェーズを待機 (DOMベース)。
+    def wait_for_betting_phase(self, timeout: float = 120, dom_checker=None, skip_round: bool = True) -> bool:
+        """BETフェーズを待機 (DOMベース)。
 
-        フロー:
-          1. タイマー非表示を待つ (=BETフェーズ終了)
-          2. タイマー表示を待つ (=次のBETフェーズ開始)
+        skip_round=True: 1ラウンド見送り後に次のBETフェーズを待つ (テーブル入場直後)
+        skip_round=False: 次のBETフェーズだけ待つ (1-2-3打法の連続BET時)
+
+        シャッフル/ディーラー交代で長時間待つこともあるため、
+        タイムアウトは十分長くとる。
         """
         if not dom_checker:
             logger.warning("dom_checker未設定")
             return False
 
-        logger.info("1ラウンド見送り中...")
         deadline = time.time() + timeout
 
-        # Step 1: タイマーが消えるのを待つ (BETフェーズ外になるのを待つ)
-        while time.time() < deadline:
-            if not dom_checker():
-                logger.info("ディーリング中 (タイマー消失)")
-                break
-            time.sleep(1.0)
-        else:
-            logger.warning("タイマー消失待ちタイムアウト")
-            return False
+        if skip_round:
+            logger.info("1ラウンド見送り中...")
+            # Step 1: タイマーが消えるのを待つ (=BETフェーズ終了)
+            while time.time() < deadline:
+                if not dom_checker():
+                    logger.info("ディーリング中 (タイマー消失)")
+                    break
+                time.sleep(1.0)
+            else:
+                logger.warning("タイマー消失待ちタイムアウト")
+                return False
 
-        # Step 2: 次のタイマー表示を待つ (次のBETフェーズ開始)
-        logger.info("次のBETフェーズを待機...")
+        # 次のBETフェーズ開始を待つ
+        logger.info("BETフェーズを待機中...")
         while time.time() < deadline:
             if dom_checker():
                 logger.info("BETフェーズ開始")
                 return True
             time.sleep(1.0)
 
-        logger.warning("BETフェーズ待機タイムアウト")
+        logger.warning("BETフェーズ待機タイムアウト (シャッフル/ディーラー交代の可能性)")
         return False
 
     def wait_for_accepted(self, timeout: float = 30) -> bool:

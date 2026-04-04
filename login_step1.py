@@ -144,7 +144,15 @@ def main(args):
         if submit.count() > 0:
             submit.first.click()
             print("    クリック完了")
-        time.sleep(5)
+        # Email Code画面遷移を待つ (最大15秒)
+        for _w in range(15):
+            time.sleep(1)
+            try:
+                if page.locator('input[placeholder*="Code" i], input[name*="code" i]').count() > 0:
+                    print("    Email Code画面検出")
+                    break
+            except:
+                pass
         page.screenshot(path=str(SCREENSHOTS_DIR / "login_04_after_submit.png"))
 
         # 6. Email Code入力
