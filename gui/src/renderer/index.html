@@ -7,12 +7,14 @@
   <link rel="stylesheet" href="styles.css">
 </head>
 <body>
-  <!-- Custom Title Bar -->
-  <div class="title-bar" id="titleBar">
+  <!-- Flash overlay for win/lose -->
+  <div class="flash-overlay" id="flashOverlay"></div>
+
+  <!-- Title Bar -->
+  <div class="title-bar">
     <div class="title-bar-left">
       <span class="title-bar-logo">&#9670;</span>
       <span class="title-bar-text">VALHALLA II</span>
-      <span class="title-bar-version">v0.1.0</span>
     </div>
     <div class="title-bar-controls">
       <button class="title-btn" id="btnMinimize">&#x2500;</button>
@@ -21,82 +23,62 @@
     </div>
   </div>
 
-  <!-- Main Content -->
+  <!-- Main -->
   <div class="main-content">
 
-    <!-- Browser Status -->
-    <div class="section">
-      <div class="section-header">Browser</div>
-      <div class="browser-status" id="browserStatus">
-        <span class="browser-dot" id="browserDot"></span>
-        <span id="browserText">Not started</span>
+    <!-- Live Action Feed -->
+    <div class="action-bar" id="actionBar">
+      <span class="action-dot"></span>
+      <span class="action-text" id="actionText">Initializing...</span>
+    </div>
+
+    <!-- Stats Row -->
+    <div class="stats-row">
+      <div class="stat-card">
+        <div class="stat-label">BALANCE</div>
+        <div class="stat-value" id="balance">$0.00</div>
+      </div>
+      <div class="stat-card accent">
+        <div class="stat-label">SESSION P&L</div>
+        <div class="stat-value" id="sessionPnl">$0.00</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-label">BETS</div>
+        <div class="stat-value" id="betCount">0W / 0L</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-label">UNIT</div>
+        <div class="stat-value" id="unitInfo">1x</div>
       </div>
     </div>
 
-    <!-- Status Bar -->
-    <div class="section">
-      <div class="section-header">Session</div>
-      <div class="stats-grid">
-        <div class="stat-group">
-          <span class="stat-label">Status</span>
-          <div class="stat-row">
-            <span class="status-indicator" id="statusDot"></span>
-            <span class="stat-value" id="statusText">Idle</span>
-          </div>
-        </div>
-        <div class="stat-group">
-          <span class="stat-label">Balance</span>
-          <span class="stat-value" id="balance">$0.00</span>
-        </div>
-        <div class="stat-group">
-          <span class="stat-label">Session P&L</span>
-          <span class="stat-value" id="sessionPnl">$0.00</span>
-        </div>
-        <div class="stat-group">
-          <span class="stat-label">Bets</span>
-          <span class="stat-value" id="betCount">0W / 0L</span>
-        </div>
+    <!-- Current Round (scrolling results) -->
+    <div class="section glass">
+      <div class="section-header">LIVE FEED</div>
+      <div class="feed-row" id="feedRow">
+        <span class="feed-cursor"></span>
       </div>
     </div>
 
-    <!-- Progress / Current Set -->
-    <div class="section">
-      <div class="section-header">Current Set</div>
-      <div class="progress-bar">
-        <div class="turn-display" id="turnDisplay">
-          <span class="turn-dot empty"></span>
-          <span class="turn-dot empty"></span>
-          <span class="turn-dot empty"></span>
-          <span class="turn-dot empty"></span>
-          <span class="turn-dot empty"></span>
-          <span class="turn-dot empty"></span>
-          <span class="turn-dot empty"></span>
-        </div>
-        <span class="turn-label" id="turnLabel">Waiting to start...</span>
+    <!-- Shoe History (scrollable sets) -->
+    <div class="section glass shoe-section">
+      <div class="section-header">SHOE HISTORY</div>
+      <div class="shoe-grid" id="shoeGrid">
+        <div class="shoe-empty">No sets completed yet</div>
       </div>
-      <div class="round-info" id="roundInfo">--</div>
     </div>
 
-    <!-- Buttons -->
-    <div class="button-row">
-      <button class="btn btn-primary" id="btnStart">
-        <span class="btn-icon">&#x25B6;</span> START
-      </button>
-      <button class="btn btn-danger" id="btnStop" disabled>
-        <span class="btn-icon">&#x25A0;</span> STOP
-      </button>
-      <button class="btn btn-secondary" id="btnSettings">
-        <span class="btn-icon">&#x2699;</span> SETTINGS
-      </button>
+    <!-- Controls -->
+    <div class="controls">
+      <button class="btn btn-start" id="btnStart">START</button>
+      <button class="btn btn-stop" id="btnStop" disabled>STOP</button>
+      <button class="btn btn-gear" id="btnSettings">&#x2699;</button>
     </div>
 
-    <!-- License Info + Log Toggle -->
-    <div class="license-bar">
-      <span class="license-text" id="licenseText">License: Not activated</span>
-      <span class="log-toggle" id="logToggle">Show Log &#x25BC;</span>
+    <!-- Log Toggle -->
+    <div class="log-bar">
+      <span class="log-toggle" id="logToggle">CONSOLE &#x25BC;</span>
     </div>
-
-    <!-- Log Panel -->
     <div class="log-panel hidden" id="logPanel">
       <div class="log-content" id="logContent"></div>
     </div>
@@ -104,9 +86,9 @@
 
   <!-- Settings Modal -->
   <div class="modal hidden" id="settingsModal">
-    <div class="modal-content">
+    <div class="modal-content glass">
       <div class="modal-header">
-        <h2>Settings</h2>
+        <h2>SETTINGS</h2>
         <button class="modal-close" id="settingsClose">&times;</button>
       </div>
       <div class="modal-body">
@@ -126,9 +108,12 @@
           <label>Telegram Chat ID</label>
           <input type="text" id="inputTelegramChat" placeholder="Optional">
         </div>
-        <button class="btn btn-primary" id="btnSaveSettings" style="width:100%;margin-top:16px;">
-          SAVE
-        </button>
+        <div class="form-group">
+          <label class="checkbox-label">
+            <input type="checkbox" id="inputDryRun"> Dry Run (no real bets)
+          </label>
+        </div>
+        <button class="btn btn-start" id="btnSaveSettings" style="width:100%;margin-top:12px;">SAVE</button>
       </div>
     </div>
   </div>

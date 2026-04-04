@@ -395,7 +395,11 @@ class BetExecutor:
         bet_amount: BET額 (BET前の残高からの差分で勝敗判定に使用)
         """
         if self.demo_mode:
-            return None
+            import random
+            time.sleep(random.uniform(2, 5))
+            r = random.choice(["player", "player", "player", "banker", "banker", "banker", "tie"])
+            logger.info(f"[DEMO] Result: {r}")
+            return {"result": r, "balance": 0.0}
 
         logger.info("結果を待っています...")
         deadline = time.time() + timeout

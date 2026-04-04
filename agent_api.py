@@ -1,14 +1,14 @@
-"""Valhalla II -- Python Agent
+"""Valhalla II -- Python Agent (BET mode)
 
-Uses the proven BaccaratScraper (scraper.py) directly.
+Uses proven BaccaratScraper + BetExecutor + MaruBatsuBetSession.
 Electron GUI communicates via stdin/stdout JSON IPC.
 
 Flow:
-  1. Electron sends {"type":"start", "config":{...}}
-  2. This agent launches BaccaratScraper (Camoufox browser)
-  3. Scraper handles login, lobby navigation, WS intercept
-  4. Results are polled and fed to MaruBatsu logic
-  5. Status/results sent to Electron via stdout
+  1. GUI sends start → agent launches Camoufox
+  2. Scraper: login → lobby → WS intercept → find table
+  3. Executor: enter table
+  4. BetSession: run_round loop (BET → result → logic)
+  5. All status/events sent to GUI via stdout
 """
 import json
 import sys
@@ -20,7 +20,6 @@ import io
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
-# Logging to file only (stdout is for IPC)
 logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s [%(name)s] %(levelname)s: %(message)s",
@@ -33,10 +32,8 @@ logging.basicConfig(
 )
 logger = logging.getLogger("valhalla.agent")
 
-from marubatsu_strategy import MaruBatsuTracker, SEQ, SetData
-
-PROFIT_STOP = 50
 TARGET_TABLE_NAME = "Japanese Speed Baccarat A"
+MAX_ROUNDS = 9999
 
 
 # ======== IPC ========
@@ -49,213 +46,308 @@ def send_msg(msg: dict):
 def send_log(text: str):
     send_msg({"type": "log", "message": text})
 
-def send_browser_status(state: str):
-    send_msg({"type": "browser_status", "state": state})
+def send_action(text: str):
+    """Send browser action status for GUI display"""
+    send_msg({"type": "action", "message": text})
 
+def send_result(result: str, won: bool | None, bet_amount: float, balance: float,
+                turn: int, turns_display: str, cumulative_profit: int, cumulative_money: float):
+    send_msg({
+        "type": "round_result",
+        "result": result,
+        "won": won,
+        "bet_amount": bet_amount,
+        "balance": balance,
+        "turn": turn,
+        "turns_display": turns_display,
+        "cumulative_profit": cumulative_profit,
+        "cumulative_money": cumulative_money,
+    })
 
-# ======== Logic Engine ========
+def send_set_complete(set_data, chip_base: float):
+    send_msg({
+        "type": "set_complete",
+        "set_index": set_data.set_index,
+        "results": set_data.results,
+        "wins": set_data.wins,
+        "losses": set_data.losses,
+        "set_profit": set_data.set_profit,
+        "cumulative_profit": set_data.cumulative_profit,
+        "money_set": set_data.set_profit * chip_base,
+        "money_cum": set_data.cumulative_profit * chip_base,
+        "overshoot": set_data.overshoot,
+    })
 
-class LogicEngine:
-    def __init__(self):
-        self.tracker = MaruBatsuTracker(chip_base=1.0)
-        self.config = {}
-        self.running = False
-        self.total_wins = 0
-        self.total_losses = 0
-        self.total_ties = 0
-        self.session_count = 0
+def send_status(session, balance: float = 0):
+    from marubatsu_strategy import SEQ
+    s = session.get_summary()
+    turns = session.tracker.current_turns
+    turns_display = "".join("O" if t == "O" else "X" for t in turns)
+    send_msg({
+        "type": "status",
+        "cumulative_profit": s["cumulative_profit"],
+        "cumulative_money": s["cumulative_money"],
+        "wins": s["total_wins"],
+        "losses": s["total_losses"],
+        "ties": s["total_ties"],
+        "set_count": s["sets"],
+        "current_turn": s["current_turn"],
+        "current_unit": s["current_unit"],
+        "current_unit_idx": s["current_unit_idx"],
+        "total_bets": s["total_bets"],
+        "running": True,
+        "balance": balance,
+        "turns_display": turns_display,
+        "session_count": s["session_count"],
+    })
 
-    def start(self, config: dict):
-        self.config = config
-        self.tracker.chip_base = config.get("chip_base", 1.0)
-        self.running = True
-        send_log(f"Logic engine started. Chip: ${self.tracker.chip_base}, Loss cut: -{config.get('loss_cut', 200)}")
-
-    def stop(self):
-        self.running = False
-
-    def on_result(self, result: str):
-        if not self.running:
-            return
-        if result == "tie":
-            self.total_ties += 1
-            return
-
-        won = (result == "player")
-        turn_before = len(self.tracker.current_turns)
-        completed_set = self.tracker.add_result(result)
-
-        if won:
-            self.total_wins += 1
-        else:
-            self.total_losses += 1
-
-        send_msg({
-            "type": "turn_result",
-            "turn_index": turn_before,
-            "won": won,
-            "result": result,
+def send_shoe_history(sets: list, chip_base: float):
+    """Send all completed sets for shoe display"""
+    data = []
+    for s in sets:
+        data.append({
+            "set_index": s.set_index,
+            "results": s.results,
+            "wins": s.wins,
+            "losses": s.losses,
+            "set_profit": s.set_profit,
+            "cumulative_profit": s.cumulative_profit,
         })
-
-        if completed_set:
-            money_set = completed_set.set_profit * self.tracker.chip_base
-            money_cum = completed_set.cumulative_profit * self.tracker.chip_base
-            send_msg({
-                "type": "set_complete",
-                "set_index": completed_set.set_index,
-                "wins": completed_set.wins,
-                "losses": completed_set.losses,
-                "profit": completed_set.set_profit,
-                "cumulative_profit": completed_set.cumulative_profit,
-                "money_set": money_set,
-                "money_cum": money_cum,
-            })
-
-        cp = self.tracker.cumulative_profit
-        loss_cut = self.config.get("loss_cut", 200)
-        if cp >= PROFIT_STOP or cp <= -loss_cut:
-            reason = "profit_stop" if cp >= PROFIT_STOP else "loss_cut"
-            send_msg({"type": "session_reset", "reason": reason, "profit": cp})
-            self.session_count += 1
-            self.tracker.sets.clear()
-            self.tracker.current_turns.clear()
-
-    def send_status(self):
-        send_msg({
-            "type": "status",
-            "cumulative_profit": self.tracker.cumulative_profit,
-            "cumulative_money": self.tracker.cumulative_profit * self.tracker.chip_base,
-            "wins": self.total_wins,
-            "losses": self.total_losses,
-            "ties": self.total_ties,
-            "set_count": len(self.tracker.sets),
-            "current_turn": len(self.tracker.current_turns),
-            "current_unit": SEQ[self.tracker.current_unit_idx],
-            "running": self.running,
-        })
+    send_msg({"type": "shoe_history", "sets": data, "chip_base": chip_base})
 
 
-# ======== Scraper Runner ========
+# ======== Table finder ========
 
 def find_target_table_id(scraper) -> str | None:
     for tid, name in scraper._target_table_names.items():
         if name.strip().lower() == TARGET_TABLE_NAME.lower():
             return tid
     for tid, name in scraper._target_table_names.items():
-        if "japanese" in name.lower() and "baccarat a" in name.lower():
+        if "japanese speed baccarat a" in name.lower():
             return tid
     return None
 
 
-def run_scraper(engine: LogicEngine, stop_event: threading.Event):
-    """Run BaccaratScraper in a thread. This is the proven, working approach."""
-    # Import here to avoid circular imports and ensure config is loaded
+# ======== BET Runner ========
+
+def run_bet_session(config: dict, stop_event: threading.Event):
+    """Main BET loop — runs in a thread."""
     import config as cfg
     cfg.HEADLESS = False
-    from scraper import BaccaratScraper
+    cfg.PROFILE_NAME = "bet"
 
+    from scraper import BaccaratScraper
+    from executor import BetExecutor
+    from game_ws import GameWSMonitor
+    from humanize import Humanizer
+    from notify import TelegramNotifier
+    from marubatsu_bet import MaruBatsuBetSession, PROFIT_STOP
+    from marubatsu_strategy import SEQ
+
+    chip_base = config.get("chip_base", 1.0)
+    loss_cut = config.get("loss_cut", 200)
+    dry_run = config.get("dry_run", False)
+
+    mode = "DRY RUN" if dry_run else "LIVE"
+    send_action(f"Starting {mode} mode...")
+
+    if dry_run:
+        notifier = TelegramNotifier("", "")
+    else:
+        notifier = TelegramNotifier(
+            os.getenv("TELEGRAM_BOT_TOKEN", ""),
+            os.getenv("TELEGRAM_CHAT_ID", ""),
+        )
+
+    # === Browser launch ===
+    send_action("Launching browser...")
     scraper = BaccaratScraper()
     scraper.table_name = "Japanese Baccarat"
-
-    send_log("Launching browser (Camoufox)...")
-    send_browser_status("launching")
 
     try:
         scraper.start()
     except Exception as e:
         send_log(f"Browser launch failed: {e}")
-        logger.error(f"Browser launch failed: {e}", exc_info=True)
+        send_action("Browser launch failed")
         return
 
-    send_log("Browser launched + logged in.")
-    send_browser_status("logged_in")
-
-    send_log("Waiting for Evolution WS...")
+    send_action("Browser ready. Waiting for Evolution WS...")
     scraper.setup_ws_intercept()
 
     if scraper._evo_ws_connected:
-        send_log("Evolution WebSocket connected!")
-        send_browser_status("ws_connected")
+        send_action("Evolution WS connected")
     else:
-        send_log("Warning: Evolution WS not detected. Continuing anyway...")
+        send_action("Evolution WS timeout — continuing...")
 
-    # Resolve target table
-    send_log("Resolving target table...")
+    # === Find table ===
+    send_action("Finding target table...")
     for _ in range(30):
         if scraper._target_table_ids:
             break
         time.sleep(1)
 
     target_tid = find_target_table_id(scraper)
-    if target_tid:
-        name = scraper._target_table_names.get(target_tid, TARGET_TABLE_NAME)
-        send_log(f"Monitoring: {name} ({target_tid})")
-        send_browser_status("ws_connected")
-    else:
-        available = list(scraper._target_table_names.values())
-        send_log(f"Table '{TARGET_TABLE_NAME}' not found. Available: {available}")
-
-    # Main loop: poll for results (same as run_marubatsu.py)
-    while not stop_event.is_set():
-        try:
-            ws_results = scraper.get_ws_results()
-            if ws_results:
-                scraper.process_results(ws_results)
-
-                for r in ws_results:
-                    result = r.get("result")
-                    tid = r.get("table_id", "")
-
-                    if target_tid and tid != target_tid:
-                        continue
-                    if result not in ("player", "banker", "tie"):
-                        continue
-
-                    mark = {"player": "Player", "banker": "Banker", "tie": "Tie"}.get(result, result)
-                    tname = scraper._target_table_names.get(tid, tid)
-                    send_log(f"Result: {mark} ({tname})")
-                    engine.on_result(result)
-
-            # Periodic lobby reload to get fresh results
-            # Evolution WS stops sending historyUpdated after a while,
-            # but reload_lobby() triggers fresh histories diff
-            ws_silent = scraper.seconds_since_last_ws_message()
-            if ws_silent > 90:
-                logger.info(f"Periodic reload ({int(ws_silent)}s since last WS)")
-                scraper.reload_lobby()
-                for _ in range(15):
-                    if scraper._target_table_ids:
-                        break
-                    time.sleep(1)
-                new_tid = find_target_table_id(scraper)
-                if new_tid:
-                    target_tid = new_tid
-
-            time.sleep(3)
-
-        except Exception as e:
-            logger.error(f"Loop error: {e}", exc_info=True)
-            send_log(f"Error: {e}")
-            time.sleep(10)
-
-    # Shutdown
-    send_log("Stopping browser...")
-    try:
+    if not target_tid:
+        send_log(f"Table '{TARGET_TABLE_NAME}' not found")
+        send_action("Table not found")
         scraper.stop()
-    except Exception:
-        pass
-    send_log("Browser stopped.")
+        return
+
+    target_name = scraper._target_table_names.get(target_tid, TARGET_TABLE_NAME)
+    send_action(f"Table found: {target_name}")
+
+    # === Setup executor ===
+    humanizer = Humanizer(cfg.HUMANIZE_CONFIG)
+    executor_config = {"demo_mode": dry_run}
+    executor = BetExecutor(scraper.page, scraper.game_ws, executor_config, humanizer=humanizer)
+
+    session = MaruBatsuBetSession(
+        executor=executor,
+        notifier=notifier,
+        chip_base=chip_base,
+        loss_cut=loss_cut,
+        dry_run=dry_run,
+    )
+
+    # === Enter table ===
+    send_action(f"Entering table: {target_name}...")
+    if not executor.enter_table(target_tid, target_name):
+        send_log("Table entry failed")
+        send_action("Table entry failed")
+        scraper.stop()
+        return
+
+    balance = executor.get_balance() if not dry_run else 0
+    send_action(f"In table. Balance: ${balance:.2f}")
+    send_log(f"BET session started [{mode}] table={target_name} chip=${chip_base} balance=${balance:.2f}")
+    send_shoe_history(session.tracker.sets, chip_base)
+
+    # === Main BET loop ===
+    round_count = 0
+    entry_fail_count = 0
+
+    while not stop_event.is_set() and round_count < MAX_ROUNDS:
+        # Shoe change check
+        shoe_signals = scraper.get_new_shoe_signals()
+        if target_tid in shoe_signals and shoe_signals[target_tid]:
+            send_action("Shoe change detected")
+            send_log("Shoe change — partial turns discarded")
+            session.handle_shoe_change()
+
+        # BET phase
+        unit_idx = session.tracker.current_unit_idx
+        unit = SEQ[unit_idx]
+        bet_amount = unit * chip_base
+        turn_num = len(session.tracker.current_turns) + 1
+        send_action(f"Waiting for BET phase... (Turn {turn_num}/7, ${bet_amount:.0f})")
+
+        result = session.run_round(lambda: not stop_event.is_set())
+
+        if result["action"] == "exit":
+            send_action("Session interrupted — attempting re-entry...")
+            executor.exit_table()
+            time.sleep(5)
+
+            if stop_event.is_set():
+                break
+
+            send_action(f"Re-entering {target_name}...")
+            if executor.enter_table(target_tid, target_name):
+                entry_fail_count = 0
+                continue
+            else:
+                entry_fail_count += 1
+                if entry_fail_count >= 3:
+                    send_action("3 entry failures — restarting browser...")
+                    try:
+                        scraper.stop()
+                    except Exception:
+                        pass
+                    time.sleep(3)
+                    scraper = BaccaratScraper()
+                    scraper.table_name = "Japanese Baccarat"
+                    scraper.start()
+                    scraper.setup_ws_intercept()
+                    for _ in range(30):
+                        if scraper._target_table_ids:
+                            break
+                        time.sleep(1)
+                    executor = BetExecutor(scraper.page, scraper.game_ws, executor_config, humanizer=humanizer)
+                    session.executor = executor
+                    target_tid = find_target_table_id(scraper) or target_tid
+                    entry_fail_count = 0
+                    if not executor.enter_table(target_tid, target_name):
+                        send_action("Failed after browser restart — stopping")
+                        break
+                else:
+                    time.sleep(10)
+                    continue
+
+        round_count += 1
+
+        # Send round result to GUI
+        if result.get("result"):
+            res = result["result"]
+            won = result.get("won")
+            ba = result.get("bet_amount", 0)
+            bal = executor.get_balance() if not dry_run else 0
+            turns = session.tracker.current_turns
+            turns_disp = "".join("O" if t == "O" else "X" for t in turns)
+            cp = session.tracker.cumulative_profit
+            cm = cp * chip_base
+
+            if res == "tie":
+                send_action(f"Tie — BET returned. Balance: ${bal:.2f}")
+            elif won:
+                send_action(f"WIN! Player ${ba:.0f}. Balance: ${bal:.2f}")
+            else:
+                send_action(f"LOSE. Banker won. Balance: ${bal:.2f}")
+
+            send_result(res, won, ba, bal, len(turns), turns_disp, cp, cm)
+
+        # Set complete
+        if result.get("completed_set"):
+            s = result["completed_set"]
+            send_set_complete(s, chip_base)
+            send_shoe_history(session.tracker.sets, chip_base)
+            send_action(f"Set #{s.set_index} done: {s.wins}W/{s.losses}L, P&L: {s.set_profit:+d}")
+
+        # Profit/loss reset
+        if result.get("should_reset"):
+            cp = session.tracker.cumulative_profit
+            reason = "Profit target" if cp >= PROFIT_STOP else "Loss cut"
+            send_action(f"{reason} reached ({cp:+d} chips) — resetting...")
+            session.reset_session("利確" if cp >= PROFIT_STOP else "損切り")
+            send_shoe_history(session.tracker.sets, chip_base)
+
+        # Periodic status
+        bal = executor.get_balance() if not dry_run else 0
+        send_status(session, bal)
+
+    # === Shutdown ===
+    send_action("Stopping...")
+    summary = session.get_summary()
+    balance = executor.get_balance() if not dry_run else 0
+    send_log(
+        f"Session ended. Bets:{summary['total_bets']} "
+        f"W:{summary['total_wins']} L:{summary['total_losses']} "
+        f"P&L:{summary['cumulative_profit']:+d} chips"
+    )
+    send_action("Closing table...")
+    executor.exit_table()
+    send_action("Closing browser...")
+    scraper.stop()
+    send_action("Stopped.")
 
 
 # ======== Main ========
 
 def main():
-    engine = LogicEngine()
     stop_event = threading.Event()
-    scraper_thread = None
+    bet_thread = None
 
     def stdin_reader():
-        nonlocal scraper_thread
+        nonlocal bet_thread
         for line in sys.stdin:
             line = line.strip()
             if not line:
@@ -265,20 +357,22 @@ def main():
                 msg_type = msg.get("type", "")
 
                 if msg_type == "start":
-                    engine.start(msg.get("config", {}))
-                    if scraper_thread is None or not scraper_thread.is_alive():
+                    config = msg.get("config", {})
+                    if bet_thread is None or not bet_thread.is_alive():
                         stop_event.clear()
-                        scraper_thread = threading.Thread(
-                            target=run_scraper, args=(engine, stop_event), daemon=True
+                        bet_thread = threading.Thread(
+                            target=run_bet_session, args=(config, stop_event), daemon=True
                         )
-                        scraper_thread.start()
+                        bet_thread.start()
+                        send_log("BET session starting...")
 
                 elif msg_type == "stop":
-                    engine.stop()
                     stop_event.set()
+                    send_log("Stop requested.")
 
                 elif msg_type == "get_status":
-                    engine.send_status()
+                    # Status is sent periodically from bet loop
+                    pass
 
             except json.JSONDecodeError:
                 logger.warning(f"Invalid JSON: {line}")
@@ -289,14 +383,13 @@ def main():
     reader_thread = threading.Thread(target=stdin_reader, daemon=True)
     reader_thread.start()
 
-    send_log("Valhalla II Logic Engine ready.")
+    send_log("Valhalla II Engine ready.")
 
     try:
         while True:
             time.sleep(1)
     except (KeyboardInterrupt, EOFError):
         stop_event.set()
-        engine.stop()
 
 
 if __name__ == "__main__":
