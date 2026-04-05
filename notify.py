@@ -1,21 +1,36 @@
-"""Telegram通知"""
+"""Telegram通知
+
+3種類のNotifier:
+- TelegramNotifier: 基底クラス (従来互換のためエイリアス)
+- PublicNotifier: 検証用公開チャンネル (シュー進行、セット完了、利確の宣伝投稿)
+- AdminNotifier: 管理者プライベート (エラー、損切り警告、ユーザー監視)
+- UserNotifier: 個別ユーザー通知 (既存のユーザー別通知)
+"""
 import logging
+import os
+import socket
 import requests
+from datetime import datetime
 
 logger = logging.getLogger("baccarat.notify")
 
 
 class TelegramNotifier:
-    def __init__(self, bot_token: str, chat_id: str):
+    """基底クラス: Telegram BOT への生送信機能"""
+
+    def __init__(self, bot_token: str, chat_id: str, label: str = "notify"):
         self.bot_token = bot_token
         self.chat_id = chat_id
+        self.label = label
         self.enabled = bool(bot_token and chat_id)
         if not self.enabled:
-            logger.info("Telegram通知無効（設定なし）")
+            logger.info(f"Telegram [{label}] 無効 (設定なし)")
+        else:
+            logger.info(f"Telegram [{label}] 有効 chat={chat_id}")
 
     def send(self, message: str, parse_mode: str = ""):
         if not self.enabled:
-            logger.info(f"[通知] {message}")
+            logger.info(f"[{self.label}] {message}")
             return
         try:
             payload = {"chat_id": self.chat_id, "text": message}
@@ -27,191 +42,254 @@ class TelegramNotifier:
                 timeout=10,
             )
             if not resp.ok:
-                logger.error(f"Telegram送信エラー: {resp.status_code} {resp.text}")
+                logger.error(f"Telegram [{self.label}] 送信エラー: {resp.status_code} {resp.text}")
         except Exception as e:
-            logger.error(f"Telegram送信エラー: {e}")
+            logger.error(f"Telegram [{self.label}] 送信エラー: {e}")
 
     def notify_startup(self, table_name: str):
         self.send(
             f"🃏 バカラモニター起動\n"
-            f"テーブル: {table_name}\n"
-            f"シュー単位で結果を記録・通知します"
-        )
-
-    def notify_shoe_complete(self, summary: dict):
-        """シュー終了時の通知 — メイン通知 + 分析結果"""
-
-        msg = (
-            f"━━━━━━━━━━━━━━━━━━━\n"
-            f"🃏 シュー #{summary['shoe_number']} 完了\n"
-            f"📍 {summary['table_name']}\n"
-            f"━━━━━━━━━━━━━━━━━━━\n"
-            f"\n"
-            f"📊 結果 ({summary['hand_count']}ハンド)\n"
-            f"  🔵 Player: {summary['player_count']}\n"
-            f"  🔴 Banker: {summary['banker_count']}\n"
-            f"  🟢 Tie:    {summary['tie_count']}\n"
-        )
-
-        # 規則性判定
-        regularity = summary.get("regularity", "")
-        reg_score = summary.get("regularity_score", 0)
-        if regularity:
-            reg_emoji = "✅" if regularity == "規則性" else "⚠️"
-            msg += (
-                f"\n{reg_emoji} 判定: {regularity} (スコア: {reg_score})\n"
-            )
-
-        # パターン分析
-        patterns = summary.get("pattern_breakdown", {})
-        dominant = summary.get("dominant_pattern", "")
-        if patterns:
-            msg += f"📋 パターン分析:\n"
-            for name, pct in sorted(patterns.items(), key=lambda x: -x[1]):
-                bar = "█" * (pct // 10)
-                marker = " ◀" if name == dominant else ""
-                msg += f"  {name}: {pct}% {bar}{marker}\n"
-
-        # 流れ分割
-        flow_type = summary.get("flow_type", "")
-        if flow_type:
-            msg += f"🔄 流れ: {flow_type}\n"
-
-        # 出目順
-        seq = summary.get("result_sequence", "")
-        if seq:
-            display_seq = self._format_sequence(seq)
-            msg += f"\n📝 出目:\n  {display_seq}\n"
-
-        msg += (
-            f"\n🔥 B最大連続: {summary['max_banker_streak']}回\n"
-            f"⚡ P最大連続: {summary['max_player_streak']}回\n"
-        )
-
-        msg += f"━━━━━━━━━━━━━━━━━━━"
-
-        self.send(msg)
-
-    def notify_hand_result(self, hand_num: int, result: str, shoe_summary: dict):
-        """各ハンドの結果を簡易通知（オプション）"""
-        emoji = {"player": "🔵P", "banker": "🔴B", "tie": "🟢T"}.get(result, "?")
-        seq = shoe_summary["result_sequence"][-20:]  # 直近20手
-        display = self._format_sequence(seq)
-        self.send(
-            f"{emoji} Hand #{hand_num}\n"
-            f"直近: {display}\n"
-            f"P:{shoe_summary['player_count']} "
-            f"B:{shoe_summary['banker_count']} "
-            f"T:{shoe_summary['tie_count']}"
-        )
-
-    def notify_report(self, table_name: str, stats: dict, streak: dict):
-        """定期レポート"""
-        self.send(
-            f"━━ バカラレポート ━━\n"
-            f"テーブル: {table_name}\n"
-            f"\n"
-            f"📊 24時間統計 ({stats['total']}ラウンド)\n"
-            f"  🔵 Player: {stats['player']} ({stats['player_pct']}%)\n"
-            f"  🔴 Banker: {stats['banker']} ({stats['banker_pct']}%)\n"
-            f"  🟢 Tie:    {stats['tie']} ({stats['tie_pct']}%)\n"
-            f"  ペア: P={stats['player_pair']} B={stats['banker_pair']}\n"
-            f"\n"
-            f"現在: {streak['current']} {streak['count']}連続"
+            f"テーブル: {table_name}"
         )
 
     def notify_shutdown(self, reason: str = ""):
         self.send(f"⛔ バカラモニター停止{': ' + reason if reason else ''}")
 
-    def _format_sequence(self, seq: str) -> str:
-        """出目文字列を絵文字付きに変換（例: PPBBT → 🔵🔵🔴🔴🟢）"""
-        mapping = {"P": "🔵", "B": "🔴", "T": "🟢"}
-        # 長い出目は改行で折り返す（30文字ごと）
-        chars = [mapping.get(c, c) for c in seq]
-        lines = []
-        chunk_size = 30
-        for i in range(0, len(chars), chunk_size):
-            lines.append("".join(chars[i:i + chunk_size]))
-        return "\n  ".join(lines)
-
-    def _get_banker_streak_detail(self, seq: str) -> str:
-        """バンカー連続の詳細を返す"""
-        streaks = []
-        current = 0
-        start_pos = 0
-        for i, c in enumerate(seq):
-            if c == "B":
-                if current == 0:
-                    start_pos = i + 1  # 1-based
-                current += 1
-            else:
-                if current >= 3:  # 3連続以上のみ表示
-                    streaks.append(f"  Hand {start_pos}〜: {current}連続🔴")
-                current = 0
-        if current >= 3:
-            streaks.append(f"  Hand {start_pos}〜: {current}連続🔴")
-
-        return "\n".join(streaks) if streaks else ""
-
-    # === BET通知 ===
+    # === BET通知 (既存互換) ===
 
     def notify_bet_placed(self, bet_info: dict):
-        """BET実行通知"""
         side_emoji = "🔵" if bet_info["side"] == "player" else "🔴"
         side_name = "Player" if bet_info["side"] == "player" else "Banker"
         self.send(
             f"🎯 BET実行\n"
             f"📍 {bet_info.get('table_name', '')}\n"
-            f"{side_emoji} {side_name} ${bet_info.get('amount', 0):.2f}\n"
-            f"📋 {bet_info.get('reason', '')}\n"
-            f"📊 規則性: {bet_info.get('regularity_score', 0)}"
+            f"{side_emoji} {side_name} ${bet_info.get('amount', 0):.2f}"
         )
 
     def notify_bet_result(self, bet_result: dict):
-        """BET結果通知"""
         result = bet_result.get("result", "")
         profit = bet_result.get("profit", 0)
         emoji = "✅" if result == "win" else "❌" if result == "lose" else "➖"
         self.send(
             f"{emoji} BET結果: {result.upper()}\n"
             f"📍 {bet_result.get('table_name', '')}\n"
-            f"💰 収支: ${profit:+.2f}\n"
-            f"📊 累計: ${bet_result.get('cumulative_profit', 0):+.2f}"
+            f"💰 収支: ${profit:+.2f}"
         )
 
-    def notify_session_summary(self, session: dict):
-        """セッション収支通知"""
+
+# ==========================================================
+#  PublicNotifier — 検証用公開チャンネル向け
+#  (ロジックが機能していることを公に証明する、宣伝・購読用)
+# ==========================================================
+
+class PublicNotifier(TelegramNotifier):
+    """公開チャンネル向け。エンドユーザー個人情報は絶対に含めない。"""
+
+    def __init__(self, bot_token: str = "", chat_id: str = ""):
+        token = bot_token or os.getenv("PUBLIC_BOT_TOKEN", "")
+        chat = chat_id or os.getenv("PUBLIC_CHANNEL_ID", "")
+        super().__init__(token, chat, label="PUBLIC")
+
+    def notify_verification_start(self, table_name: str):
         self.send(
-            f"━━━━━━━━━━━━━━━━━━━\n"
-            f"💰 BETレポート\n"
-            f"━━━━━━━━━━━━━━━━━━━\n"
-            f"\n"
-            f"📊 セッション結果\n"
-            f"  BET回数: {session.get('total_bets', 0)}\n"
-            f"  勝ち: {session.get('wins', 0)} "
-            f"({session.get('win_rate', 0):.1f}%)\n"
-            f"  負け: {session.get('losses', 0)}\n"
-            f"  収支: ${session.get('total_profit', 0):+.2f}\n"
-            f"\n"
-            f"🎯 戦略: {session.get('strategy', '')}\n"
-            f"\n"
-            f"💵 資金状況\n"
-            f"  開始: ${session.get('starting_balance', 0):.2f}\n"
-            f"  現在: ${session.get('ending_balance', 0):.2f}\n"
-            f"━━━━━━━━━━━━━━━━━━━"
+            f"━━━━━━━━━━━━━━━━\n"
+            f"∫ LAPLACE Verification\n"
+            f"━━━━━━━━━━━━━━━━\n"
+            f"Table: {table_name}\n"
+            f"Start: {datetime.now().strftime('%Y-%m-%d %H:%M JST')}\n"
+            f"Mode: Live logic verification\n"
+            f"━━━━━━━━━━━━━━━━"
         )
 
-    def notify_daily_limit(self, limit_type: str, amount: float):
-        """日次制限到達通知"""
-        if limit_type == "loss":
-            self.send(
-                f"🛑 日次損失上限到達\n"
-                f"損失額: ${abs(amount):.2f}\n"
-                f"自動停止します"
-            )
-        elif limit_type == "profit":
-            self.send(
-                f"🎉 日次利益目標達成\n"
-                f"利益額: ${amount:.2f}\n"
-                f"自動停止します"
-            )
+    def notify_set_complete(self, set_data: dict, cumulative_dollars: float):
+        """セット完了時のパブリック投稿"""
+        marks = set_data["results"].replace("O", "🟢").replace("X", "🔴")
+        sign = "+" if set_data["set_profit"] >= 0 else ""
+        cum_sign = "+" if cumulative_dollars >= 0 else ""
+        self.send(
+            f"Set #{set_data['set_index']}\n"
+            f"{marks}\n"
+            f"{set_data['wins']}W/{set_data['losses']}L  "
+            f"{sign}{set_data['set_profit']}u\n"
+            f"Cumulative: {cum_sign}${cumulative_dollars:.0f}"
+        )
+
+    def notify_profit_target(self, session_num: int, amount_dollars: float, hands_played: int):
+        """利確到達 — 最重要宣伝ポイント"""
+        self.send(
+            f"🏆 PROFIT TARGET REACHED\n"
+            f"━━━━━━━━━━━━━━━━\n"
+            f"Session #{session_num}\n"
+            f"Profit: +${amount_dollars:.0f}\n"
+            f"Hands: {hands_played}\n"
+            f"Time: {datetime.now().strftime('%H:%M JST')}\n"
+            f"━━━━━━━━━━━━━━━━\n"
+            f"∫ LAPLACE"
+        )
+
+    def notify_loss_cut(self, session_num: int, amount_dollars: float, hands_played: int):
+        """損切り — 正直に記録 (信頼性向上)"""
+        self.send(
+            f"⛔ Loss Cut\n"
+            f"━━━━━━━━━━━━━━━━\n"
+            f"Session #{session_num}\n"
+            f"Loss: -${abs(amount_dollars):.0f}\n"
+            f"Hands: {hands_played}\n"
+            f"Time: {datetime.now().strftime('%H:%M JST')}\n"
+            f"━━━━━━━━━━━━━━━━"
+        )
+
+    def notify_daily_summary(self, date_str: str, total_sessions: int,
+                              profit_sessions: int, loss_sessions: int,
+                              net_profit: float):
+        """日次サマリー (毎日1回投稿)"""
+        sign = "+" if net_profit >= 0 else ""
+        emoji = "📈" if net_profit >= 0 else "📉"
+        self.send(
+            f"{emoji} Daily Summary — {date_str}\n"
+            f"━━━━━━━━━━━━━━━━\n"
+            f"Sessions: {total_sessions}\n"
+            f"Profit sessions: {profit_sessions}\n"
+            f"Loss sessions: {loss_sessions}\n"
+            f"Net: {sign}${net_profit:.0f}\n"
+            f"━━━━━━━━━━━━━━━━\n"
+            f"∫ LAPLACE"
+        )
+
+
+# ==========================================================
+#  AdminNotifier — 管理者プライベート向け
+#  (エラー、ライセンス、ユーザー監視、異常検知)
+# ==========================================================
+
+class AdminNotifier(TelegramNotifier):
+    """管理者向け。ユーザー名・エラー詳細など機密情報を含む。"""
+
+    def __init__(self, bot_token: str = "", chat_id: str = ""):
+        token = bot_token or os.getenv("ADMIN_BOT_TOKEN", "")
+        chat = chat_id or os.getenv("ADMIN_CHAT_ID", "")
+        super().__init__(token, chat, label="ADMIN")
+        self.hostname = socket.gethostname()
+
+    def _prefix(self, user: str = None) -> str:
+        u = user or os.getenv("LAPLACE_USER", self.hostname)
+        return f"[{u}]"
+
+    def notify_user_startup(self, user: str, config: dict):
+        self.send(
+            f"{self._prefix(user)} 🟢 LAPLACE started\n"
+            f"Mode: {'DRY' if config.get('dry_run') else 'LIVE'}\n"
+            f"Base: ${config.get('chip_base', 0)}\n"
+            f"Target: ${config.get('profit_target', 0)}\n"
+            f"LossCut: ${config.get('loss_cut', 0)}\n"
+            f"Time: {datetime.now().strftime('%Y-%m-%d %H:%M JST')}"
+        )
+
+    def notify_user_shutdown(self, user: str, reason: str = ""):
+        self.send(
+            f"{self._prefix(user)} 🔴 LAPLACE stopped\n"
+            f"Reason: {reason or 'Normal'}\n"
+            f"Time: {datetime.now().strftime('%H:%M JST')}"
+        )
+
+    def notify_user_profit(self, user: str, session_num: int, amount: float, cumulative_today: float):
+        self.send(
+            f"{self._prefix(user)} 🎉 Profit target\n"
+            f"+${amount:.0f} locked in (Session #{session_num})\n"
+            f"Today total: +${cumulative_today:.0f}"
+        )
+
+    def notify_user_loss_cut(self, user: str, session_num: int, amount: float, cumulative_today: float):
+        self.send(
+            f"{self._prefix(user)} ⚠️ Loss cut\n"
+            f"-${abs(amount):.0f} (Session #{session_num})\n"
+            f"Today total: ${'+' if cumulative_today >= 0 else ''}${cumulative_today:.0f}"
+        )
+
+    def notify_error(self, user: str, error_type: str, detail: str):
+        self.send(
+            f"{self._prefix(user)} ❌ ERROR [{error_type}]\n"
+            f"{detail[:500]}\n"
+            f"Time: {datetime.now().strftime('%H:%M JST')}"
+        )
+
+    def notify_license_event(self, user: str, event: str, detail: str = ""):
+        self.send(
+            f"{self._prefix(user)} 🔑 License {event}\n"
+            f"{detail}"
+        )
+
+    def notify_anomaly(self, user: str, anomaly: str):
+        self.send(
+            f"{self._prefix(user)} 🚨 Anomaly detected\n"
+            f"{anomaly}"
+        )
+
+
+# ==========================================================
+#  UserNotifier — 個別ユーザー向け (既存互換)
+# ==========================================================
+
+class UserNotifier(TelegramNotifier):
+    """個別ユーザー向け通知 (既存の TelegramNotifier と同等)"""
+
+    def __init__(self, bot_token: str = "", chat_id: str = ""):
+        token = bot_token or os.getenv("TELEGRAM_BOT_TOKEN", "")
+        chat = chat_id or os.getenv("TELEGRAM_CHAT_ID", "")
+        super().__init__(token, chat, label="USER")
+
+
+# ==========================================================
+#  Composite — 複数のNotifierを1つにまとめる
+# ==========================================================
+
+class CompositeNotifier:
+    """複数のNotifierへ同時送信。イベント種類ごとに送信先を分岐。"""
+
+    def __init__(self, public: PublicNotifier = None,
+                 admin: AdminNotifier = None,
+                 user: UserNotifier = None):
+        self.public = public
+        self.admin = admin
+        self.user = user
+
+    def send(self, message: str):
+        """旧 TelegramNotifier.send() 互換 — UserNotifier へ送信"""
+        if self.user:
+            self.user.send(message)
+
+    def on_startup(self, user: str, config: dict, table_name: str):
+        if self.admin:
+            self.admin.notify_user_startup(user, config)
+        if self.public and config.get("verification_mode"):
+            self.public.notify_verification_start(table_name)
+        if self.user:
+            self.user.notify_startup(table_name)
+
+    def on_shutdown(self, user: str, reason: str = ""):
+        if self.admin:
+            self.admin.notify_user_shutdown(user, reason)
+        if self.user:
+            self.user.notify_shutdown(reason)
+
+    def on_set_complete(self, set_data: dict, cumulative_dollars: float, verification: bool):
+        if self.public and verification:
+            self.public.notify_set_complete(set_data, cumulative_dollars)
+
+    def on_profit_target(self, user: str, session_num: int, amount: float,
+                           hands: int, cumulative_today: float, verification: bool):
+        if self.admin:
+            self.admin.notify_user_profit(user, session_num, amount, cumulative_today)
+        if self.public and verification:
+            self.public.notify_profit_target(session_num, amount, hands)
+
+    def on_loss_cut(self, user: str, session_num: int, amount: float,
+                     hands: int, cumulative_today: float, verification: bool):
+        if self.admin:
+            self.admin.notify_user_loss_cut(user, session_num, amount, cumulative_today)
+        if self.public and verification:
+            self.public.notify_loss_cut(session_num, amount, hands)
+
+    def on_error(self, user: str, error_type: str, detail: str):
+        if self.admin:
+            self.admin.notify_error(user, error_type, detail)

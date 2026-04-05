@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Valhalla II</title>
+  <title>LAPLACE</title>
   <link rel="stylesheet" href="styles.css">
 </head>
 <body>
@@ -13,8 +13,8 @@
   <!-- Title Bar -->
   <div class="title-bar">
     <div class="title-bar-left">
-      <span class="title-bar-logo">&#9670;</span>
-      <span class="title-bar-text">VALHALLA II</span>
+      <span class="title-bar-logo">&#8747;</span>
+      <span class="title-bar-text">LAPLACE</span>
     </div>
     <div class="title-bar-controls">
       <button class="title-btn" id="btnMinimize">&#x2500;</button>
@@ -39,20 +39,75 @@
         <div class="stat-value" id="balance">$0.00</div>
       </div>
       <div class="stat-card accent">
-        <div class="stat-label">SESSION P&L</div>
+        <div class="stat-label">SESSION (TO RESET)</div>
         <div class="stat-value" id="sessionPnl">$0.00</div>
       </div>
       <div class="stat-card">
-        <div class="stat-label">BETS</div>
+        <div class="stat-label">BETS <span class="os-tag" id="osValue">OS 0</span></div>
         <div class="stat-value" id="betCount">0W / 0L</div>
       </div>
       <div class="stat-card">
-        <div class="stat-label">UNIT</div>
-        <div class="stat-value" id="unitInfo">1x</div>
+        <div class="stat-label">WIN RATE</div>
+        <div class="stat-value" id="winRate">-</div>
       </div>
     </div>
 
-    <!-- Current Round (scrolling results) -->
+    <!-- Developer Mode Panel (hidden unless unlocked) -->
+    <div class="section glass dev-panel hidden" id="devPanel">
+      <div class="section-header dev-header">
+        DEVELOPER VIEW <span class="dev-badge">DEV</span>
+      </div>
+      <div class="dev-grid">
+        <div class="dev-item">
+          <div class="dev-label">Current Unit Idx</div>
+          <div class="dev-value" id="devUnitIdx">-</div>
+        </div>
+        <div class="dev-item">
+          <div class="dev-label">Current Unit ($)</div>
+          <div class="dev-value" id="devUnit">-</div>
+        </div>
+        <div class="dev-item">
+          <div class="dev-label">Current Set</div>
+          <div class="dev-value" id="devSet">-</div>
+        </div>
+        <div class="dev-item">
+          <div class="dev-label">Turn in Set</div>
+          <div class="dev-value" id="devTurn">-/7</div>
+        </div>
+        <div class="dev-item">
+          <div class="dev-label">Set Profit (chip)</div>
+          <div class="dev-value" id="devSetProfit">-</div>
+        </div>
+        <div class="dev-item">
+          <div class="dev-label">Cumul. Profit (chip)</div>
+          <div class="dev-value" id="devCumProfit">-</div>
+        </div>
+        <div class="dev-item">
+          <div class="dev-label">Overshoot</div>
+          <div class="dev-value" id="devOvershoot">0</div>
+        </div>
+        <div class="dev-item">
+          <div class="dev-label">Total Bets</div>
+          <div class="dev-value" id="devTotalBets">0</div>
+        </div>
+      </div>
+      <div class="dev-sets-container">
+        <div class="dev-label" style="padding:0 12px;">Set History (7 hands per line)</div>
+        <div class="dev-sets" id="devSets"></div>
+      </div>
+    </div>
+
+    <!-- Daily P&L -->
+    <div class="section glass daily-section">
+      <div class="section-header">
+        DAILY TOTAL <span class="today-pnl" id="todayPnl">$0</span>
+      </div>
+      <div class="daily-row" id="dailyRow">
+        <div class="daily-empty">No history yet</div>
+      </div>
+    </div>
+
+    <!-- Current Round (last 10 results) -->
     <div class="section glass">
       <div class="section-header">LIVE FEED</div>
       <div class="feed-row" id="feedRow">
@@ -60,11 +115,11 @@
       </div>
     </div>
 
-    <!-- Shoe History (scrollable sets) -->
+    <!-- Recent History (last 20 hands, no set boundaries) -->
     <div class="section glass shoe-section">
-      <div class="section-header">SHOE HISTORY</div>
-      <div class="shoe-grid" id="shoeGrid">
-        <div class="shoe-empty">No sets completed yet</div>
+      <div class="section-header">RECENT HANDS</div>
+      <div class="recent-grid" id="recentGrid">
+        <div class="shoe-empty">Waiting for results...</div>
       </div>
     </div>
 
@@ -72,14 +127,34 @@
     <div class="controls">
       <button class="btn btn-start" id="btnStart">START</button>
       <button class="btn btn-stop" id="btnStop" disabled>STOP</button>
+      <button class="btn btn-skip" id="btnSkip" disabled>SKIP TABLE</button>
       <button class="btn btn-gear" id="btnSettings">&#x2699;</button>
+    </div>
+
+    <!-- Continue/Reset Dialog -->
+    <div class="modal hidden" id="continueModal">
+      <div class="modal-content glass">
+        <div class="modal-header">
+          <h2>PREVIOUS SESSION DETECTED</h2>
+          <button class="modal-close" id="continueClose">&times;</button>
+        </div>
+        <div class="modal-body">
+          <p style="color: var(--text-muted); font-size:12px; line-height:1.6; margin-bottom:16px;">
+            A previous session state was found. Choose how to start:
+          </p>
+          <div style="display:flex; flex-direction:column; gap:10px;">
+            <button class="btn btn-start" id="btnContinue" style="width:100%;">CONTINUE FROM LAST SESSION</button>
+            <button class="btn btn-stop" id="btnResetAll" style="width:100%;">RESET SESSION (Daily P&L kept)</button>
+          </div>
+        </div>
+      </div>
     </div>
 
     <!-- Log Toggle -->
     <div class="log-bar">
-      <span class="log-toggle" id="logToggle">CONSOLE &#x25BC;</span>
+      <span class="log-toggle" id="logToggle">CONSOLE &#x25B2;</span>
     </div>
-    <div class="log-panel hidden" id="logPanel">
+    <div class="log-panel" id="logPanel">
       <div class="log-content" id="logContent"></div>
     </div>
   </div>
@@ -97,12 +172,16 @@
           <input type="text" id="inputLicense" placeholder="XXXX-XXXX-XXXX-XXXX">
         </div>
         <div class="form-group">
-          <label>Chip Base ($)</label>
+          <label>Base Bet ($)</label>
           <input type="number" id="inputChipBase" value="1" min="0.5" step="0.5">
         </div>
         <div class="form-group">
-          <label>Loss Cut (chips)</label>
-          <input type="number" id="inputLossCut" value="200" min="50" step="50">
+          <label>Profit Target ($)</label>
+          <input type="number" id="inputProfitTarget" value="50" min="10" step="10">
+        </div>
+        <div class="form-group">
+          <label>Loss Cut ($)</label>
+          <input type="number" id="inputLossCut" value="200" min="50" step="10">
         </div>
         <div class="form-group">
           <label>Telegram Chat ID</label>
@@ -114,6 +193,31 @@
           </label>
         </div>
         <button class="btn btn-start" id="btnSaveSettings" style="width:100%;margin-top:12px;">SAVE</button>
+        <div style="text-align:center; margin-top:16px;">
+          <span id="devModeLink" style="font-size:10px; color:var(--text-dim); cursor:pointer; letter-spacing:1px;">
+            <span id="devModeStatus">Developer Mode: OFF</span>
+          </span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Developer Mode Password Dialog -->
+  <div class="modal hidden" id="devModeModal">
+    <div class="modal-content glass" style="max-width:360px;">
+      <div class="modal-header">
+        <h2>DEVELOPER MODE</h2>
+        <button class="modal-close" id="devModeClose">&times;</button>
+      </div>
+      <div class="modal-body">
+        <p style="color:var(--text-muted); font-size:11px; line-height:1.6; margin-bottom:14px;">
+          Enter developer password to enable detailed logic view.
+        </p>
+        <div class="form-group">
+          <label>Password</label>
+          <input type="password" id="inputDevPassword" placeholder="********">
+        </div>
+        <button class="btn btn-start" id="btnDevAuth" style="width:100%;margin-top:8px;">UNLOCK</button>
       </div>
     </div>
   </div>

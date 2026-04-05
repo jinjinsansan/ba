@@ -12,7 +12,7 @@ function createWindow() {
     height: 700,
     minWidth: 420,
     minHeight: 500,
-    title: 'Valhalla II',
+    title: 'LAPLACE',
     backgroundColor: '#0f1117',
     frame: false,
     show: false,
@@ -140,6 +140,11 @@ ipcMain.handle('stop-bot', () => {
 
 ipcMain.handle('get-status', () => {
   sendToAgent({ type: 'get_status' });
+  return { ok: true };
+});
+
+ipcMain.handle('send-command', (event, cmd) => {
+  sendToAgent(cmd);
   return { ok: true };
 });
 

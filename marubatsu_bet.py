@@ -22,7 +22,7 @@ from notify import TelegramNotifier
 
 logger = logging.getLogger("baccarat.marubatsu_bet")
 
-PROFIT_STOP = 50
+PROFIT_STOP = 50  # default, overridable per session
 DEFAULT_LOSS_CUT = 200
 
 
@@ -36,12 +36,16 @@ class MaruBatsuBetSession:
         chip_base: float = 1.0,
         loss_cut: int = DEFAULT_LOSS_CUT,
         dry_run: bool = False,
+        profit_stop: int = PROFIT_STOP,
+        resume: bool = True,
     ):
         self.executor = executor
         self.notifier = notifier
         self.chip_base = chip_base
         self.loss_cut = loss_cut
+        self.profit_stop = profit_stop
         self.dry_run = dry_run
+        self.resume = resume
 
         self.tracker = MaruBatsuTracker(chip_base=chip_base)
         self.session_count = 0
@@ -51,8 +55,22 @@ class MaruBatsuBetSession:
         self.total_losses = 0
         self.total_ties = 0
 
-        self.state_path = Path(__file__).parent / "state_marubatsu_bet.json"
-        self._load_state()
+        # Separate state files for dry run vs live
+        if dry_run:
+            self.state_path = Path(__file__).parent / "state_marubatsu_bet_dry.json"
+        else:
+            self.state_path = Path(__file__).parent / "state_marubatsu_bet.json"
+
+        # Resume behavior controlled by user choice (Continue/Reset dialog)
+        if self.resume:
+            self._load_state()
+        else:
+            try:
+                if self.state_path.exists():
+                    self.state_path.unlink()
+                    logger.info(f"状態リセット: {self.state_path.name} を削除")
+            except Exception as e:
+                logger.warning(f"状態ファイル削除失敗: {e}")
 
     # === 状態保存/復元 ===
 
@@ -116,10 +134,23 @@ class MaruBatsuBetSession:
 
     # === セッション制御 ===
 
-    def should_reset(self) -> bool:
-        """利確 or 損切り条件をチェック"""
+    def effective_profit(self) -> int:
+        """セット完了損益 + 進行中セットの暫定損益 (chip単位)"""
+        from marubatsu_strategy import SEQ
         cp = self.tracker.cumulative_profit
-        if cp >= PROFIT_STOP:
+        # Add provisional profit from in-progress set
+        turns = self.tracker.current_turns
+        if turns:
+            wins = turns.count("O")
+            losses = turns.count("X")
+            unit = SEQ[self.tracker.current_unit_idx]
+            cp += (wins - losses) * unit
+        return cp
+
+    def should_reset(self) -> bool:
+        """利確 or 損切り条件をチェック (進行中セット含む)"""
+        cp = self.effective_profit()
+        if cp >= self.profit_stop:
             return True
         if cp <= -self.loss_cut:
             return True
@@ -127,7 +158,7 @@ class MaruBatsuBetSession:
 
     def reset_session(self, reason: str):
         """セッションリセット (利確/損切り)"""
-        cp = self.tracker.cumulative_profit
+        cp = self.effective_profit()
         self.session_count += 1
         money = cp * self.chip_base
         balance = self.executor.get_balance() if not self.dry_run else 0

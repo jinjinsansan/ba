@@ -397,7 +397,12 @@ class BetExecutor:
         if self.demo_mode:
             import random
             time.sleep(random.uniform(2, 5))
-            r = random.choice(["player", "player", "player", "banker", "banker", "banker", "tie"])
+            # Real baccarat probabilities: Player 44.62%, Banker 45.86%, Tie 9.52%
+            r = random.choices(
+                ["player", "banker", "tie"],
+                weights=[44.62, 45.86, 9.52],
+                k=1,
+            )[0]
             logger.info(f"[DEMO] Result: {r}")
             return {"result": r, "balance": 0.0}
 

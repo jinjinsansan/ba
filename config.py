@@ -93,8 +93,8 @@ HUMANIZE_CONFIG = {
     "bet_interval_max": _ini_getint("humanize", "bet_interval_max", 8),
     "session_minutes_min": _ini_getint("humanize", "session_minutes_min", 25),
     "session_minutes_max": _ini_getint("humanize", "session_minutes_max", 40),
-    "break_minutes_min": _ini_getint("humanize", "break_minutes_min", 3),
-    "break_minutes_max": _ini_getint("humanize", "break_minutes_max", 8),
+    "break_minutes_min": _ini_getint("humanize", "break_minutes_min", 5),
+    "break_minutes_max": _ini_getint("humanize", "break_minutes_max", 10),
     "skip_bet_probability": _ini_getfloat("humanize", "skip_bet_probability", 0.07),
 }
 

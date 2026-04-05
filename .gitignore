@@ -5,6 +5,7 @@ data/
 __pycache__/
 *.pyc
 auth_state/
+auth_state_*/
 screenshots/
 dist/
 build/
@@ -17,5 +18,35 @@ analyze_*.py
 parse_*.py
 browser_data/
 state_valhalla.json
+state_marubatsu_bet.json
+state_marubatsu_bet_dry.json
 gui/node_modules/
 gui/dist/
+
+# Local DB and artifacts
+*.sqlite3
+*.db
+tables_dump.json
+capture_ws_log.json
+ws_raw_log.jsonl
+report_*.txt
+verify_*.txt
+
+# Throwaway/debug scripts
+_*.py
+check_*.py
+debug_*.py
+test_*.py
+verify_*.py
+capture_*.py
+find_*.py
+fetch_*.py
+get_*.py
+export_*.py
+backtest_*.py
+report_*.py
+investigate_*.py
+debug_*.py
+
+# Claude Code cache
+.claude/

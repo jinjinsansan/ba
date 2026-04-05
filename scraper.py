@@ -50,6 +50,8 @@ class BaccaratScraper:
         # Evolution テーブル管理
         self._evo_table_configs: dict[str, dict] = {}  # table_id → config
         self._evo_table_histories: dict[str, list] = {}  # table_id → last known history
+        self._evo_table_raw_histories: dict[str, list] = {}  # table_id → raw history entries (with c=B/R, ties)
+        self._evo_players_count: dict[str, int] = {}  # table_id → player count
         self._evo_ws_connected = False
         self._last_ws_message_time: float = 0.0
         self._consecutive_reload_fails: int = 0
@@ -440,6 +442,8 @@ class BaccaratScraper:
                 self._process_history_updated(args)
             elif msg_type == "lobby.configsUpdated":
                 self._process_configs_updated(args)
+            elif msg_type == "lobby.playersCount":
+                self._process_players_count(args)
 
         except json.JSONDecodeError:
             pass
@@ -509,6 +513,13 @@ class BaccaratScraper:
         else:
             logger.warning(f"テーブルが見つかりません (フィルタ: '{self.table_name}')")
 
+    def _process_players_count(self, args: dict):
+        """lobby.playersCount → テーブル別参加者数更新"""
+        players = args.get("players", {})
+        with self._lock:
+            for table_id, count in players.items():
+                self._evo_players_count[table_id] = count
+
     def _process_histories(self, args: dict):
         """lobby.histories → 一括ロード (リコネクト時にも送られる)
 
@@ -516,6 +527,11 @@ class BaccaratScraper:
         old_results >= 30 かつ new_results < 5 → シューリセットと判定。
         """
         histories = args.get("histories", {})
+
+        # 全テーブルの生履歴を保存 (テーブル選定用)
+        with self._lock:
+            for table_id, hist_data in histories.items():
+                self._evo_table_raw_histories[table_id] = hist_data.get("results", [])
 
         for table_id, hist_data in histories.items():
             new_results = hist_data.get("results", [])
@@ -551,6 +567,13 @@ class BaccaratScraper:
 
     def _process_history_updated(self, args: dict):
         """lobby.historyUpdated → 全ターゲットテーブルのリアルタイム更新"""
+        # 全テーブルの生履歴を更新 (テーブル選定用)
+        with self._lock:
+            for table_id, update_data in args.items():
+                new_r = update_data.get("results", []) if isinstance(update_data, dict) else []
+                if new_r:
+                    self._evo_table_raw_histories[table_id] = new_r
+
         for table_id, update_data in args.items():
             if table_id not in self._target_table_ids:
                 continue
@@ -716,6 +739,23 @@ class BaccaratScraper:
             results = list(self._ws_results)
             self._ws_results.clear()
         return results
+
+    def get_all_table_configs(self) -> dict[str, dict]:
+        """全バカラテーブルのconfig (選定用)"""
+        with self._lock:
+            return dict(self._evo_table_configs)
+
+    def get_players_count(self, table_id: str | None = None):
+        """参加者数取得。table_id指定なら1件、なしなら全件dict"""
+        with self._lock:
+            if table_id is None:
+                return dict(self._evo_players_count)
+            return self._evo_players_count.get(table_id, 0)
+
+    def get_raw_history(self, table_id: str) -> list:
+        """テーブルの生履歴エントリを取得 (c=B/R, ties等)"""
+        with self._lock:
+            return list(self._evo_table_raw_histories.get(table_id, []))
 
     def get_new_shoe_signals(self) -> dict[str, bool]:
         """新シュー信号があるテーブルをチェックして消費する"""
