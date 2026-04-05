@@ -92,7 +92,6 @@ def send_set_complete(set_data, chip_base: float):
     })
 
 def send_status(session, balance: float = 0):
-    from marubatsu_strategy import SEQ
     s = session.get_summary()
     turns = session.tracker.current_turns
     turns_display = "".join("O" if t == "O" else "X" for t in turns)
@@ -149,16 +148,18 @@ def run_bet_session(config: dict, stop_event: threading.Event, skip_event: threa
     from game_ws import GameWSMonitor
     from humanize import Humanizer
     from notify import TelegramNotifier, PublicNotifier, AdminNotifier, UserNotifier, CompositeNotifier
-    from marubatsu_bet import MaruBatsuBetSession
-    from marubatsu_strategy import SEQ
-    from table_selector import TableSelector
+    # NOTE: marubatsu_bet / marubatsu_strategy / table_selector are lazily imported ONLY
+    # in local-fallback mode. In production (LAPLACE_USE_REMOTE=1) these modules must
+    # NEVER be imported on the client so that the core logic / scoring formulas cannot
+    # be extracted from a shipped binary.
 
     # Remote LAPLACE API mode (VPS-hosted logic engine)
     use_remote = os.getenv("LAPLACE_USE_REMOTE", "0").strip() in ("1", "true", "True", "yes")
     RemoteLaplaceSession = None
+    RemoteTableSelector = None
     if use_remote:
         try:
-            from laplace_client import RemoteLaplaceSession, LaplaceApiError  # noqa: F401
+            from laplace_client import RemoteLaplaceSession, RemoteTableSelector, LaplaceApiError  # noqa: F401
             send_log(f"LAPLACE Remote mode: API={os.getenv('LAPLACE_API_URL', 'http://127.0.0.1:8000')} user={os.getenv('LAPLACE_USER', 'dev-machine')}")
         except Exception as e:
             send_log(f"Remote mode requested but client import failed ({e}) — falling back to local MaruBatsuBetSession")
@@ -245,10 +246,37 @@ def run_bet_session(config: dict, stop_event: threading.Event, skip_event: threa
     send_action("Loading table data...")
     time.sleep(12)  # configs/histories/playersCount の初期ロード待機
 
-    selector = TableSelector(scraper)
+    if use_remote:
+        # All scoring / exclusion / threshold logic runs on the VPS.
+        # This client never ships table_selector.py.
+        from laplace_client import LaplaceClient as _LaplaceClient
+        _api_url = os.getenv("LAPLACE_API_URL", "http://127.0.0.1:8000")
+        _api_key = os.getenv("LAPLACE_API_KEY", "")
+        _user_id = os.getenv("LAPLACE_USER", "dev-machine")
+        _selector_client = _LaplaceClient(_api_url, _api_key)
+        selector = RemoteTableSelector(scraper, _selector_client, _user_id)
+    else:
+        # Local fallback — requires table_selector.py on disk
+        from table_selector import TableSelector
+        selector = TableSelector(scraper)
     humanizer = Humanizer(cfg.HUMANIZE_CONFIG)
     executor_config = {"demo_mode": dry_run}
     executor = BetExecutor(scraper.page, scraper.game_ws, executor_config, humanizer=humanizer)
+
+    def _make_local_session():
+        # Lazy import — only when running in local fallback mode.
+        # On shipped client binaries, marubatsu_bet / marubatsu_strategy are NOT included,
+        # so this import will fail and force the user to use VPS remote mode.
+        from marubatsu_bet import MaruBatsuBetSession
+        return MaruBatsuBetSession(
+            executor=executor,
+            notifier=notifier,
+            chip_base=chip_base,
+            loss_cut=loss_cut_chips,
+            profit_stop=profit_stop_chips,
+            dry_run=dry_run,
+            resume=resume,
+        )
 
     if use_remote:
         try:
@@ -264,25 +292,17 @@ def run_bet_session(config: dict, stop_event: threading.Event, skip_event: threa
             send_action(f"LAPLACE Remote session ready (sets={len(session.tracker.sets)}, cp={session.tracker.cumulative_profit:+d})")
         except Exception as e:
             send_log(f"Remote session creation failed ({e}) — falling back to local MaruBatsuBetSession")
-            session = MaruBatsuBetSession(
-                executor=executor,
-                notifier=notifier,
-                chip_base=chip_base,
-                loss_cut=loss_cut_chips,
-                profit_stop=profit_stop_chips,
-                dry_run=dry_run,
-                resume=resume,
-            )
+            try:
+                session = _make_local_session()
+            except ImportError as imp_err:
+                send_log(f"FATAL: local fallback unavailable on this build ({imp_err}). VPS API is required.")
+                return
     else:
-        session = MaruBatsuBetSession(
-            executor=executor,
-            notifier=notifier,
-            chip_base=chip_base,
-            loss_cut=loss_cut_chips,
-            profit_stop=profit_stop_chips,
-            dry_run=dry_run,
-            resume=resume,
-        )
+        try:
+            session = _make_local_session()
+        except ImportError as imp_err:
+            send_log(f"FATAL: local mode requires marubatsu_bet/marubatsu_strategy ({imp_err}). Set LAPLACE_USE_REMOTE=1 to use the VPS API instead.")
+            return
     _active_session = session
 
     # Apply any pending config updates received before session creation
@@ -444,10 +464,8 @@ def run_bet_session(config: dict, stop_event: threading.Event, skip_event: threa
                     time.sleep(5)
                     continue
 
-        # BET phase
-        unit_idx = session.tracker.current_unit_idx
-        unit = SEQ[unit_idx]
-        bet_amount = unit * chip_base
+        # BET phase — amount comes from session (remote: from VPS state; local: from tracker)
+        bet_amount = session.get_bet_amount()
         total_hands = session.total_wins + session.total_losses + session.total_ties + 1
         send_action(f"Hand #{total_hands} -- Betting ${bet_amount:.0f}")
 

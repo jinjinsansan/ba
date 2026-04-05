@@ -55,6 +55,10 @@ DEFAULT_CHIP_BASE = 1.0
 # --- Thread-safe session store ---
 _sessions_lock = threading.RLock()
 
+# Per-user table selector wait state (for primary-threshold wait-then-relax logic)
+_selector_wait_state: dict[str, float] = {}
+_selector_wait_lock = threading.RLock()
+
 
 # ======== Models ========
 
@@ -123,6 +127,40 @@ class ResultResponse(BaseModel):
     should_reset: bool
     reset_reason: Optional[str]
     state: SessionState
+
+
+class SelectTableRequest(BaseModel):
+    user_id: str = Field(..., min_length=1, max_length=64)
+    configs: dict = Field(..., description="tid -> {title, frontendApp, bl, gt, published}")
+    players: dict = Field(..., description="tid -> int")
+    histories: dict = Field(..., description="tid -> list of {c, ties, ...}")
+    excluded_ids: list[str] = Field(default_factory=list)
+    fixed_name: Optional[str] = None
+
+
+class SelectTableResponse(BaseModel):
+    found: bool
+    table_id: Optional[str] = None
+    title: Optional[str] = None
+    players: Optional[int] = None
+    hands: Optional[int] = None
+    p_count: Optional[int] = None
+    b_count: Optional[int] = None
+    tie_count: Optional[int] = None
+    last_5: list[str] = Field(default_factory=list)
+    score: Optional[float] = None
+    wait_status: Optional[str] = None  # "waiting_primary" | "still_waiting" | "no_candidates"
+    debug: Optional[dict] = None
+
+
+class ExitCheckRequest(BaseModel):
+    table_id: str
+    players: int
+    history: list = Field(default_factory=list)
+
+
+class ExitCheckResponse(BaseModel):
+    exit_reason: Optional[str] = None
 
 
 class BotStartRequest(BaseModel):
@@ -385,6 +423,8 @@ class LaplaceSession:
                     "slashed": s.slashed,
                     "used_unit_idx": s.used_unit_idx,
                     "next_unit_idx": s.next_unit_idx,
+                    "used_unit_chips": SEQ[s.used_unit_idx],
+                    "next_unit_chips": SEQ[s.next_unit_idx],
                     "set_profit": s.set_profit,
                     "cumulative_profit": s.cumulative_profit,
                 }
@@ -546,6 +586,7 @@ async def submit_result(user_id: str, req: ResultRequest):
 
         completed_dict = None
         if completed:
+            # Include resolved chip counts so clients never need the SEQ table.
             completed_dict = {
                 "set_index": completed.set_index,
                 "results": completed.results,
@@ -554,6 +595,8 @@ async def submit_result(user_id: str, req: ResultRequest):
                 "overshoot": completed.overshoot,
                 "used_unit_idx": completed.used_unit_idx,
                 "next_unit_idx": completed.next_unit_idx,
+                "used_unit_chips": SEQ[completed.used_unit_idx],
+                "next_unit_chips": SEQ[completed.next_unit_idx],
                 "set_profit": completed.set_profit,
                 "cumulative_profit": completed.cumulative_profit,
             }
@@ -610,6 +653,157 @@ async def delete_session(user_id: str):
         sess.delete_state()
         _SESSIONS.pop(user_id, None)
         return {"deleted": True, "user_id": user_id}
+
+
+# ======== Table Selector endpoints ========
+#
+# These endpoints move the sensitive table selection / scoring logic
+# off the client entirely. The client only sends raw observations (table
+# configs, player counts, histories) and receives a verdict.
+# This way the scoring formula, thresholds and exclusion rules never
+# appear in any shipped client binary.
+
+
+@app.post(
+    "/api/select-table",
+    response_model=SelectTableResponse,
+    dependencies=[Depends(verify_api_key)],
+)
+async def select_table_endpoint(req: SelectTableRequest):
+    import time as _time
+    from table_selector import (
+        is_excluded,
+        has_banker_dragon,
+        analyze_history,
+        compute_score,
+        TableCandidate,
+        PLAYERS_PRIMARY,
+        PLAYERS_RELAXED,
+        RELAX_WAIT_SECONDS,
+        MIN_HANDS,
+        MAX_HANDS,
+    )
+
+    candidates: list = []
+    debug_stats = {
+        "excluded": 0,
+        "no_players_data": 0,
+        "low_players": 0,
+        "dragon": 0,
+        "bad_hands": 0,
+        "bad_pb_ratio": 0,
+    }
+
+    excluded = set(req.excluded_ids or [])
+
+    for tid, cfg in req.configs.items():
+        if tid in excluded:
+            continue
+        reason = is_excluded(cfg)
+        if reason:
+            debug_stats["excluded"] += 1
+            continue
+        title = cfg.get("title", tid)
+        if req.fixed_name and req.fixed_name.lower() not in title.lower():
+            continue
+        p_count = req.players.get(tid)
+        if p_count is None:
+            debug_stats["no_players_data"] += 1
+            continue
+        raw = req.histories.get(tid, []) or []
+        hands, p, b, tie, last5 = analyze_history(raw)
+        if not req.fixed_name:
+            if has_banker_dragon(raw):
+                debug_stats["dragon"] += 1
+                continue
+            if hands < MIN_HANDS or hands > MAX_HANDS:
+                debug_stats["bad_hands"] += 1
+                continue
+            if p <= b:
+                debug_stats["bad_pb_ratio"] += 1
+                continue
+        candidates.append(
+            TableCandidate(
+                table_id=tid,
+                title=title,
+                players=p_count,
+                hands=hands,
+                p_count=p,
+                b_count=b,
+                tie_count=tie,
+                last_5=last5,
+            )
+        )
+
+    now = _time.time()
+    primary_cands = [c for c in candidates if c.players >= PLAYERS_PRIMARY]
+    relaxed_cands = [c for c in candidates if c.players >= PLAYERS_RELAXED]
+
+    logger.info(
+        f"[select-table] user={req.user_id} configs={len(req.configs)} "
+        f"candidates={len(candidates)} primary={len(primary_cands)} "
+        f"relaxed={len(relaxed_cands)} debug={debug_stats}"
+    )
+
+    chosen_list: list = []
+    wait_status: Optional[str] = None
+
+    if primary_cands:
+        chosen_list = primary_cands
+        with _selector_wait_lock:
+            _selector_wait_state.pop(req.user_id, None)
+    else:
+        with _selector_wait_lock:
+            wait_start = _selector_wait_state.get(req.user_id)
+            if wait_start is None:
+                _selector_wait_state[req.user_id] = now
+                return SelectTableResponse(
+                    found=False, wait_status="waiting_primary", debug=debug_stats
+                )
+            if now - wait_start < RELAX_WAIT_SECONDS:
+                return SelectTableResponse(
+                    found=False, wait_status="still_waiting", debug=debug_stats
+                )
+        if relaxed_cands:
+            chosen_list = relaxed_cands
+        else:
+            return SelectTableResponse(
+                found=False, wait_status="no_candidates", debug=debug_stats
+            )
+
+    for c in chosen_list:
+        c.score = compute_score(c)
+    chosen_list.sort(key=lambda x: -x.score)
+
+    best = chosen_list[0]
+    return SelectTableResponse(
+        found=True,
+        table_id=best.table_id,
+        title=best.title,
+        players=best.players,
+        hands=best.hands,
+        p_count=best.p_count,
+        b_count=best.b_count,
+        tie_count=best.tie_count,
+        last_5=best.last_5,
+        score=best.score,
+        debug=debug_stats,
+    )
+
+
+@app.post(
+    "/api/exit-check",
+    response_model=ExitCheckResponse,
+    dependencies=[Depends(verify_api_key)],
+)
+async def exit_check_endpoint(req: ExitCheckRequest):
+    from table_selector import has_banker_dragon, PLAYERS_RELAXED
+
+    if req.players < PLAYERS_RELAXED:
+        return ExitCheckResponse(exit_reason=f"players dropped to {req.players}")
+    if has_banker_dragon(req.history):
+        return ExitCheckResponse(exit_reason="banker dragon detected")
+    return ExitCheckResponse(exit_reason=None)
 
 
 # ======== Bot control endpoints ========

@@ -17,13 +17,54 @@ import json
 import logging
 import os
 import time
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Any, Optional
 
 import requests
 
-from marubatsu_strategy import SEQ, SetData
 from notify import TelegramNotifier
+
+
+# =========================================================================
+# ClientSetData — minimal data holder that mirrors server SetData fields.
+# NO logic, NO algorithm. Just attribute storage so display / notification
+# code can use dot access. The real SetData class (with finalize_set,
+# calc_slashed, etc.) lives only on the VPS.
+# =========================================================================
+
+
+@dataclass
+class ClientSetData:
+    set_index: int
+    results: str
+    wins: int
+    losses: int
+    overshoot: int
+    slashed: bool = False
+    used_unit_idx: int = 0
+    next_unit_idx: int = 0
+    used_unit_chips: int = 0
+    next_unit_chips: int = 0
+    set_profit: int = 0
+    cumulative_profit: int = 0
+
+    @classmethod
+    def from_dict(cls, d: dict) -> "ClientSetData":
+        """Construct from a server response dict, tolerating missing fields."""
+        return cls(
+            set_index=d.get("set_index", 0),
+            results=d.get("results", ""),
+            wins=d.get("wins", 0),
+            losses=d.get("losses", 0),
+            overshoot=d.get("overshoot", 0),
+            slashed=d.get("slashed", False),
+            used_unit_idx=d.get("used_unit_idx", 0),
+            next_unit_idx=d.get("next_unit_idx", 0),
+            used_unit_chips=d.get("used_unit_chips", 0),
+            next_unit_chips=d.get("next_unit_chips", 0),
+            set_profit=d.get("set_profit", 0),
+            cumulative_profit=d.get("cumulative_profit", 0),
+        )
 
 logger = logging.getLogger("baccarat.laplace_client")
 
@@ -122,6 +163,35 @@ class LaplaceClient:
     def delete(self, user_id: str) -> dict:
         return self._request("DELETE", f"/api/sessions/{user_id}")
 
+    # --- Table selector endpoints (L.2: logic moved to VPS) ---
+
+    def select_table(
+        self,
+        user_id: str,
+        configs: dict,
+        players: dict,
+        histories: dict,
+        excluded_ids: Optional[list[str]] = None,
+        fixed_name: Optional[str] = None,
+    ) -> dict:
+        body = {
+            "user_id": user_id,
+            "configs": configs,
+            "players": players,
+            "histories": histories,
+            "excluded_ids": excluded_ids or [],
+            "fixed_name": fixed_name,
+        }
+        return self._request("POST", "/api/select-table", json=body)
+
+    def exit_check(self, table_id: str, players_count: int, history: list) -> dict:
+        body = {
+            "table_id": table_id,
+            "players": players_count,
+            "history": history,
+        }
+        return self._request("POST", "/api/exit-check", json=body)
+
 
 # ======== Local shim objects that mimic marubatsu_strategy types ========
 # This lets the existing agent_api.py code continue to read
@@ -133,11 +203,12 @@ class _RemoteTracker:
 
     def __init__(self, chip_base: float):
         self.chip_base = chip_base
-        self.sets: list[SetData] = []
+        self.sets: list[ClientSetData] = []
         self.current_turns: list[str] = []
         self.total_o = 0
         self.total_x = 0
         self.current_unit_idx = 0
+        self.current_unit_chips = 0  # chip count for current unit (from server)
         self.cumulative_profit = 0
         self.prev_overshoot = 0
         self.current_set_index = 1
@@ -145,7 +216,7 @@ class _RemoteTracker:
 
     def apply_state(self, state: dict) -> None:
         self.chip_base = state.get("chip_base", self.chip_base)
-        self.sets = [SetData(**sd) for sd in state.get("sets", [])]
+        self.sets = [ClientSetData.from_dict(sd) for sd in state.get("sets", [])]
         # State returns turns_display but not raw array; reconstruct from total turns
         # by using turns_display char-by-char (single char O/X)
         turns_display = state.get("turns_display", "")
@@ -153,6 +224,7 @@ class _RemoteTracker:
         self.total_o = state.get("total_o", 0)
         self.total_x = state.get("total_x", 0)
         self.current_unit_idx = state.get("current_unit_idx", 0)
+        self.current_unit_chips = state.get("current_unit", 0)  # server-resolved chip count
         self.cumulative_profit = state.get("cumulative_profit", 0)
         self.prev_overshoot = state.get("overshoot", 0)
         self.current_turn_number = len(self.current_turns) + 1
@@ -264,8 +336,7 @@ class RemoteLaplaceSession:
     # --- Compatibility helpers ---
 
     def get_bet_amount(self) -> float:
-        unit = SEQ[self.tracker.current_unit_idx]
-        return unit * self.chip_base
+        return self.tracker.current_unit_chips * self.chip_base
 
     def effective_profit(self) -> int:
         cp = self.tracker.cumulative_profit
@@ -273,7 +344,7 @@ class RemoteLaplaceSession:
         if turns:
             wins = turns.count("O")
             losses = turns.count("X")
-            unit = SEQ[self.tracker.current_unit_idx]
+            unit = self.tracker.current_unit_chips
             cp += (wins - losses) * unit
         return cp
 
@@ -333,7 +404,7 @@ class RemoteLaplaceSession:
                 logger.error(f"残高不足: ${balance:.2f} < ${bet_amount:.2f}")
                 self.notifier.send(
                     f"⚠️ 残高不足!\n"
-                    f"必要: ${bet_amount:.2f} (SEQ[{unit_idx}]={unit})\n"
+                    f"必要: ${bet_amount:.2f} ({unit} chips)\n"
                     f"残高: ${balance:.2f}"
                 )
                 return {"action": "exit"}
@@ -341,7 +412,7 @@ class RemoteLaplaceSession:
         side = "player"
         logger.info(
             f"BET: ${bet_amount:.0f} {side.upper()} "
-            f"(SEQ[{unit_idx}]={unit}, Set#{set_idx} Turn{turn_num}/7) [remote]"
+            f"(unit={unit} chips, Set#{set_idx} Turn{turn_num}/7) [remote]"
         )
 
         if not self.executor.place_bet(side, bet_amount):
@@ -367,21 +438,9 @@ class RemoteLaplaceSession:
         self._apply_state(resp["state"])
 
         completed_dict = resp.get("completed_set")
-        completed_set: Optional[SetData] = None
+        completed_set: Optional[ClientSetData] = None
         if completed_dict:
-            # Reconstruct SetData for downstream code that uses attribute access
-            completed_set = SetData(
-                set_index=completed_dict["set_index"],
-                results=completed_dict["results"],
-                wins=completed_dict["wins"],
-                losses=completed_dict["losses"],
-                overshoot=completed_dict["overshoot"],
-                slashed=False,
-                used_unit_idx=completed_dict["used_unit_idx"],
-                next_unit_idx=completed_dict["next_unit_idx"],
-                set_profit=completed_dict["set_profit"],
-                cumulative_profit=completed_dict["cumulative_profit"],
-            )
+            completed_set = ClientSetData.from_dict(completed_dict)
 
         won = resp.get("won")
         need_reset = bool(resp.get("should_reset"))
@@ -431,12 +490,13 @@ class RemoteLaplaceSession:
             "should_reset": need_reset,
         }
 
-    def _notify_set_complete(self, new_set: SetData, balance: float) -> None:
+    def _notify_set_complete(self, new_set: ClientSetData, balance: float) -> None:
         marks = new_set.results.replace("O", "〇").replace("X", "✕")
         diff = new_set.wins - new_set.losses
         outcome = "勝ち越し 📈" if diff > 0 else "負け越し 📉"
         money_set = new_set.set_profit * self.chip_base
         money_cum = new_set.cumulative_profit * self.chip_base
+        next_unit = new_set.next_unit_chips or self.tracker.current_unit_chips
 
         msg = (
             f"📋 Set #{new_set.set_index} 確定\n"
@@ -448,8 +508,7 @@ class RemoteLaplaceSession:
             f"累計損益: {new_set.cumulative_profit:+d} chip (${money_cum:+.2f})\n"
             f"OS: {new_set.overshoot}\n"
             f"\n"
-            f"次BET: SEQ[{new_set.next_unit_idx}] = {SEQ[new_set.next_unit_idx]} chip "
-            f"(${SEQ[new_set.next_unit_idx] * self.chip_base:.2f})\n"
+            f"次BET: {next_unit} chip (${next_unit * self.chip_base:.2f})\n"
             f"残高: ${balance:.2f}\n"
             f"━━━━━━━━━━━━━━━"
         )
@@ -502,6 +561,121 @@ class RemoteLaplaceSession:
             "total_wins": self.total_wins,
             "total_losses": self.total_losses,
             "total_ties": self.total_ties,
-            "current_unit": SEQ[self.tracker.current_unit_idx],
+            "current_unit": self.tracker.current_unit_chips,
             "current_unit_idx": self.tracker.current_unit_idx,
         }
+
+
+# =========================================================================
+# RemoteTableSelector — client-side wrapper that delegates table selection
+# to the VPS. Same public interface as local TableSelector.
+# =========================================================================
+
+
+@dataclass
+class RemoteTableResult:
+    """Minimal shim that mimics TableCandidate for agent_api.py consumers."""
+
+    table_id: str
+    title: str
+    players: int
+    hands: int
+    p_count: int
+    b_count: int
+    tie_count: int = 0
+    last_5: list = field(default_factory=list)
+    score: float = 0.0
+
+
+class RemoteTableSelector:
+    """Drop-in replacement for TableSelector backed by the VPS API.
+
+    The scoring formula, exclusion rules and thresholds all live on the VPS.
+    The client only ships raw observations to the server and receives a verdict.
+    """
+
+    def __init__(self, scraper, client: "LaplaceClient", user_id: str):
+        self.scraper = scraper
+        self.client = client
+        self.user_id = user_id
+        self.excluded_table_ids: set[str] = set()
+
+    def _gather_observations(self) -> tuple[dict, dict, dict]:
+        """Collect current scraper state to send to the selector API."""
+        try:
+            configs = self.scraper.get_all_table_configs() or {}
+        except Exception as e:
+            logger.error(f"scraper.get_all_table_configs failed: {e}")
+            configs = {}
+        try:
+            players = self.scraper.get_players_count() or {}
+        except Exception as e:
+            logger.error(f"scraper.get_players_count failed: {e}")
+            players = {}
+        histories: dict[str, list] = {}
+        for tid in list(configs.keys()):
+            try:
+                histories[tid] = self.scraper.get_raw_history(tid) or []
+            except Exception:
+                histories[tid] = []
+        return configs, players, histories
+
+    def find_best_table(
+        self, fixed_name: Optional[str] = None
+    ) -> Optional[RemoteTableResult]:
+        configs, players, histories = self._gather_observations()
+        if not configs:
+            logger.info("[selector-remote] no configs yet — scraper still warming up")
+            return None
+
+        try:
+            resp = self.client.select_table(
+                user_id=self.user_id,
+                configs=configs,
+                players=players,
+                histories=histories,
+                excluded_ids=list(self.excluded_table_ids),
+                fixed_name=fixed_name,
+            )
+        except LaplaceApiError as e:
+            logger.error(f"select_table API failed: {e}")
+            return None
+
+        if not resp.get("found"):
+            wait = resp.get("wait_status") or "unknown"
+            debug = resp.get("debug") or {}
+            logger.info(f"[selector-remote] no table — status={wait} debug={debug}")
+            return None
+
+        result = RemoteTableResult(
+            table_id=resp["table_id"],
+            title=resp["title"],
+            players=resp["players"],
+            hands=resp["hands"],
+            p_count=resp["p_count"],
+            b_count=resp["b_count"],
+            tie_count=resp.get("tie_count", 0),
+            last_5=resp.get("last_5", []),
+            score=resp.get("score", 0.0),
+        )
+        logger.info(
+            f"[selector-remote] BEST: {result.title} "
+            f"p={result.players} h={result.hands} "
+            f"P={result.p_count} B={result.b_count} score={result.score:.1f}"
+        )
+        return result
+
+    def should_exit_table(self, table_id: str) -> Optional[str]:
+        try:
+            players_map = self.scraper.get_players_count() or {}
+            p_count = players_map.get(table_id, 0)
+            raw = self.scraper.get_raw_history(table_id) or []
+        except Exception as e:
+            logger.error(f"exit_check scraper fetch failed: {e}")
+            return None
+        try:
+            resp = self.client.exit_check(table_id, p_count, raw)
+        except LaplaceApiError as e:
+            logger.error(f"exit_check API failed: {e}")
+            return None
+        return resp.get("exit_reason")
