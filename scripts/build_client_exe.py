@@ -64,6 +64,7 @@ HIDDEN_IMPORTS = [
     "telegram_auth",
     "login_step1",
     # Third-party runtime deps
+    "numpy",
     "camoufox.sync_api",
     "camoufox",
     "playwright.sync_api",
@@ -81,6 +82,11 @@ HIDDEN_IMPORTS = [
 COLLECT_ALL = [
     "camoufox",
     "playwright",
+    # Data packages camoufox reads at runtime via relative paths
+    # (PyInstaller cannot discover these via static import analysis).
+    "apify_fingerprint_datapoints",
+    "browserforge",
+    "language_tags",
 ]
 
 

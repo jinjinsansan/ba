@@ -18,6 +18,29 @@ import time
 import logging
 import io
 
+# ---- Eager imports (MUST happen on the main thread) --------------------
+# Importing numpy from a worker thread while another thread is blocked on
+# sys.stdin.readline() deadlocks inside numpy._core.overrides on Python
+# 3.12 Windows. camoufox.async_api transitively imports numpy, so the
+# scraper import used to hang the whole BET session.
+#
+# Pull every heavy / native dependency in up front from the main thread
+# so the worker thread only needs to reference already-loaded modules.
+# Order matters: numpy first, then playwright/camoufox, then our own
+# modules that depend on them.
+try:
+    import numpy  # noqa: F401 -- pre-warm numpy on main thread
+except Exception:
+    pass
+try:
+    import playwright.sync_api  # noqa: F401
+except Exception:
+    pass
+try:
+    import camoufox.sync_api  # noqa: F401
+except Exception:
+    pass
+
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 # Load .env early so LAPLACE_USE_REMOTE etc. are available
@@ -135,6 +158,33 @@ def send_shoe_history(sets: list, chip_base: float):
 # ======== BET Runner ========
 
 def run_bet_session(config: dict, stop_event: threading.Event, skip_event: threading.Event = None):
+    """Main BET loop entry — runs in a thread. Wraps the real body so that
+    any unhandled exception is surfaced to the GUI instead of silently
+    killing the daemon thread."""
+    import traceback as _tb
+    try:
+        return _run_bet_session_inner(config, stop_event, skip_event)
+    except Exception as _err:
+        tb = _tb.format_exc()
+        try:
+            send_log(f"FATAL: BET session crashed: {_err}")
+            for _line in tb.splitlines():
+                if _line.strip():
+                    send_log(_line)
+        except Exception:
+            pass
+        try:
+            logger.error("BET session crashed", exc_info=True)
+        except Exception:
+            pass
+        try:
+            send_msg({"type": "error", "message": f"BET session crashed: {_err}"})
+            send_msg({"type": "stopped", "code": -1})
+        except Exception:
+            pass
+
+
+def _run_bet_session_inner(config: dict, stop_event: threading.Event, skip_event: threading.Event = None):
     global _active_session, _pending_config_update
     """Main BET loop — runs in a thread."""
     import config as cfg
@@ -143,6 +193,9 @@ def run_bet_session(config: dict, stop_event: threading.Event, skip_event: threa
         cfg.HEADLESS = True
     cfg.PROFILE_NAME = os.getenv("LAPLACE_PROFILE_NAME", "bet")
 
+    # These modules were pre-imported on the main thread at agent_api load
+    # time (see top of file) so Python's import machinery does NOT deadlock
+    # when the worker thread touches numpy-backed code.
     from scraper import BaccaratScraper
     from executor import BetExecutor
     from game_ws import GameWSMonitor
