@@ -234,6 +234,35 @@ def main() -> int:
         if rc != 0:
             print(f"[dist-build] FAILED (exit {rc})")
             return rc
+    else:
+        # Staleness guard: if the user passed --skip-dist-build but the
+        # root source is newer than the sanitised copy, we would silently
+        # freeze stale bytecode into the bundled Engine. This has burned
+        # us once already (Japanese cp932 hotfix rebuild didn't take);
+        # refuse to proceed unless the user really knows what they're
+        # doing.
+        stale: list[str] = []
+        check_files = ("agent_api.py", "scraper.py", "laplace_client.py")
+        for name in check_files:
+            root_f = repo_root / name
+            dist_f = dist_dir / name
+            if not root_f.exists() or not dist_f.exists():
+                continue
+            if root_f.stat().st_mtime > dist_f.stat().st_mtime + 1:
+                stale.append(name)
+        if stale:
+            print("")
+            print("=" * 72)
+            print("[fatal] dist_client/ is STALE relative to repo root:")
+            for s in stale:
+                print(f"        - {s}")
+            print(
+                "\nPyInstaller would compile outdated source. Drop "
+                "--skip-dist-build\nor run 'python scripts/build_client_dist.py' "
+                "first."
+            )
+            print("=" * 72)
+            return 3
 
     if not dist_dir.exists():
         print(f"[fatal] dist_client/ does not exist at {dist_dir}")
