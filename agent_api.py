@@ -146,7 +146,7 @@ def run_bet_session(config: dict, stop_event: threading.Event, skip_event: threa
     from scraper import BaccaratScraper
     from executor import BetExecutor
     from game_ws import GameWSMonitor
-    from humanize import Humanizer
+    from humanizer import Humanizer
     from notify import TelegramNotifier, PublicNotifier, AdminNotifier, UserNotifier, CompositeNotifier
     # NOTE: marubatsu_bet / marubatsu_strategy / table_selector are lazily imported ONLY
     # in local-fallback mode. In production (LAPLACE_USE_REMOTE=1) these modules must

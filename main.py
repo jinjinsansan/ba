@@ -32,7 +32,7 @@ from scraper import BaccaratScraper
 from notify import TelegramNotifier
 from shoe import ShoeTracker
 from strategy import BetStrategy
-from humanize import Humanizer
+from humanizer import Humanizer
 from executor import BetExecutor
 
 import io

@@ -40,7 +40,7 @@ import config as cfg
 from scraper import BaccaratScraper
 from executor import BetExecutor
 from game_ws import GameWSMonitor
-from humanize import Humanizer
+from humanizer import Humanizer
 from notify import TelegramNotifier
 from marubatsu_bet import MaruBatsuBetSession, PROFIT_STOP
 from marubatsu_strategy import SEQ

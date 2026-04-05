@@ -465,32 +465,39 @@ def build(
 
 
 def _import_smoke_test(out: Path) -> list[str]:
-    """Run laplace_client + agent_api import from a COPY of the output dir.
+    """Run full import of every shipped Python module from a COPY of the
+    output dir.
 
     We copy to a throwaway tempdir first because agent_api.py's module-level
     logging.FileHandler writes agent.log at import time, and the Python
     interpreter writes __pycache__/*.pyc, both of which would pollute the
     pristine build output.
+
+    Testing every .py forces us to catch transitive deps that the earlier
+    laplace_client + agent_api pair misses (agent_api imports scraper
+    lazily, so scraper's own top-level imports are only validated here).
     """
     import tempfile
 
     errors: list[str] = []
+    py_modules = sorted(
+        p.stem for p in out.glob("*.py") if p.stem != "__init__"
+    )
     with tempfile.TemporaryDirectory(prefix="laplace_smoke_") as tmp:
         probe_dir = Path(tmp) / "dist"
         shutil.copytree(out, probe_dir)
         probe_str = str(probe_dir).replace("\\", "\\\\")
-        agent_path = str(probe_dir / "agent_api.py").replace("\\", "\\\\")
+        import_lines = "\n".join(
+            f"import {m}; print('imported:', {m!r})" for m in py_modules
+        )
         probe = (
-            "import sys, importlib.util\n"
+            "import sys\n"
             f"sys.path.insert(0, '{probe_str}')\n"
+            f"{import_lines}\n"
             "import laplace_client\n"
             "assert hasattr(laplace_client, 'RemoteLaplaceSession')\n"
             "assert hasattr(laplace_client, 'RemoteTableSelector')\n"
             "assert hasattr(laplace_client, 'ClientSetData')\n"
-            f"spec = importlib.util.spec_from_file_location('agent_api', '{agent_path}')\n"
-            "mod = importlib.util.module_from_spec(spec)\n"
-            "spec.loader.exec_module(mod)\n"
-            "assert hasattr(mod, 'run_bet_session')\n"
             "print('IMPORT_SMOKE_OK')\n"
         )
         try:

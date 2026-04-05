@@ -22,7 +22,17 @@ from camoufox.sync_api import Camoufox
 from playwright.sync_api import Page, WebSocket
 
 import config
-from db import insert_round
+# Optional local round logging. Available only in full-repo installs; the
+# shipped client distribution omits db.py and this becomes a no-op.
+try:
+    from db import insert_round as _insert_round  # type: ignore
+except Exception:  # pragma: no cover - client-only path
+    def _insert_round(**_kwargs) -> bool:
+        return True
+
+
+def insert_round(**kwargs) -> bool:
+    return _insert_round(**kwargs)
 from telegram_auth import ask_email_code
 
 logger = logging.getLogger("baccarat.scraper")
