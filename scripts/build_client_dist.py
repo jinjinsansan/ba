@@ -3,7 +3,7 @@
 Reads `.dist_excludes` at the repo root and produces a sanitised
 `dist_client/` directory containing only the files that are safe to ship.
 
-The build runs 3 automated checks:
+The build runs 3 automated checks plus (optionally) a watermark injection:
 
     1. Pattern matcher. Every path in the source tree is tested against
        `.dist_excludes` patterns (filename globs, directory prefixes,
@@ -22,21 +22,42 @@ The build runs 3 automated checks:
        ImportError for a server-only module means we forgot to make
        something lazy.
 
+    5. (L.7) Fingerprint injection. When --user-id is provided, the
+       build stamps a unique build_id into laplace_client.py's
+       _BUILD_INFO dict, writes .build_manifest.json, records the build
+       in scripts/.build_registry.json, and optionally issues a per-user
+       API key via the admin endpoint.
+
 Usage:
+    # Unbranded dev build
     python scripts/build_client_dist.py
-    python scripts/build_client_dist.py --out custom_dir
-    python scripts/build_client_dist.py --verbose
+
+    # Per-user branded build
+    python scripts/build_client_dist.py --user-id alice --channel beta
+
+    # Per-user build + auto-issue API key (requires LAPLACE_ADMIN_KEY env)
+    python scripts/build_client_dist.py --user-id alice --issue-key
+
+    # Custom output dir + verbose
+    python scripts/build_client_dist.py --out custom_dir --verbose
 """
 from __future__ import annotations
 
 import argparse
 import fnmatch
+import hashlib
+import json
 import os
+import re
+import secrets
 import shutil
 import subprocess
 import sys
+import zipfile
 from dataclasses import dataclass, field
+from datetime import datetime, timezone
 from pathlib import Path
+from typing import Optional
 
 # =============================================================================
 # Canaries — files and strings that MUST NOT appear in the output distribution
@@ -168,12 +189,36 @@ def match_exclude(rel_path: str, patterns: list[ExcludePattern]) -> ExcludePatte
 
 
 @dataclass
+class BuildFingerprint:
+    user_id: str
+    build_id: str
+    built_at: str
+    channel: str
+    key_prefix: Optional[str] = None  # set if --issue-key succeeded
+    issued_key: Optional[str] = None  # full secret, returned ONCE
+
+    def to_manifest_dict(self) -> dict:
+        d = {
+            "user_id": self.user_id,
+            "build_id": self.build_id,
+            "built_at": self.built_at,
+            "channel": self.channel,
+        }
+        if self.key_prefix:
+            d["api_key_prefix"] = self.key_prefix
+        return d
+
+
+@dataclass
 class BuildReport:
     copied: list[str] = field(default_factory=list)
     excluded: list[tuple[str, str]] = field(default_factory=list)  # (path, pattern)
     canary_files_found: list[str] = field(default_factory=list)
     canary_strings_found: list[tuple[str, str]] = field(default_factory=list)  # (file, string)
     import_errors: list[str] = field(default_factory=list)
+    fingerprint: Optional[BuildFingerprint] = None
+    fingerprint_errors: list[str] = field(default_factory=list)
+    zip_path: Optional[Path] = None
 
     @property
     def ok(self) -> bool:
@@ -181,12 +226,143 @@ class BuildReport:
             not self.canary_files_found
             and not self.canary_strings_found
             and not self.import_errors
+            and not self.fingerprint_errors
         )
 
 
-def build(src: Path, out: Path, verbose: bool = False) -> BuildReport:
+def _make_build_id(user_id: str) -> str:
+    """Deterministic-ish short ID: sha256 over user + random salt + timestamp."""
+    salt = secrets.token_hex(8)
+    ts = datetime.now(tz=timezone.utc).isoformat()
+    raw = f"{user_id}|{ts}|{salt}".encode("utf-8")
+    return hashlib.sha256(raw).hexdigest()[:16]
+
+
+FINGERPRINT_MARKER_START = "# === BUILD_FINGERPRINT_START ==="
+FINGERPRINT_MARKER_END = "# === BUILD_FINGERPRINT_END ==="
+
+
+def _inject_fingerprint(file_path: Path, fp: BuildFingerprint) -> None:
+    """Rewrite the _BUILD_INFO block between the fingerprint markers."""
+    text = file_path.read_text(encoding="utf-8")
+    if FINGERPRINT_MARKER_START not in text or FINGERPRINT_MARKER_END not in text:
+        raise ValueError(
+            f"{file_path.name}: missing fingerprint markers "
+            f"({FINGERPRINT_MARKER_START} / {FINGERPRINT_MARKER_END})"
+        )
+    replacement = (
+        FINGERPRINT_MARKER_START
+        + "\n"
+        + "# Injected by build_client_dist.py. Do not edit.\n"
+        + "_BUILD_INFO: dict = {\n"
+        + f'    "user_id": "{fp.user_id}",\n'
+        + f'    "build_id": "{fp.build_id}",\n'
+        + f'    "built_at": "{fp.built_at}",\n'
+        + f'    "channel": "{fp.channel}",\n'
+        + "}\n"
+        + FINGERPRINT_MARKER_END
+    )
+    new_text = re.sub(
+        re.escape(FINGERPRINT_MARKER_START)
+        + r".*?"
+        + re.escape(FINGERPRINT_MARKER_END),
+        replacement,
+        text,
+        count=1,
+        flags=re.DOTALL,
+    )
+    file_path.write_text(new_text, encoding="utf-8")
+
+
+def _issue_key_via_admin(user_id: str, fp: BuildFingerprint) -> tuple[Optional[str], Optional[str], Optional[str]]:
+    """Call /api/admin/keys. Returns (full_key, key_prefix, error)."""
+    try:
+        import requests
+    except ImportError:
+        return None, None, "requests library not available"
+    url = os.getenv("LAPLACE_API_URL", "").rstrip("/")
+    admin = os.getenv("LAPLACE_ADMIN_KEY", "").strip()
+    if not url or not admin:
+        return None, None, "LAPLACE_API_URL or LAPLACE_ADMIN_KEY not set"
+    try:
+        r = requests.post(
+            f"{url}/api/admin/keys",
+            headers={"Authorization": f"Bearer {admin}"},
+            json={
+                "user_id": user_id,
+                "name": f"build {fp.build_id}",
+                "rate_limit_per_hour": 3600,
+                "ip_allowlist": [],
+            },
+            timeout=10,
+        )
+    except Exception as e:
+        return None, None, f"admin API call failed: {e}"
+    if r.status_code >= 400:
+        return None, None, f"admin API error {r.status_code}: {r.text}"
+    data = r.json()
+    return data["key"], data["key"][: len("lpk_live_") + 8], None
+
+
+def _write_build_manifest(out: Path, fp: BuildFingerprint, copied: list[str]) -> None:
+    """Write .build_manifest.json summarising what's in the bundle."""
+    sha = hashlib.sha256()
+    for rel in sorted(copied):
+        p = out / rel
+        if p.is_file():
+            sha.update(rel.encode("utf-8"))
+            sha.update(b"\0")
+            sha.update(p.read_bytes())
+    manifest = {
+        **fp.to_manifest_dict(),
+        "file_count": len(copied),
+        "content_sha256": sha.hexdigest(),
+    }
+    (out / ".build_manifest.json").write_text(
+        json.dumps(manifest, indent=2, ensure_ascii=False), encoding="utf-8"
+    )
+
+
+def _append_build_registry(scripts_dir: Path, fp: BuildFingerprint) -> None:
+    """Maintain a local log of every build ever made."""
+    registry = scripts_dir / ".build_registry.json"
+    data = {"builds": []}
+    if registry.exists():
+        try:
+            data = json.loads(registry.read_text(encoding="utf-8"))
+        except Exception:
+            pass
+    data.setdefault("builds", []).append(fp.to_manifest_dict())
+    registry.write_text(
+        json.dumps(data, indent=2, ensure_ascii=False), encoding="utf-8"
+    )
+
+
+def _make_zip(out: Path, fp: BuildFingerprint, src_root: Path) -> Path:
+    builds_dir = src_root / "builds"
+    builds_dir.mkdir(exist_ok=True)
+    zip_name = f"laplace_client_{fp.user_id}_{fp.build_id}.zip"
+    zip_path = builds_dir / zip_name
+    if zip_path.exists():
+        zip_path.unlink()
+    with zipfile.ZipFile(zip_path, "w", zipfile.ZIP_DEFLATED) as zf:
+        for p in out.rglob("*"):
+            if p.is_file():
+                zf.write(p, p.relative_to(out))
+    return zip_path
+
+
+def build(
+    src: Path,
+    out: Path,
+    verbose: bool = False,
+    fp: Optional[BuildFingerprint] = None,
+    issue_key: bool = False,
+    make_zip: bool = False,
+) -> BuildReport:
     patterns = parse_manifest(src / ".dist_excludes")
     report = BuildReport()
+    report.fingerprint = fp
 
     # Clean output
     if out.exists():
@@ -252,8 +428,38 @@ def build(src: Path, out: Path, verbose: bool = False) -> BuildReport:
             if needle in text:
                 report.canary_strings_found.append((copied, needle))
 
+    # --- Fingerprint injection (L.7) ---
+    if fp is not None:
+        target = out / "laplace_client.py"
+        if not target.exists():
+            report.fingerprint_errors.append("laplace_client.py missing from output")
+        else:
+            try:
+                _inject_fingerprint(target, fp)
+            except Exception as e:
+                report.fingerprint_errors.append(f"inject failed: {e}")
+
+        if issue_key:
+            full_key, prefix, err = _issue_key_via_admin(fp.user_id, fp)
+            if err:
+                report.fingerprint_errors.append(f"key issuance failed: {err}")
+            else:
+                fp.issued_key = full_key
+                fp.key_prefix = prefix
+
+        if not report.fingerprint_errors:
+            _write_build_manifest(out, fp, report.copied)
+            _append_build_registry(Path(__file__).resolve().parent, fp)
+
     # --- Import smoke test ---
     report.import_errors.extend(_import_smoke_test(out))
+
+    # --- Optional zip packaging ---
+    if make_zip and fp is not None and report.ok:
+        try:
+            report.zip_path = _make_zip(out, fp, Path(src))
+        except Exception as e:
+            report.fingerprint_errors.append(f"zip packaging failed: {e}")
 
     return report
 
@@ -339,6 +545,34 @@ def print_summary(report: BuildReport, out: Path) -> None:
     else:
         print("[PASS] Import smoke test (laplace_client + agent_api)")
     print("")
+    if report.fingerprint is not None:
+        fp = report.fingerprint
+        if report.fingerprint_errors:
+            print("[FAIL] Fingerprint injection:")
+            for e in report.fingerprint_errors:
+                print(f"  {e}")
+        else:
+            print("[PASS] Fingerprint injected")
+            print(f"  user_id:  {fp.user_id}")
+            print(f"  build_id: {fp.build_id}")
+            print(f"  channel:  {fp.channel}")
+            print(f"  built_at: {fp.built_at}")
+            if fp.key_prefix:
+                print(f"  api_key_prefix: {fp.key_prefix}")
+            if fp.issued_key:
+                print("")
+                print("  " + "!" * 60)
+                print("  NEW API KEY ISSUED -- SAVE NOW, WILL NEVER BE SHOWN AGAIN:")
+                print(f"    {fp.issued_key}")
+                print("  " + "!" * 60)
+        print("")
+    else:
+        print("[SKIP] Fingerprint injection (--user-id not provided)")
+        print("")
+    if report.zip_path:
+        size_kb = report.zip_path.stat().st_size / 1024
+        print(f"[ZIP]  {report.zip_path} ({size_kb:.1f} KB)")
+        print("")
     print("=" * 72)
     if report.ok:
         print("BUILD OK -- distribution is ready to ship")
@@ -359,16 +593,56 @@ def main() -> int:
     parser.add_argument(
         "--verbose", "-v", action="store_true", help="Print every excluded file"
     )
+    parser.add_argument(
+        "--user-id",
+        default=None,
+        help="Embed a per-user fingerprint (user_id, build_id, timestamp)",
+    )
+    parser.add_argument(
+        "--channel",
+        default="beta",
+        help="Distribution channel tag (e.g. dev, beta, stable)",
+    )
+    parser.add_argument(
+        "--issue-key",
+        action="store_true",
+        help="Auto-issue an API key via LAPLACE_API_URL admin endpoint",
+    )
+    parser.add_argument(
+        "--zip",
+        action="store_true",
+        help="Produce builds/laplace_client_<user>_<id>.zip after build",
+    )
     args = parser.parse_args()
 
     src = Path(__file__).resolve().parent.parent
     out = src / args.out
 
+    fp: Optional[BuildFingerprint] = None
+    if args.user_id:
+        fp = BuildFingerprint(
+            user_id=args.user_id,
+            build_id=_make_build_id(args.user_id),
+            built_at=datetime.now(tz=timezone.utc).isoformat(),
+            channel=args.channel,
+        )
+
     print(f"Source:      {src}")
     print(f"Destination: {out}")
+    if fp:
+        print(f"User:        {fp.user_id}")
+        print(f"Build ID:    {fp.build_id}")
+        print(f"Channel:     {fp.channel}")
     print("")
 
-    report = build(src, out, verbose=args.verbose)
+    report = build(
+        src,
+        out,
+        verbose=args.verbose,
+        fp=fp,
+        issue_key=args.issue_key,
+        make_zip=args.zip,
+    )
     print_summary(report, out)
 
     return 0 if report.ok else 1

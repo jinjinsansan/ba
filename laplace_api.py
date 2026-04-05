@@ -781,6 +781,34 @@ app.add_middleware(
 )
 
 
+# --- Fingerprint logging middleware ---
+# Every shipped client sends X-Client-Build-Id / X-Client-User headers
+# that are embedded per-user at build time. Logging them here lets us
+# correlate leaked binaries with usage patterns (L.7).
+
+_fp_logger = logging.getLogger("laplace.fingerprint")
+
+
+@app.middleware("http")
+async def fingerprint_middleware(request: Request, call_next):
+    build_id = request.headers.get("x-client-build-id", "-")
+    client_user = request.headers.get("x-client-user", "-")
+    channel = request.headers.get("x-client-channel", "-")
+    client_ip = request.client.host if request.client else "-"
+    response = await call_next(request)
+    if build_id != "-" or client_user != "-":
+        _fp_logger.info(
+            "fp=%s user=%s channel=%s ip=%s path=%s status=%d",
+            build_id,
+            client_user,
+            channel,
+            client_ip,
+            request.url.path,
+            response.status_code,
+        )
+    return response
+
+
 @app.get("/api/health")
 async def health():
     """Public unauthenticated health probe."""

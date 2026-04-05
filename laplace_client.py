@@ -74,6 +74,19 @@ class LaplaceApiError(RuntimeError):
     """Raised when the VPS API returns an error or is unreachable."""
 
 
+# === BUILD_FINGERPRINT_START ===
+# The dict below is rewritten per-user by scripts/build_client_dist.py at
+# build time. Do not edit the values manually or the fingerprint audit
+# will fail. Leaving the default "unbranded" markers is fine for dev.
+_BUILD_INFO: dict = {
+    "user_id": "unbranded",
+    "build_id": "unbranded",
+    "built_at": "unbranded",
+    "channel": "dev",
+}
+# === BUILD_FINGERPRINT_END ===
+
+
 class LaplaceClient:
     """Low-level HTTP client for the LAPLACE Logic API."""
 
@@ -84,6 +97,15 @@ class LaplaceClient:
         self._session = requests.Session()
         if api_key:
             self._session.headers.update({"Authorization": f"Bearer {api_key}"})
+        # Fingerprint headers — identify this build in VPS logs. The values
+        # are rewritten per-user at package build time (see L.7).
+        self._session.headers.update(
+            {
+                "X-Client-Build-Id": str(_BUILD_INFO.get("build_id", "unbranded")),
+                "X-Client-User": str(_BUILD_INFO.get("user_id", "unbranded")),
+                "X-Client-Channel": str(_BUILD_INFO.get("channel", "dev")),
+            }
+        )
 
     def _url(self, path: str) -> str:
         return f"{self.base_url}{path}"

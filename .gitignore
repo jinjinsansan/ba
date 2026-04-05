@@ -11,6 +11,8 @@ dist/
 dist_client/
 dist_client_test/
 build/
+builds/
+scripts/.build_registry.json
 *.spec
 config.ini
 *_dumps/
