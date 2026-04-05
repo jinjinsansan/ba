@@ -1,0 +1,88 @@
+# =============================================================================
+# LAPLACE Client Distribution — SERVER-ONLY files
+# =============================================================================
+#
+# This manifest lists files that MUST NOT be included in any client-facing
+# distribution (.exe installer, cloud desktop setup, ZIP bundle, etc.).
+#
+# These files contain the sensitive IP (scoring formulas, betting sequences,
+# threshold constants, regularity algorithms) that make the LAPLACE strategy
+# valuable. They must live only on the VPS, where the LAPLACE API serves
+# decisions to clients over HTTP.
+#
+# When building a client distribution, filter out every path listed below.
+# When running the client, these files are lazily imported only in
+# local-fallback mode (which should be disabled in shipped builds via
+# LAPLACE_USE_REMOTE=1).
+#
+# Format: one glob pattern per line. Lines starting with '#' are comments.
+# =============================================================================
+
+# --- Core strategy logic (highest sensitivity) ---
+marubatsu_strategy.py
+marubatsu_bet.py
+run_marubatsu_bet.py
+
+# --- Table selection and scoring ---
+table_selector.py
+
+# --- Regularity and shoe pattern analysis ---
+shoe.py
+strategy.py
+
+# --- Backtest / research / dev tooling ---
+backtest.py
+main.py
+main_lobby.py
+analyze_*.py
+verify_*.py
+investigate_*.py
+debug_*.py
+check_*.py
+report_*.py
+backtest_*.py
+fetch_*.py
+capture_*.py
+get_*.py
+export_*.py
+parse_*.py
+inspect_*.py
+test_*.py
+find_*.py
+
+# --- Server-only entry points ---
+laplace_api.py
+laplace_bet_runner.py
+bot_manager.py
+monitor/run_marubatsu.py
+monitor/run_data_collector.py
+monitor/run.py
+
+# --- Data artefacts (never ship) ---
+analytics.sqlite3
+analytics.sqlite3-*
+data/
+api_state/
+bot_logs/
+bot_configs/
+auth_state/
+screenshots/
+*.log
+*.log.*
+ws_raw_log.jsonl
+tables_dump.json
+
+# --- Secrets & local config ---
+.env
+.env.*
+config.ini
+monitor/.env
+
+# --- Documentation (can be shipped but not required) ---
+*.md
+DESIGN_AUTO_BET.md
+AI_PREDICTION_PROJECT.md
+
+# --- Developer scripts ---
+scripts/
+tests/

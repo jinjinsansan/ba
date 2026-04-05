@@ -1,5 +1,10 @@
 """BET判断エンジン — プレイヤー3落ち目狙い + 1-2-3打法
 
+⚠️  SERVER-ONLY — DO NOT SHIP TO CLIENT ⚠️
+このモジュールは 1-2-3 打法戦略とテーブル選定ロジックを含みます。
+legacy/backtest 用途のみ。client distribution には含めてはいけません
+(.dist_excludes 参照)。
+
 テーブル選定:
   ① シューの30%-50%のテーブル (半分以上終了は入らない)
   ② なるべく参加人数が多いテーブル (データ不足時はSpeedBac優先)

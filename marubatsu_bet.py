@@ -1,5 +1,10 @@
 """〇❌ロジック × 自動BETセッション
 
+⚠️  SERVER-ONLY — DO NOT SHIP TO CLIENT ⚠️
+このモジュールは local-fallback 用 MaruBatsuBetSession で、
+VPS に到達できない開発用途のみ使用します。marubatsu_strategy (SEQ 含む)
+に依存するため client distribution には含めません (.dist_excludes 参照)。
+
 Japanese Speed Baccarat A テーブルに入場し、
 〇❌ロジック (SEQ, OS, slashed, next_unit_idx) に従って
 Player側にBETする。

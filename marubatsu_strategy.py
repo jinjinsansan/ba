@@ -1,5 +1,12 @@
 """〇❌パーティゲーム ロジック (Python移植)
 
+⚠️  SERVER-ONLY — DO NOT SHIP TO CLIENT ⚠️
+このモジュールは SEQ 配列 (core martingale sequence) と
+finalize_set/calc_slashed/calc_next_unit_idx の機密ロジックを含みます。
+VPS の laplace_api (logic engine) と marubatsu monitor のみから
+import され、client distribution には含めてはいけません
+(.dist_excludes 参照)。
+
 maru プロジェクトの gameLogic.ts を忠実にPythonへ移植。
 バカラ結果を Player=〇, Banker=✕ にマッピングし、
 7ハンド=1セットとして overshoot / 斜線 / bet単位 / 損益を管理する。

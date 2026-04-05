@@ -3,6 +3,12 @@
 バカラの1シュー（6〜8デッキのカードセット）を追跡し、
 シュー終了時の統計・規則性判定・パターン分類を計算する。
 
+⚠️  SERVER-ONLY — DO NOT SHIP TO CLIENT ⚠️
+このモジュールは規則性スコアリング (_compute_regularity) と
+パターン分類の機密ロジックを含みます。VPS の data collector /
+marubatsu monitor からのみ import され、client distribution には
+含めてはいけません (.dist_excludes 参照)。
+
 分析項目:
   - 規則性 vs 不規則性 判定 (スコア0-100)
   - 大路パターン分類 (テレコ/ニコニコ・ニコイチ/サンイチ/ドラゴン/ブリッジ)

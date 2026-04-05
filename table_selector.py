@@ -1,5 +1,12 @@
 """テーブル選定ロジック (6つの条件を実装)
 
+⚠️  SERVER-ONLY — DO NOT SHIP TO CLIENT ⚠️
+このモジュールは compute_score スコアリング式、PLAYERS_PRIMARY /
+PLAYERS_RELAXED / MIN_HANDS / MAX_HANDS / DRAGON_LIMIT 等の機密閾値、
+および EXCLUDE_TITLE_KEYWORDS ブラックリストを含みます。VPS の
+laplace_api (/api/select-table) からのみ import され、client
+distribution には含めてはいけません (.dist_excludes 参照)。
+
 条件:
   ① 除外テーブル: Always9, Lightning, XXXtreme, Golden Wealth, Prosperity, Peek,
                     No Commission, Salon Prive, Elite VIP, Stake Exclusive(0.1$)
