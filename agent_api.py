@@ -18,6 +18,21 @@ import time
 import logging
 import io
 
+# ---- Force stdio to UTF-8 (MUST run before any send_log/send_msg) -------
+# PyInstaller-bundled Python on a Japanese Windows install defaults to
+# cp932 for sys.stdout / sys.stderr, which chokes on characters like
+# the em dash U+2014 used throughout our log messages and crashes the
+# whole BET session with UnicodeEncodeError. The parent Electron process
+# always decodes the child pipes as UTF-8, so forcing UTF-8 on both ends
+# is the right fix.
+for _name in ("stdout", "stderr"):
+    _stream = getattr(sys, _name, None)
+    if _stream is not None and hasattr(_stream, "reconfigure"):
+        try:
+            _stream.reconfigure(encoding="utf-8", errors="replace", newline="\n")
+        except Exception:
+            pass
+
 # ---- Eager imports (MUST happen on the main thread) --------------------
 # Importing numpy from a worker thread while another thread is blocked on
 # sys.stdin.readline() deadlocks inside numpy._core.overrides on Python
@@ -73,9 +88,33 @@ MAX_ROUNDS = 9999
 # ======== IPC ========
 
 def send_msg(msg: dict):
-    line = json.dumps(msg, ensure_ascii=False)
-    sys.stdout.write(line + "\n")
-    sys.stdout.flush()
+    line = json.dumps(msg, ensure_ascii=False) + "\n"
+    try:
+        sys.stdout.write(line)
+        sys.stdout.flush()
+    except UnicodeEncodeError:
+        # Belt-and-braces: if the stdout text wrapper somehow still has a
+        # non-UTF-8 encoding (e.g. cp932 on a Japanese Windows PyInstaller
+        # build that ignored our reconfigure), push raw UTF-8 bytes onto
+        # the underlying binary buffer instead. The Electron parent always
+        # decodes the child pipe as UTF-8, so this works.
+        buf = getattr(sys.stdout, "buffer", None)
+        if buf is not None:
+            try:
+                buf.write(line.encode("utf-8", errors="replace"))
+                buf.flush()
+            except Exception:
+                pass
+        else:
+            # Last resort: ASCII-safe JSON (escapes everything non-ASCII)
+            try:
+                ascii_line = json.dumps(msg, ensure_ascii=True) + "\n"
+                sys.stdout.write(ascii_line)
+                sys.stdout.flush()
+            except Exception:
+                pass
+    except Exception:
+        pass
 
 def send_log(text: str):
     send_msg({"type": "log", "message": text})
