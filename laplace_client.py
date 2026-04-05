@@ -26,10 +26,9 @@ from notify import TelegramNotifier
 
 
 # =========================================================================
-# ClientSetData — minimal data holder that mirrors server SetData fields.
-# NO logic, NO algorithm. Just attribute storage so display / notification
-# code can use dot access. The real SetData class (with finalize_set,
-# calc_slashed, etc.) lives only on the VPS.
+# ClientSetData — minimal data holder that mirrors the server-side
+# completed-set payload. Storage only, no logic. All decisions about what
+# a set looks like are made by the VPS; the client just receives values.
 # =========================================================================
 
 

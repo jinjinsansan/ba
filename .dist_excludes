@@ -34,6 +34,7 @@ strategy.py
 backtest.py
 main.py
 main_lobby.py
+vision.py
 analyze_*.py
 verify_*.py
 investigate_*.py
@@ -49,14 +50,19 @@ parse_*.py
 inspect_*.py
 test_*.py
 find_*.py
+_*.py
 
 # --- Server-only entry points ---
 laplace_api.py
 laplace_bet_runner.py
 bot_manager.py
-monitor/run_marubatsu.py
-monitor/run_data_collector.py
-monitor/run.py
+
+# --- monitor/ is entirely VPS-side (data collector, promotional telegram) ---
+monitor/
+
+# --- DB schema (sensitive) ---
+db.py
+analytics_db.py
 
 # --- Data artefacts (never ship) ---
 analytics.sqlite3
@@ -86,3 +92,40 @@ AI_PREDICTION_PROJECT.md
 # --- Developer scripts ---
 scripts/
 tests/
+
+# --- Build artefacts and caches ---
+__pycache__/
+.git/
+.claude/
+.factory/
+.pytest_cache/
+.venv/
+venv/
+dist/
+dist_client/
+build/
+gui/node_modules/
+gui/dist/
+node_modules/
+
+# --- OS junk ---
+.DS_Store
+Thumbs.db
+
+# --- Browser state (never ship — contains login cookies) ---
+browser_data/
+browser_profile/
+stake_profile/
+
+# --- Stale DOM dumps / debugging snapshots ---
+*_dumps/
+*_dump*/
+stderr.log
+state_*.json
+ws_raw_log.jsonl
+capture_ws_log.json
+tables_dump.json
+report_*.txt
+verify_*.txt
+TODO_NEXT.md
+PLAN_GUI_APP.md

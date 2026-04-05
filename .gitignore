@@ -8,6 +8,8 @@ auth_state/
 auth_state_*/
 screenshots/
 dist/
+dist_client/
+dist_client_test/
 build/
 *.spec
 config.ini
