@@ -20,6 +20,13 @@ import io
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
+# Load .env early so LAPLACE_USE_REMOTE etc. are available
+try:
+    from dotenv import load_dotenv
+    load_dotenv(os.path.join(os.path.dirname(os.path.abspath(__file__)), ".env"))
+except Exception:
+    pass
+
 logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s [%(name)s] %(levelname)s: %(message)s",
@@ -132,8 +139,10 @@ def run_bet_session(config: dict, stop_event: threading.Event, skip_event: threa
     global _active_session, _pending_config_update
     """Main BET loop — runs in a thread."""
     import config as cfg
-    cfg.HEADLESS = False
-    cfg.PROFILE_NAME = "bet"
+    # Headless is determined by env (VPS sets LAPLACE_HEADLESS=1) or config.ini; default False
+    if os.getenv("LAPLACE_HEADLESS", "").strip() in ("1", "true", "True", "yes"):
+        cfg.HEADLESS = True
+    cfg.PROFILE_NAME = os.getenv("LAPLACE_PROFILE_NAME", "bet")
 
     from scraper import BaccaratScraper
     from executor import BetExecutor
@@ -144,11 +153,28 @@ def run_bet_session(config: dict, stop_event: threading.Event, skip_event: threa
     from marubatsu_strategy import SEQ
     from table_selector import TableSelector
 
+    # Remote LAPLACE API mode (VPS-hosted logic engine)
+    use_remote = os.getenv("LAPLACE_USE_REMOTE", "0").strip() in ("1", "true", "True", "yes")
+    RemoteLaplaceSession = None
+    if use_remote:
+        try:
+            from laplace_client import RemoteLaplaceSession, LaplaceApiError  # noqa: F401
+            send_log(f"LAPLACE Remote mode: API={os.getenv('LAPLACE_API_URL', 'http://127.0.0.1:8000')} user={os.getenv('LAPLACE_USER', 'dev-machine')}")
+        except Exception as e:
+            send_log(f"Remote mode requested but client import failed ({e}) — falling back to local MaruBatsuBetSession")
+            use_remote = False
+
     chip_base = config.get("chip_base", 1.0)
     profit_target_dollars = config.get("profit_target", 50)
     loss_cut_dollars = config.get("loss_cut", 200)
     dry_run = config.get("dry_run", False)
     resume = config.get("resume", False)
+
+    # Allow overriding dry_run via environment (safe for CI / first-run testing)
+    if os.getenv("LAPLACE_FORCE_DRYRUN", "").strip() in ("1", "true", "True", "yes"):
+        if not dry_run:
+            send_log("LAPLACE_FORCE_DRYRUN=1 detected — forcing dry_run=True")
+        dry_run = True
     # Verification mode: fixed table, public channel notifications
     verification_mode = (
         config.get("verification_mode", False)
@@ -224,29 +250,63 @@ def run_bet_session(config: dict, stop_event: threading.Event, skip_event: threa
     executor_config = {"demo_mode": dry_run}
     executor = BetExecutor(scraper.page, scraper.game_ws, executor_config, humanizer=humanizer)
 
-    session = MaruBatsuBetSession(
-        executor=executor,
-        notifier=notifier,
-        chip_base=chip_base,
-        loss_cut=loss_cut_chips,
-        profit_stop=profit_stop_chips,
-        dry_run=dry_run,
-        resume=resume,
-    )
+    if use_remote:
+        try:
+            session = RemoteLaplaceSession(
+                executor=executor,
+                notifier=notifier,
+                chip_base=chip_base,
+                loss_cut=loss_cut_chips,
+                profit_stop=profit_stop_chips,
+                dry_run=dry_run,
+                resume=resume,
+            )
+            send_action(f"LAPLACE Remote session ready (sets={len(session.tracker.sets)}, cp={session.tracker.cumulative_profit:+d})")
+        except Exception as e:
+            send_log(f"Remote session creation failed ({e}) — falling back to local MaruBatsuBetSession")
+            session = MaruBatsuBetSession(
+                executor=executor,
+                notifier=notifier,
+                chip_base=chip_base,
+                loss_cut=loss_cut_chips,
+                profit_stop=profit_stop_chips,
+                dry_run=dry_run,
+                resume=resume,
+            )
+    else:
+        session = MaruBatsuBetSession(
+            executor=executor,
+            notifier=notifier,
+            chip_base=chip_base,
+            loss_cut=loss_cut_chips,
+            profit_stop=profit_stop_chips,
+            dry_run=dry_run,
+            resume=resume,
+        )
     _active_session = session
 
     # Apply any pending config updates received before session creation
     if _pending_config_update:
         pending = _pending_config_update
         _pending_config_update = {}
+        new_pt_chips = None
+        new_lc_chips = None
         if "profit_target" in pending:
             new_pt = float(pending["profit_target"])
-            session.profit_stop = max(1, int(round(new_pt / max(chip_base, 0.01))))
-            send_log(f"Applied pending profit target: ${new_pt:.0f} ({session.profit_stop} chips)")
+            new_pt_chips = max(1, int(round(new_pt / max(chip_base, 0.01))))
+            session.profit_stop = new_pt_chips
+            send_log(f"Applied pending profit target: ${new_pt:.0f} ({new_pt_chips} chips)")
         if "loss_cut" in pending:
             new_lc = float(pending["loss_cut"])
-            session.loss_cut = max(1, int(round(new_lc / max(chip_base, 0.01))))
-            send_log(f"Applied pending loss cut: ${new_lc:.0f} ({session.loss_cut} chips)")
+            new_lc_chips = max(1, int(round(new_lc / max(chip_base, 0.01))))
+            session.loss_cut = new_lc_chips
+            send_log(f"Applied pending loss cut: ${new_lc:.0f} ({new_lc_chips} chips)")
+        # Sync to remote if applicable
+        if use_remote and hasattr(session, "update_config"):
+            try:
+                session.update_config(profit_stop=new_pt_chips, loss_cut=new_lc_chips)
+            except Exception as e:
+                send_log(f"Remote config sync failed: {e}")
 
     # === Select initial table ===
     target_tid = None
@@ -565,15 +625,25 @@ def main():
                     cfg = msg.get("config", {})
                     if _active_session is not None:
                         s = _active_session
-                        chip_base = s.chip_base
+                        chip_base_val = s.chip_base
+                        new_pt_chips = None
+                        new_lc_chips = None
                         if "profit_target" in cfg:
                             new_pt = float(cfg["profit_target"])
-                            s.profit_stop = max(1, int(round(new_pt / max(chip_base, 0.01))))
-                            send_log(f"Profit target updated: ${new_pt:.0f} ({s.profit_stop} chips)")
+                            new_pt_chips = max(1, int(round(new_pt / max(chip_base_val, 0.01))))
+                            s.profit_stop = new_pt_chips
+                            send_log(f"Profit target updated: ${new_pt:.0f} ({new_pt_chips} chips)")
                         if "loss_cut" in cfg:
                             new_lc = float(cfg["loss_cut"])
-                            s.loss_cut = max(1, int(round(new_lc / max(chip_base, 0.01))))
-                            send_log(f"Loss cut updated: ${new_lc:.0f} ({s.loss_cut} chips)")
+                            new_lc_chips = max(1, int(round(new_lc / max(chip_base_val, 0.01))))
+                            s.loss_cut = new_lc_chips
+                            send_log(f"Loss cut updated: ${new_lc:.0f} ({new_lc_chips} chips)")
+                        # Sync to remote session if applicable
+                        if hasattr(s, "update_config") and hasattr(s, "client"):
+                            try:
+                                s.update_config(profit_stop=new_pt_chips, loss_cut=new_lc_chips)
+                            except Exception as e:
+                                send_log(f"Remote config sync failed: {e}")
                     else:
                         # Session not yet initialized, buffer for later
                         _pending_config_update.update(cfg)

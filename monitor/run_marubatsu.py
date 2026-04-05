@@ -53,7 +53,7 @@ logging.getLogger("baccarat.game_ws").propagate = False
 logger = logging.getLogger("baccarat.marubatsu_monitor")
 
 from scraper import BaccaratScraper
-from notify import TelegramNotifier
+from notify import PublicNotifier
 from shoe import ShoeTracker
 from marubatsu_strategy import MaruBatsuTracker, SEQ
 
@@ -76,9 +76,12 @@ def find_target_table_id(scraper: BaccaratScraper) -> str | None:
 
 
 def main():
-    bot_token = os.getenv("TELEGRAM_BOT_TOKEN", "")
-    chat_id = os.getenv("TELEGRAM_CHAT_ID", "")
-    notifier = TelegramNotifier(bot_token, chat_id)
+    # 宣伝用公開チャンネル向け: PUBLIC_BOT_TOKEN / PUBLIC_CHANNEL_ID を使用
+    # (GUI の TELEGRAM_BOT_TOKEN/USER とは別ボット・別用途)
+    notifier = PublicNotifier()
+    if not notifier.enabled:
+        logger.error("PublicNotifier disabled — PUBLIC_BOT_TOKEN / PUBLIC_CHANNEL_ID が未設定")
+        return
 
     tracker = MaruBatsuTracker(chip_base=CHIP_BASE)
 

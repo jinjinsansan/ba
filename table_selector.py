@@ -47,8 +47,8 @@ EXCLUDE_TITLE_KEYWORDS = [
 REQUIRED_MIN_BET = 1
 
 # 参加者数しきい値
-PLAYERS_PRIMARY = 50
-PLAYERS_RELAXED = 30
+PLAYERS_PRIMARY = 10
+PLAYERS_RELAXED = 1
 
 # 待機時間 (primary閾値が見つからない場合、relaxedに緩和するまでの待機秒数)
 RELAX_WAIT_SECONDS = 60
@@ -224,20 +224,23 @@ class TableSelector:
             raw = self.scraper.get_raw_history(tid)
             hands, p, b, tie, last5 = analyze_history(raw)
 
-            # ③ ドラゴン除外
-            if has_banker_dragon(raw):
-                debug_stats["dragon"] += 1
-                continue
+            # Fixed table (verification) mode: bypass dragon / hands / pb filters
+            # — we are locked to this specific table regardless of its stats.
+            if not fixed_name:
+                # ③ ドラゴン除外
+                if has_banker_dragon(raw):
+                    debug_stats["dragon"] += 1
+                    continue
 
-            # ⑥ ハンド進行度
-            if hands < MIN_HANDS or hands > MAX_HANDS:
-                debug_stats["bad_hands"] += 1
-                continue
+                # ⑥ ハンド進行度
+                if hands < MIN_HANDS or hands > MAX_HANDS:
+                    debug_stats["bad_hands"] += 1
+                    continue
 
-            # ⑥ プレイヤー > バンカー
-            if p <= b:
-                debug_stats["bad_pb_ratio"] += 1
-                continue
+                # ⑥ プレイヤー > バンカー
+                if p <= b:
+                    debug_stats["bad_pb_ratio"] += 1
+                    continue
 
             candidates.append(TableCandidate(
                 table_id=tid,

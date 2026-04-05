@@ -1,10 +1,111 @@
+// LAPLACE Electron main (Fat Client)
+//
+// Architecture (正):
+//   Local PC / Desktop Cloud:
+//     - Electron GUI (this window)
+//     - Python agent (agent_api.py) spawned as child process
+//     - VISIBLE Camoufox browser (you can watch each BET happen)
+//     - BetExecutor physically clicks BET buttons on Stake
+//   VPS:
+//     - laplace-api.service (MaruBatsu logic engine) — no browser
+//     - laplace-collector.service (62 tables data warehouse)
+//
+// Flow on Start:
+//   1. Open SSH tunnel (127.0.0.1:8000 -> VPS:8000)
+//   2. Spawn Python agent_api.py with merged .env
+//   3. Python agent launches visible Camoufox and uses RemoteLaplaceSession
+//      to delegate logic decisions to the VPS API
+//   4. GUI receives stdin/stdout JSON IPC events (action, round_result, ...)
+
 const { app, BrowserWindow, ipcMain } = require('electron');
 const path = require('path');
+const fs = require('fs');
+const os = require('os');
 const { spawn } = require('child_process');
 
 let mainWindow = null;
 let pythonProcess = null;
+let sshTunnelProcess = null;
 let statusInterval = null;
+
+// === .env loader (merged into Python child env) ===
+
+function loadDotEnv() {
+  const envPath = path.join(__dirname, '..', '..', '.env');
+  const env = {};
+  if (!fs.existsSync(envPath)) return env;
+  try {
+    const content = fs.readFileSync(envPath, 'utf-8');
+    for (const raw of content.split(/\r?\n/)) {
+      const line = raw.trim();
+      if (!line || line.startsWith('#')) continue;
+      const m = line.match(/^([A-Za-z_][A-Za-z0-9_]*)=(.*)$/);
+      if (m) env[m[1]] = m[2];
+    }
+  } catch (e) {
+    console.error('[Main] .env load error:', e);
+  }
+  return env;
+}
+
+// === SSH tunnel (127.0.0.1:8000 -> VPS:8000) ===
+
+function startSshTunnel() {
+  if (sshTunnelProcess) return;
+  const envFile = loadDotEnv();
+  const useRemote = (envFile.LAPLACE_USE_REMOTE || process.env.LAPLACE_USE_REMOTE || '0').trim();
+  if (!['1', 'true', 'yes'].includes(useRemote.toLowerCase())) {
+    console.log('[Main] LAPLACE_USE_REMOTE not set — skipping SSH tunnel');
+    return;
+  }
+
+  const sshHost = envFile.LAPLACE_SSH_HOST || process.env.LAPLACE_SSH_HOST || 'laplace@210.131.215.116';
+  const sshKey = envFile.LAPLACE_SSH_KEY || process.env.LAPLACE_SSH_KEY || path.join(os.homedir(), '.ssh', 'laplace_vps');
+  const localPort = envFile.LAPLACE_LOCAL_PORT || '8000';
+  const remotePort = envFile.LAPLACE_REMOTE_PORT || '8000';
+
+  console.log(`[Main] Starting SSH tunnel ${localPort} -> ${sshHost}:${remotePort} (key=${sshKey})`);
+  sendToRenderer('agent-message', {
+    type: 'log',
+    message: `Opening SSH tunnel to VPS (${sshHost})...`,
+  });
+
+  const args = [
+    '-i', sshKey,
+    '-o', 'StrictHostKeyChecking=no',
+    '-o', 'BatchMode=yes',
+    '-o', 'ExitOnForwardFailure=yes',
+    '-o', 'ServerAliveInterval=30',
+    '-o', 'ServerAliveCountMax=3',
+    '-N',
+    '-L', `${localPort}:127.0.0.1:${remotePort}`,
+    sshHost,
+  ];
+
+  sshTunnelProcess = spawn('ssh', args, { stdio: ['ignore', 'pipe', 'pipe'] });
+
+  sshTunnelProcess.stderr.on('data', (data) => {
+    const text = data.toString('utf-8').trim();
+    if (text) console.error('[SSH Tunnel]', text);
+  });
+
+  sshTunnelProcess.on('exit', (code) => {
+    console.log('[Main] SSH tunnel exited:', code);
+    sshTunnelProcess = null;
+  });
+}
+
+function stopSshTunnel() {
+  if (sshTunnelProcess) {
+    console.log('[Main] Stopping SSH tunnel');
+    try {
+      sshTunnelProcess.kill();
+    } catch (e) {
+      console.error('[Main] tunnel kill error:', e);
+    }
+    sshTunnelProcess = null;
+  }
+}
 
 function createWindow() {
   mainWindow = new BrowserWindow({
@@ -47,13 +148,20 @@ function startPython(config) {
     pythonProcess.kill();
   }
 
+  // Open SSH tunnel first (no-op if LAPLACE_USE_REMOTE is not set)
+  startSshTunnel();
+
   const agentPath = path.join(__dirname, '..', '..', 'agent_api.py');
   console.log('[Main] Starting Python agent:', agentPath);
   sendToRenderer('agent-message', { type: 'log', message: `Starting agent: ${agentPath}` });
 
+  // Merge .env values into child env so Python can read LAPLACE_USE_REMOTE etc.
+  const envFile = loadDotEnv();
+  const childEnv = { ...process.env, ...envFile, PYTHONIOENCODING: 'utf-8' };
+
   pythonProcess = spawn('python', ['-X', 'utf8', agentPath], {
     cwd: path.join(__dirname, '..', '..'),
-    env: { ...process.env, PYTHONIOENCODING: 'utf-8' },
+    env: childEnv,
   });
 
   pythonProcess.on('error', (err) => {
@@ -110,7 +218,10 @@ function stopPython() {
         pythonProcess.kill();
         pythonProcess = null;
       }
+      stopSshTunnel();
     }, 5000);
+  } else {
+    stopSshTunnel();
   }
 }
 
@@ -158,5 +269,5 @@ ipcMain.handle('window-close', () => mainWindow?.close());
 // === App ===
 
 app.whenReady().then(createWindow);
-app.on('window-all-closed', () => { stopPython(); app.quit(); });
-app.on('before-quit', () => stopPython());
+app.on('window-all-closed', () => { stopPython(); stopSshTunnel(); app.quit(); });
+app.on('before-quit', () => { stopPython(); stopSshTunnel(); });
