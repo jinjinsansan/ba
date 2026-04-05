@@ -19,16 +19,21 @@ MaruBatsuTracker のロジックと状態管理を一元化する。
 """
 from __future__ import annotations
 
+import ipaddress
 import json
 import logging
 import os
+import secrets
 import sys
 import threading
+import time
+from collections import deque
+from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
 from typing import Optional
 
-from fastapi import FastAPI, HTTPException, Header, Depends, status
+from fastapi import FastAPI, HTTPException, Header, Depends, Request, status
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
 
@@ -44,9 +49,11 @@ logging.basicConfig(
 logger = logging.getLogger("laplace.api")
 
 # --- Configuration ---
-API_KEY = os.getenv("LAPLACE_API_KEY", "").strip()
+API_KEY = os.getenv("LAPLACE_API_KEY", "").strip()  # Legacy master key (fallback)
+ADMIN_KEY = os.getenv("LAPLACE_ADMIN_KEY", "").strip()  # Admin endpoint auth
 STATE_DIR = Path(os.getenv("LAPLACE_STATE_DIR", "/opt/laplace/api_state"))
 STATE_DIR.mkdir(parents=True, exist_ok=True)
+KEYS_FILE = Path(os.getenv("LAPLACE_KEYS_FILE", str(STATE_DIR.parent / "api_keys.json")))
 
 DEFAULT_PROFIT_STOP = 50
 DEFAULT_LOSS_CUT = 200
@@ -204,24 +211,322 @@ class BotStatusResponse(BaseModel):
     session_state: Optional[SessionState] = None
 
 
-# ======== Auth ========
+# ======== Auth & rate limiting ========
 
-async def verify_api_key(authorization: Optional[str] = Header(None)):
-    if not API_KEY:
-        # No API key configured → open access (dev mode)
-        return True
-    if not authorization or not authorization.startswith("Bearer "):
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Missing Bearer token",
+KEY_PREFIX = "lpk_live_"  # laplace key, live environment
+
+
+@dataclass
+class ApiKeyRecord:
+    key: str                      # full secret (lpk_live_...)
+    user_id: str
+    name: str
+    created_at: str
+    rate_limit_per_hour: int = 3600
+    ip_allowlist: list[str] = field(default_factory=list)  # CIDR or plain IP; empty = any
+    enabled: bool = True
+
+    def to_public_dict(self) -> dict:
+        return {
+            "prefix": self.key[: len(KEY_PREFIX) + 8],  # lpk_live_XXXXXXXX (masked tail)
+            "user_id": self.user_id,
+            "name": self.name,
+            "created_at": self.created_at,
+            "rate_limit_per_hour": self.rate_limit_per_hour,
+            "ip_allowlist": list(self.ip_allowlist),
+            "enabled": self.enabled,
+        }
+
+    @classmethod
+    def from_dict(cls, d: dict) -> "ApiKeyRecord":
+        return cls(
+            key=d["key"],
+            user_id=d["user_id"],
+            name=d.get("name", ""),
+            created_at=d.get("created_at", datetime.utcnow().isoformat() + "Z"),
+            rate_limit_per_hour=int(d.get("rate_limit_per_hour", 3600)),
+            ip_allowlist=list(d.get("ip_allowlist", [])),
+            enabled=bool(d.get("enabled", True)),
         )
-    token = authorization[len("Bearer ") :].strip()
-    if token != API_KEY:
+
+
+class ApiKeyRegistry:
+    """Thread-safe file-backed registry of per-user API keys.
+
+    Layout: {"keys": {"<full_key>": {...record fields...}}}
+    """
+
+    def __init__(self, path: Path):
+        self.path = path
+        self._lock = threading.Lock()
+        self._keys: dict[str, ApiKeyRecord] = {}
+        self.load()
+
+    def load(self) -> None:
+        with self._lock:
+            self._keys.clear()
+            if not self.path.exists():
+                return
+            try:
+                data = json.loads(self.path.read_text(encoding="utf-8"))
+            except Exception as e:
+                logger.error(f"Failed to parse {self.path}: {e}")
+                return
+            for key, rec_dict in data.get("keys", {}).items():
+                try:
+                    rec_dict = {**rec_dict, "key": key}
+                    self._keys[key] = ApiKeyRecord.from_dict(rec_dict)
+                except Exception as e:
+                    logger.error(f"Skipping malformed key entry: {e}")
+
+    def save(self) -> None:
+        with self._lock:
+            self.path.parent.mkdir(parents=True, exist_ok=True)
+            data = {
+                "keys": {
+                    k: {
+                        "user_id": r.user_id,
+                        "name": r.name,
+                        "created_at": r.created_at,
+                        "rate_limit_per_hour": r.rate_limit_per_hour,
+                        "ip_allowlist": r.ip_allowlist,
+                        "enabled": r.enabled,
+                    }
+                    for k, r in self._keys.items()
+                }
+            }
+            tmp = self.path.with_suffix(".tmp")
+            tmp.write_text(
+                json.dumps(data, indent=2, ensure_ascii=False), encoding="utf-8"
+            )
+            tmp.replace(self.path)
+
+    def issue(
+        self,
+        user_id: str,
+        name: str,
+        rate_limit_per_hour: int = 3600,
+        ip_allowlist: Optional[list[str]] = None,
+    ) -> ApiKeyRecord:
+        key = KEY_PREFIX + secrets.token_hex(16)
+        rec = ApiKeyRecord(
+            key=key,
+            user_id=user_id,
+            name=name,
+            created_at=datetime.utcnow().isoformat() + "Z",
+            rate_limit_per_hour=rate_limit_per_hour,
+            ip_allowlist=list(ip_allowlist or []),
+            enabled=True,
+        )
+        with self._lock:
+            self._keys[key] = rec
+        self.save()
+        return rec
+
+    def revoke(self, prefix: str) -> bool:
+        """Revoke by prefix (full key or first N chars). Returns True if removed."""
+        with self._lock:
+            match = next(
+                (k for k in self._keys if k == prefix or k.startswith(prefix)),
+                None,
+            )
+            if not match:
+                return False
+            del self._keys[match]
+        self.save()
+        return True
+
+    def set_enabled(self, prefix: str, enabled: bool) -> bool:
+        with self._lock:
+            match = next(
+                (k for k in self._keys if k == prefix or k.startswith(prefix)),
+                None,
+            )
+            if not match:
+                return False
+            self._keys[match].enabled = enabled
+        self.save()
+        return True
+
+    def get(self, key: str) -> Optional[ApiKeyRecord]:
+        with self._lock:
+            return self._keys.get(key)
+
+    def list(self) -> list[ApiKeyRecord]:
+        with self._lock:
+            return list(self._keys.values())
+
+    @property
+    def empty(self) -> bool:
+        with self._lock:
+            return not self._keys
+
+
+class RateLimiter:
+    """Sliding-window in-memory rate limiter, keyed by API key."""
+
+    def __init__(self, window_seconds: int = 3600):
+        self.window = window_seconds
+        self._hits: dict[str, deque] = {}
+        self._lock = threading.Lock()
+
+    def check_and_record(self, key: str, limit_per_hour: int) -> tuple[bool, int]:
+        """Return (allowed, remaining). Counts this call if allowed."""
+        now = time.monotonic()
+        cutoff = now - self.window
+        with self._lock:
+            dq = self._hits.setdefault(key, deque())
+            while dq and dq[0] < cutoff:
+                dq.popleft()
+            if len(dq) >= limit_per_hour:
+                return False, 0
+            dq.append(now)
+            return True, max(0, limit_per_hour - len(dq))
+
+    def usage(self, key: str) -> int:
+        now = time.monotonic()
+        cutoff = now - self.window
+        with self._lock:
+            dq = self._hits.get(key)
+            if not dq:
+                return 0
+            while dq and dq[0] < cutoff:
+                dq.popleft()
+            return len(dq)
+
+
+def _ip_matches_allowlist(client_ip: str, allowlist: list[str]) -> bool:
+    if not allowlist:
+        return True
+    try:
+        ip = ipaddress.ip_address(client_ip)
+    except ValueError:
+        return False
+    for entry in allowlist:
+        try:
+            if "/" in entry:
+                if ip in ipaddress.ip_network(entry, strict=False):
+                    return True
+            else:
+                if ip == ipaddress.ip_address(entry):
+                    return True
+        except ValueError:
+            continue
+    return False
+
+
+@dataclass
+class UserContext:
+    user_id: str
+    key_prefix: str
+    is_admin: bool = False
+    rate_remaining: int = 0
+
+
+# Global instances
+_api_keys = ApiKeyRegistry(KEYS_FILE)
+_rate_limiter = RateLimiter()
+
+
+def _extract_bearer(authorization: Optional[str]) -> Optional[str]:
+    if not authorization or not authorization.startswith("Bearer "):
+        return None
+    return authorization[len("Bearer ") :].strip() or None
+
+
+async def verify_api_key(
+    request: Request,
+    authorization: Optional[str] = Header(None),
+) -> UserContext:
+    """Per-user key auth with rate limit + IP allowlist.
+
+    Resolution order:
+      1. If registry has keys, look up the Bearer token there.
+      2. Else fall back to legacy single-key mode (LAPLACE_API_KEY env).
+      3. Else open access (dev mode, no auth).
+
+    Admin keys (ADMIN_KEY env) bypass user_id scoping.
+    """
+    token = _extract_bearer(authorization)
+    client_ip = request.client.host if request.client else "0.0.0.0"
+
+    # --- Admin master key (for admin endpoints and cross-user operations) ---
+    if ADMIN_KEY and token == ADMIN_KEY:
+        return UserContext(user_id="*", key_prefix="admin", is_admin=True)
+
+    # --- Legacy single key: always accepted as admin for backward compat.
+    # Even after per-user keys are populated, the legacy key continues to
+    # work so existing deployments don't break mid-migration. ---
+    if API_KEY and token == API_KEY:
+        return UserContext(user_id="*", key_prefix="legacy", is_admin=True)
+
+    # --- Per-user registry mode ---
+    if not _api_keys.empty:
+        if not token:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Missing Bearer token",
+            )
+        rec = _api_keys.get(token)
+        if rec is None:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Invalid API key",
+            )
+        if not rec.enabled:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="API key disabled",
+            )
+        if not _ip_matches_allowlist(client_ip, rec.ip_allowlist):
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail=f"IP {client_ip} not in allowlist",
+            )
+        allowed, remaining = _rate_limiter.check_and_record(
+            token, rec.rate_limit_per_hour
+        )
+        if not allowed:
+            raise HTTPException(
+                status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+                detail=f"Rate limit exceeded ({rec.rate_limit_per_hour}/hour)",
+            )
+        return UserContext(
+            user_id=rec.user_id,
+            key_prefix=rec.key[: len(KEY_PREFIX) + 8],
+            is_admin=False,
+            rate_remaining=remaining,
+        )
+
+    # --- Legacy-only mode: key set but no registry ---
+    if API_KEY:
+        # Already handled above; reaching here means the token was wrong.
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid API key",
         )
-    return True
+
+    # --- Dev mode: no auth configured ---
+    return UserContext(user_id="*", key_prefix="dev", is_admin=True)
+
+
+def require_user_scope(ctx: UserContext, path_user_id: str) -> None:
+    """Ensure the request's user_id matches the key owner (unless admin)."""
+    if ctx.is_admin or ctx.user_id == "*":
+        return
+    if ctx.user_id != path_user_id:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=f"Key is scoped to user '{ctx.user_id}', not '{path_user_id}'",
+        )
+
+
+def require_admin(ctx: UserContext) -> None:
+    if not ctx.is_admin:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Admin key required",
+        )
 
 
 # ======== Session Wrapper ========
@@ -478,21 +783,133 @@ app.add_middleware(
 
 @app.get("/api/health")
 async def health():
+    """Public unauthenticated health probe."""
     with _sessions_lock:
         in_memory = len(_SESSIONS)
     disk_count = len(list(STATE_DIR.glob("*.json")))
+    if not _api_keys.empty:
+        auth_mode = "per_user_keys"
+    elif API_KEY:
+        auth_mode = "legacy_single_key"
+    else:
+        auth_mode = "open"
     return {
         "status": "ok",
         "in_memory_sessions": in_memory,
         "persisted_sessions": disk_count,
-        "auth_enabled": bool(API_KEY),
+        "auth_mode": auth_mode,
+        "registered_keys": len(_api_keys.list()),
+        "admin_configured": bool(ADMIN_KEY),
         "state_dir": str(STATE_DIR),
         "time": datetime.utcnow().isoformat() + "Z",
     }
 
 
-@app.post("/api/sessions", dependencies=[Depends(verify_api_key)])
-async def create_session(req: CreateSessionRequest):
+# ======== Admin: API key management ========
+
+
+class IssueKeyRequest(BaseModel):
+    user_id: str
+    name: str = ""
+    rate_limit_per_hour: int = 3600
+    ip_allowlist: list[str] = []
+
+
+class IssueKeyResponse(BaseModel):
+    key: str  # full secret — returned ONCE
+    user_id: str
+    name: str
+    created_at: str
+    rate_limit_per_hour: int
+    ip_allowlist: list[str]
+
+
+class KeyListResponse(BaseModel):
+    keys: list[dict]
+
+
+@app.post("/api/admin/keys", response_model=IssueKeyResponse)
+async def admin_issue_key(
+    req: IssueKeyRequest,
+    ctx: UserContext = Depends(verify_api_key),
+):
+    """Issue a new per-user API key. Returns the full secret ONCE."""
+    require_admin(ctx)
+    if not req.user_id.strip():
+        raise HTTPException(status_code=400, detail="user_id required")
+    if req.rate_limit_per_hour < 1 or req.rate_limit_per_hour > 100_000:
+        raise HTTPException(status_code=400, detail="rate_limit_per_hour out of range")
+    rec = _api_keys.issue(
+        user_id=req.user_id.strip(),
+        name=req.name.strip(),
+        rate_limit_per_hour=req.rate_limit_per_hour,
+        ip_allowlist=req.ip_allowlist,
+    )
+    logger.info(f"admin_issue_key: user={rec.user_id} prefix={rec.key[:16]}...")
+    return IssueKeyResponse(
+        key=rec.key,
+        user_id=rec.user_id,
+        name=rec.name,
+        created_at=rec.created_at,
+        rate_limit_per_hour=rec.rate_limit_per_hour,
+        ip_allowlist=rec.ip_allowlist,
+    )
+
+
+@app.get("/api/admin/keys", response_model=KeyListResponse)
+async def admin_list_keys(ctx: UserContext = Depends(verify_api_key)):
+    """List all issued keys (masked — full secret never returned again)."""
+    require_admin(ctx)
+    return KeyListResponse(
+        keys=[
+            {
+                **rec.to_public_dict(),
+                "rate_usage_last_hour": _rate_limiter.usage(rec.key),
+            }
+            for rec in _api_keys.list()
+        ]
+    )
+
+
+@app.delete("/api/admin/keys/{prefix}")
+async def admin_revoke_key(
+    prefix: str,
+    ctx: UserContext = Depends(verify_api_key),
+):
+    require_admin(ctx)
+    if not _api_keys.revoke(prefix):
+        raise HTTPException(status_code=404, detail=f"No key matching '{prefix}'")
+    logger.info(f"admin_revoke_key: prefix={prefix}")
+    return {"revoked": True, "prefix": prefix}
+
+
+@app.patch("/api/admin/keys/{prefix}")
+async def admin_toggle_key(
+    prefix: str,
+    enabled: bool,
+    ctx: UserContext = Depends(verify_api_key),
+):
+    require_admin(ctx)
+    if not _api_keys.set_enabled(prefix, enabled):
+        raise HTTPException(status_code=404, detail=f"No key matching '{prefix}'")
+    logger.info(f"admin_toggle_key: prefix={prefix} enabled={enabled}")
+    return {"updated": True, "prefix": prefix, "enabled": enabled}
+
+
+@app.post("/api/admin/keys/reload")
+async def admin_reload_keys(ctx: UserContext = Depends(verify_api_key)):
+    """Reload the key registry from disk (useful after manual JSON edits)."""
+    require_admin(ctx)
+    _api_keys.load()
+    return {"reloaded": True, "count": len(_api_keys.list())}
+
+
+@app.post("/api/sessions")
+async def create_session(
+    req: CreateSessionRequest,
+    ctx: UserContext = Depends(verify_api_key),
+):
+    require_user_scope(ctx, req.user_id)
     with _sessions_lock:
         existing = get_or_load(req.user_id)
         if existing and req.resume:
@@ -522,15 +939,24 @@ async def create_session(req: CreateSessionRequest):
         return {"created": True, "resumed": False, "state": sess.to_state()}
 
 
-@app.get("/api/sessions/{user_id}", dependencies=[Depends(verify_api_key)])
-async def get_session(user_id: str):
+@app.get("/api/sessions/{user_id}")
+async def get_session(
+    user_id: str,
+    ctx: UserContext = Depends(verify_api_key),
+):
+    require_user_scope(ctx, user_id)
     with _sessions_lock:
         sess = get_required(user_id)
         return {"state": sess.to_state()}
 
 
-@app.patch("/api/sessions/{user_id}", dependencies=[Depends(verify_api_key)])
-async def update_session(user_id: str, req: UpdateConfigRequest):
+@app.patch("/api/sessions/{user_id}")
+async def update_session(
+    user_id: str,
+    req: UpdateConfigRequest,
+    ctx: UserContext = Depends(verify_api_key),
+):
+    require_user_scope(ctx, user_id)
     with _sessions_lock:
         sess = get_required(user_id)
         if req.chip_base is not None and req.chip_base > 0:
@@ -544,9 +970,13 @@ async def update_session(user_id: str, req: UpdateConfigRequest):
         return {"updated": True, "state": sess.to_state()}
 
 
-@app.post("/api/sessions/{user_id}/decide", dependencies=[Depends(verify_api_key)])
-async def decide_bet(user_id: str):
+@app.post("/api/sessions/{user_id}/decide")
+async def decide_bet(
+    user_id: str,
+    ctx: UserContext = Depends(verify_api_key),
+):
     """Return next BET parameters (always Player side for maru-batsu)."""
+    require_user_scope(ctx, user_id)
     with _sessions_lock:
         sess = get_required(user_id)
         should, reason = sess.should_reset()
@@ -575,8 +1005,13 @@ async def decide_bet(user_id: str):
         )
 
 
-@app.post("/api/sessions/{user_id}/result", dependencies=[Depends(verify_api_key)])
-async def submit_result(user_id: str, req: ResultRequest):
+@app.post("/api/sessions/{user_id}/result")
+async def submit_result(
+    user_id: str,
+    req: ResultRequest,
+    ctx: UserContext = Depends(verify_api_key),
+):
+    require_user_scope(ctx, user_id)
     with _sessions_lock:
         sess = get_required(user_id)
         try:
@@ -614,8 +1049,12 @@ async def submit_result(user_id: str, req: ResultRequest):
         )
 
 
-@app.post("/api/sessions/{user_id}/reset", dependencies=[Depends(verify_api_key)])
-async def reset_session_endpoint(user_id: str):
+@app.post("/api/sessions/{user_id}/reset")
+async def reset_session_endpoint(
+    user_id: str,
+    ctx: UserContext = Depends(verify_api_key),
+):
+    require_user_scope(ctx, user_id)
     with _sessions_lock:
         sess = get_required(user_id)
         should, reason = sess.should_reset()
@@ -631,8 +1070,12 @@ async def reset_session_endpoint(user_id: str):
         }
 
 
-@app.post("/api/sessions/{user_id}/shoe-change", dependencies=[Depends(verify_api_key)])
-async def shoe_change(user_id: str):
+@app.post("/api/sessions/{user_id}/shoe-change")
+async def shoe_change(
+    user_id: str,
+    ctx: UserContext = Depends(verify_api_key),
+):
+    require_user_scope(ctx, user_id)
     with _sessions_lock:
         sess = get_required(user_id)
         discarded = sess.handle_shoe_change()
@@ -644,8 +1087,12 @@ async def shoe_change(user_id: str):
         }
 
 
-@app.delete("/api/sessions/{user_id}", dependencies=[Depends(verify_api_key)])
-async def delete_session(user_id: str):
+@app.delete("/api/sessions/{user_id}")
+async def delete_session(
+    user_id: str,
+    ctx: UserContext = Depends(verify_api_key),
+):
+    require_user_scope(ctx, user_id)
     with _sessions_lock:
         sess = get_or_load(user_id)
         if sess is None:
@@ -667,9 +1114,12 @@ async def delete_session(user_id: str):
 @app.post(
     "/api/select-table",
     response_model=SelectTableResponse,
-    dependencies=[Depends(verify_api_key)],
 )
-async def select_table_endpoint(req: SelectTableRequest):
+async def select_table_endpoint(
+    req: SelectTableRequest,
+    ctx: UserContext = Depends(verify_api_key),
+):
+    require_user_scope(ctx, req.user_id)
     import time as _time
     from table_selector import (
         is_excluded,
@@ -794,9 +1244,11 @@ async def select_table_endpoint(req: SelectTableRequest):
 @app.post(
     "/api/exit-check",
     response_model=ExitCheckResponse,
-    dependencies=[Depends(verify_api_key)],
 )
-async def exit_check_endpoint(req: ExitCheckRequest):
+async def exit_check_endpoint(
+    req: ExitCheckRequest,
+    ctx: UserContext = Depends(verify_api_key),
+):
     from table_selector import has_banker_dragon, PLAYERS_RELAXED
 
     if req.players < PLAYERS_RELAXED:
@@ -812,9 +1264,12 @@ async def exit_check_endpoint(req: ExitCheckRequest):
 @app.post(
     "/api/bot/start",
     response_model=BotStartResponse,
-    dependencies=[Depends(verify_api_key)],
 )
-async def bot_start(req: BotStartRequest):
+async def bot_start(
+    req: BotStartRequest,
+    ctx: UserContext = Depends(verify_api_key),
+):
+    require_user_scope(ctx, req.user_id)
     """Spawn the bet runner subprocess with the given config.
 
     The runner will read config from LAPLACE_BOT_CONFIG env var (pointing
@@ -864,9 +1319,9 @@ async def bot_start(req: BotStartRequest):
 @app.post(
     "/api/bot/stop",
     response_model=BotStopResponse,
-    dependencies=[Depends(verify_api_key)],
 )
-async def bot_stop():
+async def bot_stop(ctx: UserContext = Depends(verify_api_key)):
+    require_admin(ctx)
     mgr = get_bot_manager()
     result = mgr.stop()
     logger.info(f"bot_stop: {result}")
@@ -876,9 +1331,9 @@ async def bot_stop():
 @app.get(
     "/api/bot/status",
     response_model=BotStatusResponse,
-    dependencies=[Depends(verify_api_key)],
 )
-async def bot_status():
+async def bot_status(ctx: UserContext = Depends(verify_api_key)):
+    require_admin(ctx)
     mgr = get_bot_manager()
     st = mgr.status()
 
@@ -904,8 +1359,12 @@ async def bot_status():
     )
 
 
-@app.get("/api/bot/log", dependencies=[Depends(verify_api_key)])
-async def bot_log(lines: int = 100):
+@app.get("/api/bot/log")
+async def bot_log(
+    lines: int = 100,
+    ctx: UserContext = Depends(verify_api_key),
+):
+    require_admin(ctx)
     if lines < 1 or lines > 1000:
         raise HTTPException(status_code=400, detail="lines must be 1..1000")
     mgr = get_bot_manager()
@@ -915,8 +1374,9 @@ async def bot_log(lines: int = 100):
 # ======== Sessions listing ========
 
 
-@app.get("/api/sessions", dependencies=[Depends(verify_api_key)])
-async def list_sessions():
+@app.get("/api/sessions")
+async def list_sessions(ctx: UserContext = Depends(verify_api_key)):
+    require_admin(ctx)
     with _sessions_lock:
         # Load any persisted sessions not yet in memory
         for f in STATE_DIR.glob("*.json"):
@@ -945,5 +1405,14 @@ if __name__ == "__main__":
 
     host = os.getenv("LAPLACE_API_HOST", "0.0.0.0")
     port = int(os.getenv("LAPLACE_API_PORT", "8000"))
-    logger.info(f"LAPLACE API starting on {host}:{port} (auth={'enabled' if API_KEY else 'DISABLED'})")
+    if not _api_keys.empty:
+        auth_desc = f"per_user_keys ({len(_api_keys.list())} registered)"
+    elif API_KEY:
+        auth_desc = "legacy_single_key"
+    else:
+        auth_desc = "DISABLED (dev mode)"
+    logger.info(f"LAPLACE API starting on {host}:{port} (auth={auth_desc})")
+    if ADMIN_KEY:
+        logger.info("admin key configured (LAPLACE_ADMIN_KEY)")
+    logger.info(f"keys file: {KEYS_FILE}")
     uvicorn.run(app, host=host, port=port)
