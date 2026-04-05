@@ -28,12 +28,53 @@ let pythonProcess = null;
 let sshTunnelProcess = null;
 let statusInterval = null;
 
+// === Runtime layout ===
+//
+// Dev mode (npm start):
+//   - spawn `python agent_api.py` from repo root
+//   - .env lives at <repo-root>/.env
+//
+// Packaged mode (electron-builder --dir):
+//   - spawn `<resources>/engine/laplace_client_unbranded.exe`
+//   - .env lives at <resources>/.env (bundled via extraResources)
+//   - The Engine .exe has _internal/ next to it; do NOT change cwd
+//     away from the engine directory or PyInstaller's bootloader
+//     will fail to find its bundled Python runtime.
+
+function resolveEnvPath() {
+  if (app.isPackaged) {
+    return path.join(process.resourcesPath, '.env');
+  }
+  return path.join(__dirname, '..', '..', '.env');
+}
+
+function resolveEnginePaths() {
+  if (app.isPackaged) {
+    const engineDir = path.join(process.resourcesPath, 'engine');
+    return {
+      mode: 'packaged',
+      exe: path.join(engineDir, 'laplace_client_unbranded.exe'),
+      cwd: engineDir,
+      args: [],
+    };
+  }
+  return {
+    mode: 'dev',
+    exe: 'python',
+    cwd: path.join(__dirname, '..', '..'),
+    args: ['-X', 'utf8', path.join(__dirname, '..', '..', 'agent_api.py')],
+  };
+}
+
 // === .env loader (merged into Python child env) ===
 
 function loadDotEnv() {
-  const envPath = path.join(__dirname, '..', '..', '.env');
+  const envPath = resolveEnvPath();
   const env = {};
-  if (!fs.existsSync(envPath)) return env;
+  if (!fs.existsSync(envPath)) {
+    console.warn('[Main] .env not found at', envPath);
+    return env;
+  }
   try {
     const content = fs.readFileSync(envPath, 'utf-8');
     for (const raw of content.split(/\r?\n/)) {
@@ -151,17 +192,30 @@ function startPython(config) {
   // Open SSH tunnel first (no-op if LAPLACE_USE_REMOTE is not set)
   startSshTunnel();
 
-  const agentPath = path.join(__dirname, '..', '..', 'agent_api.py');
-  console.log('[Main] Starting Python agent:', agentPath);
-  sendToRenderer('agent-message', { type: 'log', message: `Starting agent: ${agentPath}` });
+  const engine = resolveEnginePaths();
+  console.log(`[Main] Starting Engine (${engine.mode}):`, engine.exe);
+  sendToRenderer('agent-message', {
+    type: 'log',
+    message: `Starting engine (${engine.mode}): ${engine.exe}`,
+  });
 
-  // Merge .env values into child env so Python can read LAPLACE_USE_REMOTE etc.
+  // Sanity check in packaged mode: the .exe must exist on disk.
+  if (engine.mode === 'packaged' && !fs.existsSync(engine.exe)) {
+    const msg = `Engine binary not found: ${engine.exe}`;
+    console.error('[Main]', msg);
+    sendToRenderer('agent-message', { type: 'error', message: msg });
+    return;
+  }
+
+  // Merge .env values into child env so the engine can read
+  // LAPLACE_USE_REMOTE, LAPLACE_FORCE_DRYRUN, credentials, etc.
   const envFile = loadDotEnv();
   const childEnv = { ...process.env, ...envFile, PYTHONIOENCODING: 'utf-8' };
 
-  pythonProcess = spawn('python', ['-X', 'utf8', agentPath], {
-    cwd: path.join(__dirname, '..', '..'),
+  pythonProcess = spawn(engine.exe, engine.args, {
+    cwd: engine.cwd,
     env: childEnv,
+    windowsHide: true,
   });
 
   pythonProcess.on('error', (err) => {

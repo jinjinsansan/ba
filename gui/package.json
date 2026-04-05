@@ -1,12 +1,13 @@
 {
-  "name": "valhalla-ii",
+  "name": "laplace-gui",
   "version": "0.1.0",
-  "description": "Valhalla II — Automated Trading Bot",
+  "description": "LAPLACE — Baccarat Strategy Client (GUI)",
   "main": "src/main.js",
   "scripts": {
     "start": "electron .",
     "dev": "electron . --dev",
-    "build": "electron-builder"
+    "build": "electron-builder --dir",
+    "build:installer": "electron-builder"
   },
   "author": "",
   "license": "UNLICENSED",
@@ -16,27 +17,34 @@
     "electron-builder": "^25.1.8"
   },
   "build": {
-    "appId": "com.valhalla2.bot",
-    "productName": "Valhalla II",
+    "appId": "ai.laplace.client",
+    "productName": "LAPLACE",
+    "asar": true,
+    "compression": "store",
     "win": {
-      "target": "nsis",
-      "icon": "assets/icon.ico"
+      "target": [
+        {
+          "target": "dir",
+          "arch": ["x64"]
+        }
+      ]
     },
     "directories": {
-      "output": "dist"
+      "output": "dist",
+      "buildResources": "assets"
     },
+    "files": [
+      "src/**/*",
+      "!**/*.map"
+    ],
     "extraResources": [
       {
-        "from": "../marubatsu_bet.py",
-        "to": "agent/"
+        "from": "../builds/exe/laplace_client_unbranded",
+        "to": "engine"
       },
       {
-        "from": "../marubatsu_strategy.py",
-        "to": "agent/"
-      },
-      {
-        "from": "../executor.py",
-        "to": "agent/"
+        "from": "../.env",
+        "to": ".env"
       }
     ]
   }
