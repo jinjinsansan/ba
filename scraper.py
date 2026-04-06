@@ -145,6 +145,15 @@ class BaccaratScraper:
             logger.info("すでにログイン済み")
             return
 
+        # If credentials are empty, fall back to manual login mode:
+        # the user logs in via the visible browser window, and we poll
+        # until we detect the logged-in state.
+        has_credentials = bool(config.STAKE_USERNAME and config.STAKE_PASSWORD)
+        if not has_credentials:
+            logger.info("STAKE_USERNAME/PASSWORD not set -- waiting for manual login")
+            self._wait_for_manual_login(timeout=300)
+            return
+
         # ログインフォームを開く (JSクリック — Playwright click()はStakeボタンでタイムアウトするため)
         logger.info("ログインフォームを開く...")
         try:
@@ -227,6 +236,34 @@ class BaccaratScraper:
             self._save_cookies()
         else:
             logger.warning("ログイン状態が不明（続行を試みます）")
+
+    def _wait_for_manual_login(self, timeout: int = 300):
+        """Poll until user completes login manually in the visible browser."""
+        logger.info(f"Please log in to Stake.com in the browser window (timeout={timeout}s)")
+        try:
+            from agent_api import send_action, send_log
+            send_action("Please log in to Stake.com in the browser window")
+            send_log(f"Waiting up to {timeout}s for manual login...")
+        except Exception:
+            pass
+        interval = 10
+        elapsed = 0
+        while elapsed < timeout:
+            if self._is_logged_in():
+                logger.info("Manual login detected")
+                try:
+                    from agent_api import send_action
+                    send_action("Login detected -- continuing")
+                except Exception:
+                    pass
+                self._save_cookies()
+                return
+            time.sleep(interval)
+            elapsed += interval
+            remaining = timeout - elapsed
+            if remaining > 0 and remaining % 60 < interval:
+                logger.info(f"Still waiting for login... ({remaining}s remaining)")
+        logger.warning(f"Manual login not detected within {timeout}s -- continuing anyway")
 
     def _handle_email_code(self):
         """Email Code（2FA）画面を検出し、Telegram経由でコードを取得して入力"""

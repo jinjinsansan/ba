@@ -56,6 +56,29 @@ try:
 except Exception:
     pass
 
+# ---- Bundled camoufox browser bootstrap --------------------------------
+# When the Engine is packaged via PyInstaller, the build script can include
+# a pre-fetched camoufox browser tree at <exe_dir>/camoufox_cache/.
+# On first launch we copy it into the platform cache dir that
+# camoufox.pkgman.INSTALL_DIR points to, so users never have to run
+# `camoufox fetch` or download 530 MB themselves.
+def _bootstrap_camoufox_cache():
+    try:
+        from camoufox.pkgman import INSTALL_DIR
+        if INSTALL_DIR.exists() and (INSTALL_DIR / "version.json").exists():
+            return  # already installed, nothing to do
+        exe_dir = os.path.dirname(os.path.abspath(sys.executable if getattr(sys, "frozen", False) else __file__))
+        bundled = os.path.join(exe_dir, "camoufox_cache")
+        if not os.path.isdir(bundled):
+            return  # no bundled cache
+        import shutil
+        INSTALL_DIR.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copytree(bundled, str(INSTALL_DIR), dirs_exist_ok=True)
+    except Exception:
+        pass
+
+_bootstrap_camoufox_cache()
+
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 # Load .env early so LAPLACE_USE_REMOTE etc. are available
