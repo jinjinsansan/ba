@@ -526,7 +526,8 @@ body {
 .form-group { margin-bottom: 12px; }
 .form-group label { display: block; font-size: 10px; color: var(--text-dim); margin-bottom: 5px; letter-spacing: 1px; font-weight: 700; }
 .form-group input[type="text"],
-.form-group input[type="number"] { width: 100%; padding: 9px 12px; background: rgba(10,15,25,0.8); border: 1px solid var(--border); border-radius: 8px; color: var(--text); font-size: 13px; outline: none; }
+.form-group input[type="number"],
+.form-group input[type="email"] { width: 100%; padding: 9px 12px; background: rgba(10,15,25,0.8); border: 1px solid var(--border); border-radius: 8px; color: var(--text); font-size: 13px; outline: none; }
 .form-group input:focus { border-color: var(--accent); box-shadow: 0 0 8px rgba(0,229,255,0.15); }
 .form-group input::placeholder { color: var(--text-dim); }
 .checkbox-label { display: flex; align-items: center; gap: 8px; cursor: pointer; font-size: 12px; color: var(--text-muted); }

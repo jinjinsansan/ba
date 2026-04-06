@@ -130,6 +130,7 @@ const DEFAULT_SETTINGS = {
   profit_target: 50,
   loss_cut: 200,
   telegram_chat_id: '',
+  user_email: '',
   dry_run: false,
 };
 
@@ -255,7 +256,7 @@ function initTableFilterControls() {
       require_pb: _toggles['pbTrack'].get(),
     };
     saveTableFilter(f);
-    window.valhalla.getEnv().then(env => syncTableFilterToServer(env.stake_username, f));
+    syncTableFilterToServer(loadSettings().user_email, f);
     addLog(`Table filter saved: primary≥${f.players_primary}p relax=${f.relax_wait_sec}s hands=${f.min_hands}-${f.max_hands} dragon=${f.dragon_limit||'OFF'} P>B=${f.require_pb}`, 'info');
     $('#settingsModal').classList.add('hidden');
   });
@@ -283,6 +284,7 @@ $('#btnSettings').addEventListener('click', () => {
   $('#inputProfitTarget').value = s.profit_target;
   $('#inputLossCut').value = s.loss_cut;
   $('#inputTelegramChat').value = s.telegram_chat_id || '';
+  $('#inputUserEmail').value = s.user_email || '';
   $('#inputDryRun').checked = !!s.dry_run;
   // Load table filter into UI
   applyTableFilterToUI(loadTableFilter());
@@ -300,6 +302,7 @@ $('#btnSaveSettings').addEventListener('click', async () => {
     profit_target: parseFloat($('#inputProfitTarget').value) || 50,
     loss_cut: parseFloat($('#inputLossCut').value) || 200,
     telegram_chat_id: $('#inputTelegramChat').value.trim(),
+    user_email: $('#inputUserEmail').value.trim(),
     dry_run: $('#inputDryRun').checked,
   };
   localStorage.setItem('valhalla_settings', JSON.stringify(settings));
