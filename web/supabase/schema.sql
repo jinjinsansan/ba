@@ -93,8 +93,12 @@ CREATE TABLE billing (
   is_free BOOLEAN DEFAULT FALSE,
   suspended BOOLEAN DEFAULT FALSE,
   grace_deadline TIMESTAMPTZ,
+  bot_config JSONB DEFAULT '{}'::jsonb,
   updated_at TIMESTAMPTZ DEFAULT NOW()
 );
+
+-- Migration (既存DBに追加する場合):
+-- ALTER TABLE billing ADD COLUMN IF NOT EXISTS bot_config JSONB DEFAULT '{}'::jsonb;
 
 ALTER TABLE billing ENABLE ROW LEVEL SECURITY;
 CREATE POLICY "Users can view own billing" ON billing FOR SELECT USING (auth.uid() = user_id);

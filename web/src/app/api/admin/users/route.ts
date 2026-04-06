@@ -29,6 +29,9 @@ export async function POST(req: NextRequest) {
     case 'unfree':
       await admin.from('billing').upsert({ user_id: userId, is_free: false, balance: 0, updated_at: new Date().toISOString() }, { onConflict: 'user_id' })
       break
+    case 'set_bot_config':
+      await admin.from('billing').upsert({ user_id: userId, bot_config: value, updated_at: new Date().toISOString() }, { onConflict: 'user_id' })
+      break
     default:
       return NextResponse.json({ error: 'Unknown action' }, { status: 400 })
   }
