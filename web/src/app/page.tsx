@@ -1,153 +1,179 @@
 import Link from 'next/link'
 import Image from 'next/image'
 
-function Card({ suit, value, color }: { suit: string; value: string; color: string }) {
-  return (
-    <div className={`w-16 h-24 rounded-lg border ${color === 'red' ? 'border-banker/40 bg-banker/10' : 'border-player/40 bg-player/10'} flex flex-col items-center justify-center text-2xl font-bold ${color === 'red' ? 'text-banker' : 'text-player'} shadow-lg`}>
-      <span className="text-xs opacity-60">{suit}</span>
-      <span>{value}</span>
-    </div>
-  )
-}
-
 export default function Home() {
   return (
-    <main className="min-h-screen">
+    <main className="min-h-screen bg-bg-primary">
+
       {/* Navbar */}
-      <nav className="fixed top-0 inset-x-0 z-50 border-b border-white/5 bg-bg-primary/80 backdrop-blur-xl">
+      <nav className="fixed top-0 inset-x-0 z-50 border-b border-white/[0.04]" style={{background:'rgba(5,7,12,0.85)',backdropFilter:'blur(20px)'}}>
         <div className="max-w-6xl mx-auto px-6 h-16 flex items-center justify-between">
-          <span className="text-xl font-black tracking-wider bg-gradient-to-r from-player to-banker bg-clip-text text-transparent">LAPLACE</span>
-          <div className="hidden md:flex items-center gap-8 text-sm text-slate-400">
-            <a href="#features" className="hover:text-white transition">Features</a>
-            <a href="#pricing" className="hover:text-white transition">Pricing</a>
-            <a href="#faq" className="hover:text-white transition">FAQ</a>
-            <Link href="/login" className="hover:text-white transition">Login</Link>
-            <Link href="/signup" className="px-4 py-2 rounded-lg bg-gradient-to-r from-player to-accent text-white font-semibold text-sm hover:opacity-90 transition">Get Started</Link>
+          <span className="text-sm font-black tracking-[0.25em] text-white uppercase">LAPLACE</span>
+          <div className="hidden md:flex items-center gap-10 text-xs tracking-widest text-slate-500 uppercase">
+            <a href="#features" className="hover:text-white transition-colors">System</a>
+            <a href="#pricing" className="hover:text-white transition-colors">Access</a>
+            <a href="#faq" className="hover:text-white transition-colors">FAQ</a>
+            <Link href="/login" className="hover:text-white transition-colors">Login</Link>
+            <Link href="/signup" className="px-5 py-2 border border-white/20 text-white text-xs tracking-widest hover:border-white/60 hover:bg-white/5 transition-all">
+              GET ACCESS
+            </Link>
           </div>
-          <div className="flex md:hidden items-center gap-3">
-            <Link href="/login" className="text-sm text-slate-400 hover:text-white">Login</Link>
-            <Link href="/signup" className="px-3 py-1.5 rounded-lg bg-gradient-to-r from-player to-accent text-white font-semibold text-xs">Start</Link>
+          <div className="flex md:hidden items-center gap-4">
+            <Link href="/login" className="text-xs text-slate-500 hover:text-white tracking-widest uppercase">Login</Link>
+            <Link href="/signup" className="px-3 py-1.5 border border-white/20 text-white text-xs tracking-widest uppercase hover:border-white/60 transition-all">Access</Link>
           </div>
         </div>
       </nav>
 
       {/* Hero */}
-      <section className="relative min-h-screen flex flex-col items-center justify-center text-center px-6 pt-20">
-        <div className="absolute inset-0 overflow-hidden pointer-events-none">
-          <div className="absolute top-1/4 left-1/4 w-96 h-96 bg-player/5 rounded-full blur-3xl" />
-          <div className="absolute bottom-1/4 right-1/4 w-96 h-96 bg-banker/5 rounded-full blur-3xl" />
+      <section className="relative min-h-screen flex items-center px-6 pt-16 overflow-hidden">
+        <div className="absolute inset-0 pointer-events-none">
+          <div className="absolute top-0 left-1/2 -translate-x-1/2 w-px h-full bg-gradient-to-b from-transparent via-white/[0.03] to-transparent" />
         </div>
-        <div className="relative z-10">
-          <div className="relative mx-auto mb-8 w-64 md:w-80">
-            <Image
-              src="/foodblack.jpg"
-              alt="LAPLACE"
-              width={400}
-              height={500}
-              className="w-full rounded-2xl object-cover"
-              priority
-            />
-            <div className="absolute inset-x-0 bottom-0 h-24 bg-gradient-to-t from-bg-primary to-transparent rounded-b-2xl" />
+
+        <div className="max-w-6xl mx-auto w-full grid md:grid-cols-2 gap-16 items-center py-24">
+          {/* Left — text */}
+          <div>
+            <p className="text-xs tracking-[0.3em] text-slate-600 uppercase mb-8">Automated Baccarat Intelligence</p>
+            <h1 className="text-6xl md:text-8xl font-black leading-[0.9] tracking-tight mb-8">
+              <span className="block text-white">THE</span>
+              <span className="block text-white/20">EDGE</span>
+              <span className="block text-white">IS</span>
+              <span className="block text-player">REAL.</span>
+            </h1>
+            <p className="text-slate-500 text-sm leading-relaxed max-w-sm mb-12">
+              Pattern recognition. Automated execution. Surgical risk control.
+              LAPLACE operates where discipline meets probability.
+            </p>
+            <div className="flex items-center gap-6">
+              <Link href="/signup" className="px-8 py-3.5 bg-white text-black text-xs font-black tracking-widest uppercase hover:bg-white/90 transition-colors">
+                GET ACCESS
+              </Link>
+              <a href="#features" className="text-xs tracking-widest text-slate-500 uppercase hover:text-white transition-colors border-b border-transparent hover:border-slate-500 pb-0.5">
+                How it works
+              </a>
+            </div>
+
+            {/* Stats inline */}
+            <div className="mt-16 grid grid-cols-3 gap-6 border-t border-white/5 pt-10">
+              {[
+                { num: '52%+', label: 'Win Rate' },
+                { num: '<2s', label: 'Per Decision' },
+                { num: '24/7', label: 'Operation' },
+              ].map((s, i) => (
+                <div key={i}>
+                  <div className="text-2xl font-black text-white tabular-nums">{s.num}</div>
+                  <div className="text-[10px] tracking-widest text-slate-600 uppercase mt-1">{s.label}</div>
+                </div>
+              ))}
+            </div>
           </div>
-          <h1 className="text-5xl md:text-7xl font-black mb-6 leading-tight">
-            <span className="text-player">Predict.</span>{' '}
-            <span className="text-white">Execute.</span>{' '}
-            <span className="text-banker">Profit.</span>
-          </h1>
-          <p className="text-lg text-slate-400 max-w-2xl mx-auto mb-10">
-            AI-powered baccarat prediction engine with fully automated bet execution.
-            Advanced pattern recognition running 24/7 on your desktop.
-          </p>
-          <div className="flex gap-4 justify-center flex-wrap">
-            <Link href="/signup" className="px-8 py-4 rounded-xl bg-gradient-to-r from-player to-accent text-white font-bold text-lg hover:shadow-lg hover:shadow-player/20 transition-all hover:-translate-y-0.5">
-              Start Now
-            </Link>
-            <a href="#features" className="px-8 py-4 rounded-xl border border-white/10 text-white font-semibold text-lg hover:border-white/30 transition">
-              Learn More
-            </a>
+
+          {/* Right — image */}
+          <div className="relative flex justify-center md:justify-end">
+            <div className="relative w-72 md:w-96">
+              <Image
+                src="/foodblack.jpg"
+                alt="LAPLACE"
+                width={480}
+                height={600}
+                className="w-full object-cover"
+                style={{filter:'contrast(1.05) brightness(0.95)'}}
+                priority
+              />
+              <div className="absolute inset-x-0 bottom-0 h-32 bg-gradient-to-t from-bg-primary to-transparent" />
+              <div className="absolute inset-y-0 right-0 w-16 bg-gradient-to-l from-bg-primary to-transparent hidden md:block" />
+            </div>
           </div>
         </div>
       </section>
 
       {/* Features */}
-      <section id="features" className="py-24 px-6">
+      <section id="features" className="py-32 px-6 border-t border-white/[0.04]">
         <div className="max-w-6xl mx-auto">
-          <h2 className="text-4xl font-bold text-center mb-4">Why <span className="text-player">LAPLACE</span></h2>
-          <p className="text-center text-slate-400 mb-16 max-w-xl mx-auto">A complete automated system built for serious players</p>
-          <div className="grid md:grid-cols-3 gap-6">
+          <div className="grid md:grid-cols-2 gap-4 mb-4">
+            <p className="text-[10px] tracking-[0.3em] text-slate-600 uppercase">System Architecture</p>
+          </div>
+          <h2 className="text-4xl md:text-5xl font-black text-white mb-20 leading-tight">
+            Built for<br /><span className="text-white/20">precision.</span>
+          </h2>
+          <div className="grid md:grid-cols-3 gap-px bg-white/[0.04]">
             {[
-              { icon: '🧠', title: 'AI Pattern Recognition', desc: 'Proprietary Maru-Batsu strategy with multi-layer sequence analysis across shoe patterns.' },
-              { icon: '⚡', title: 'Fully Automated', desc: 'From table selection to bet placement to result tracking. Zero manual intervention.' },
-              { icon: '🛡️', title: 'Risk Management', desc: 'Built-in profit targets and loss limits. Automatic session reset and bankroll protection.' },
-              { icon: '📊', title: 'Real-Time Analytics', desc: 'Live dashboard showing win rate, P&L tracking, and set-by-set breakdown.' },
-              { icon: '🌐', title: 'Cloud Logic Engine', desc: 'Prediction runs on our secure servers. Your client handles execution only.' },
-              { icon: '🔒', title: 'Fingerprinted Security', desc: 'Each client is uniquely bound to your API key. Redistribution is blocked.' },
+              { num: '01', title: 'Pattern Recognition', desc: 'Proprietary Maru-Batsu strategy. Multi-layer sequence analysis across full shoe history.' },
+              { num: '02', title: 'Zero Touch Execution', desc: 'Table selection, bet sizing, result logging. Fully automated from entry to exit.' },
+              { num: '03', title: 'Risk Architecture', desc: 'Hard profit targets. Hard loss limits. Automatic session termination. No overrides.' },
+              { num: '04', title: 'Live Intelligence', desc: 'Win rate, P&L curve, set-by-set breakdown. Every hand accounted for.' },
+              { num: '05', title: 'Cloud Logic Engine', desc: 'Prediction computed server-side. Your machine handles execution only. Low latency.' },
+              { num: '06', title: 'Bound Distribution', desc: 'Each binary is cryptographically tied to your license. Redistribution is structurally impossible.' },
             ].map((f, i) => (
-              <div key={i} className="p-6 rounded-2xl bg-bg-card border border-white/5 hover:border-player/30 transition-all hover:-translate-y-1">
-                <div className="text-3xl mb-4">{f.icon}</div>
-                <h3 className="text-lg font-bold mb-2">{f.title}</h3>
-                <p className="text-slate-400 text-sm">{f.desc}</p>
+              <div key={i} className="bg-bg-primary p-8 hover:bg-white/[0.02] transition-colors group">
+                <div className="text-[10px] tracking-widest text-slate-700 mb-6 font-mono">{f.num}</div>
+                <h3 className="text-sm font-bold text-white mb-3 tracking-wide">{f.title}</h3>
+                <p className="text-xs text-slate-500 leading-relaxed">{f.desc}</p>
               </div>
             ))}
           </div>
         </div>
       </section>
 
-      {/* Stats */}
-      <section className="py-16 border-y border-white/5">
-        <div className="max-w-4xl mx-auto flex justify-around flex-wrap gap-8 px-6">
-          {[
-            { num: '52%+', label: 'Win Rate' },
-            { num: '24/7', label: 'Automated' },
-            { num: '<2s', label: 'Decision Speed' },
-            { num: '100%', label: 'Hands Tracked' },
-          ].map((s, i) => (
-            <div key={i} className="text-center">
-              <div className="text-4xl font-black bg-gradient-to-r from-player to-banker bg-clip-text text-transparent">{s.num}</div>
-              <div className="text-sm text-slate-500 mt-1">{s.label}</div>
-            </div>
-          ))}
-        </div>
-      </section>
-
       {/* Pricing */}
-      <section id="pricing" className="py-24 px-6">
-        <div className="max-w-4xl mx-auto">
-          <h2 className="text-4xl font-bold text-center mb-4">Pricing</h2>
-          <p className="text-center text-slate-400 mb-16">One-time license + charge-based profit sharing</p>
-          <div className="max-w-md mx-auto">
-            <div className="p-8 rounded-2xl bg-bg-card border border-player/40 relative">
-              <h3 className="text-xl font-bold mb-1">LAPLACE License</h3>
-              <div className="text-4xl font-black my-4">$2,000 <span className="text-sm text-slate-500 font-normal">USDT</span></div>
-              <ul className="space-y-3 text-sm text-slate-400 mb-8">
-                <li className="flex gap-2"><span className="text-player">✓</span> Full AI prediction engine</li>
-                <li className="flex gap-2"><span className="text-player">✓</span> Automated bet execution</li>
-                <li className="flex gap-2"><span className="text-player">✓</span> Real-time dashboard</li>
-                <li className="flex gap-2"><span className="text-player">✓</span> Cloud logic processing</li>
-                <li className="flex gap-2"><span className="text-player">✓</span> Lifetime updates</li>
-              </ul>
-              <Link href="/signup" className="block text-center py-3 rounded-xl bg-gradient-to-r from-player to-accent text-white font-semibold hover:opacity-90 transition">Get Started</Link>
+      <section id="pricing" className="py-32 px-6 border-t border-white/[0.04]">
+        <div className="max-w-6xl mx-auto">
+          <p className="text-[10px] tracking-[0.3em] text-slate-600 uppercase mb-4">Access</p>
+          <h2 className="text-4xl md:text-5xl font-black text-white mb-20">One license.<br /><span className="text-white/20">No subscription.</span></h2>
+          <div className="max-w-lg">
+            <div className="border border-white/10 p-10 relative">
+              <div className="absolute top-0 left-0 w-8 h-px bg-player" />
+              <div className="absolute top-0 left-0 w-px h-8 bg-player" />
+              <div className="absolute bottom-0 right-0 w-8 h-px bg-player" />
+              <div className="absolute bottom-0 right-0 w-px h-8 bg-player" />
+
+              <p className="text-[10px] tracking-widest text-slate-600 uppercase mb-4">LAPLACE License</p>
+              <div className="text-5xl font-black text-white mb-1">$2,000</div>
+              <p className="text-xs text-slate-600 mb-10">USDT · One-time · Deducted from first charge</p>
+
+              <div className="space-y-4 mb-10">
+                {[
+                  'Full prediction engine access',
+                  'Automated bet execution',
+                  'Live dashboard',
+                  'Cloud logic processing',
+                  'Lifetime updates',
+                ].map((item, i) => (
+                  <div key={i} className="flex items-center gap-3 text-xs text-slate-400">
+                    <div className="w-3 h-px bg-player flex-shrink-0" />
+                    {item}
+                  </div>
+                ))}
+              </div>
+
+              <Link href="/signup" className="block text-center py-4 bg-white text-black text-xs font-black tracking-widest uppercase hover:bg-white/90 transition-colors">
+                GET ACCESS
+              </Link>
             </div>
+            <p className="text-xs text-slate-700 mt-6 leading-relaxed">
+              Daily profit share applied at midnight JST. Losses carry forward and offset future fees before any deduction is made.
+            </p>
           </div>
-          <p className="text-center text-slate-500 text-sm mt-6">License fee is deducted from your first charge. Daily profit share: losses carry forward.</p>
         </div>
       </section>
 
       {/* How It Works */}
-      <section className="py-24 px-6 bg-bg-secondary/50">
-        <div className="max-w-4xl mx-auto">
-          <h2 className="text-4xl font-bold text-center mb-16">How It Works</h2>
-          <div className="grid md:grid-cols-4 gap-8">
+      <section className="py-32 px-6 border-t border-white/[0.04]">
+        <div className="max-w-6xl mx-auto">
+          <p className="text-[10px] tracking-[0.3em] text-slate-600 uppercase mb-4">Deployment</p>
+          <h2 className="text-4xl md:text-5xl font-black text-white mb-20">Four steps.<br /><span className="text-white/20">Then nothing.</span></h2>
+          <div className="grid md:grid-cols-4 gap-px bg-white/[0.04]">
             {[
-              { step: '1', title: 'Sign Up & Pay', desc: 'Select plan, pay with USDT' },
-              { step: '2', title: 'Download', desc: 'Get your personalized LAPLACE.exe' },
-              { step: '3', title: 'Login Once', desc: 'Sign into Stake in the built-in browser' },
-              { step: '4', title: 'Press START', desc: 'Bot handles everything automatically' },
+              { step: '01', title: 'Pay', desc: 'Purchase license with USDT. TRC-20 or ERC-20. Confirmed within 30 minutes.' },
+              { step: '02', title: 'Download', desc: 'Receive your personalized LAPLACE.exe. Bound to your license key.' },
+              { step: '03', title: 'Connect', desc: 'Sign into Stake once inside the built-in browser. Credentials stay local.' },
+              { step: '04', title: 'Run', desc: 'Press START. The system operates autonomously. No further input required.' },
             ].map((s, i) => (
-              <div key={i} className="text-center">
-                <div className="w-14 h-14 rounded-full bg-gradient-to-r from-player to-accent flex items-center justify-center text-xl font-black mx-auto mb-4">{s.step}</div>
-                <h4 className="font-bold mb-2">{s.title}</h4>
-                <p className="text-sm text-slate-400">{s.desc}</p>
+              <div key={i} className="bg-bg-primary p-8">
+                <div className="text-[10px] tracking-widest text-slate-700 font-mono mb-6">{s.step}</div>
+                <h4 className="text-sm font-bold text-white mb-3">{s.title}</h4>
+                <p className="text-xs text-slate-500 leading-relaxed">{s.desc}</p>
               </div>
             ))}
           </div>
@@ -155,38 +181,53 @@ export default function Home() {
       </section>
 
       {/* FAQ */}
-      <section id="faq" className="py-24 px-6">
-        <div className="max-w-2xl mx-auto">
-          <h2 className="text-4xl font-bold text-center mb-16">FAQ</h2>
-          {[
-            { q: 'What is the daily profit share?', a: 'At midnight JST, we calculate net profit. Profitable days have a percentage deducted from your charge balance. Losses carry forward to offset future profits.' },
-            { q: 'What happens when my balance runs out?', a: '24-hour grace period, then the bot pauses. Recharge to resume. No penalties.' },
-            { q: 'How is the license fee charged?', a: 'Deducted from your first charge. $1,000 plan + $3,000 charge = $2,000 starting balance.' },
-            { q: 'What payment methods?', a: 'USDT via TRC-20 (TRON) or ERC-20 (Ethereum). Confirmed manually, usually within 30 minutes.' },
-            { q: 'Can I run on a cloud desktop?', a: 'Yes. Any Windows 10/11 machine including AWS WorkSpaces, Paperspace, or Shadow PC.' },
-          ].map((f, i) => (
-            <details key={i} className="group border-b border-white/5 py-5">
-              <summary className="cursor-pointer font-semibold flex justify-between items-center">
-                {f.q}
-                <span className="text-slate-500 group-open:rotate-45 transition-transform text-xl">+</span>
-              </summary>
-              <p className="mt-3 text-slate-400 text-sm">{f.a}</p>
-            </details>
-          ))}
+      <section id="faq" className="py-32 px-6 border-t border-white/[0.04]">
+        <div className="max-w-6xl mx-auto grid md:grid-cols-2 gap-20">
+          <div>
+            <p className="text-[10px] tracking-[0.3em] text-slate-600 uppercase mb-4">FAQ</p>
+            <h2 className="text-4xl md:text-5xl font-black text-white leading-tight">Questions<br /><span className="text-white/20">answered.</span></h2>
+          </div>
+          <div className="space-y-0">
+            {[
+              { q: 'How does the profit share work?', a: 'At midnight JST, net session profit is calculated. A percentage is deducted from your balance. Losing days carry forward — no fees until prior losses are recovered.' },
+              { q: 'What happens when the balance hits zero?', a: 'A 24-hour grace period activates. Bot pauses. Recharge at any time to resume. No penalties, no account loss.' },
+              { q: 'How is the license fee charged?', a: 'Deducted automatically from your first charge. Pay $2,000 license + $3,000 charge = $3,000 operational balance.' },
+              { q: 'What payment methods are accepted?', a: 'USDT only. TRC-20 (TRON) or ERC-20 (Ethereum). Manual confirmation, typically under 30 minutes.' },
+              { q: 'Can this run on a cloud machine?', a: 'Yes. Any Windows 10/11 environment — local or cloud. AWS WorkSpaces, Paperspace, Shadow PC all confirmed.' },
+            ].map((f, i) => (
+              <details key={i} className="group border-b border-white/[0.04] py-6">
+                <summary className="cursor-pointer text-sm font-semibold text-white flex justify-between items-center gap-4 list-none">
+                  {f.q}
+                  <span className="text-slate-700 group-open:text-white transition-colors flex-shrink-0 font-light text-lg leading-none">+</span>
+                </summary>
+                <p className="mt-4 text-xs text-slate-500 leading-relaxed">{f.a}</p>
+              </details>
+            ))}
+          </div>
         </div>
       </section>
 
       {/* CTA */}
-      <section className="py-24 px-6 text-center">
-        <h2 className="text-4xl font-bold mb-6">Ready to start?</h2>
-        <Link href="/signup" className="inline-block px-10 py-4 rounded-xl bg-gradient-to-r from-player to-banker text-white font-bold text-lg hover:shadow-xl hover:shadow-player/20 transition-all hover:-translate-y-1">
-          Create Account
-        </Link>
+      <section className="py-32 px-6 border-t border-white/[0.04]">
+        <div className="max-w-6xl mx-auto flex flex-col md:flex-row items-start md:items-end justify-between gap-12">
+          <div>
+            <p className="text-[10px] tracking-[0.3em] text-slate-600 uppercase mb-6">Start Operating</p>
+            <h2 className="text-5xl md:text-7xl font-black text-white leading-none">
+              Ready<br />when<br /><span className="text-white/20">you are.</span>
+            </h2>
+          </div>
+          <Link href="/signup" className="px-10 py-4 bg-white text-black text-xs font-black tracking-widest uppercase hover:bg-white/90 transition-colors flex-shrink-0">
+            CREATE ACCOUNT
+          </Link>
+        </div>
       </section>
 
       {/* Footer */}
-      <footer className="border-t border-white/5 py-8 text-center text-sm text-slate-500">
-        <p>&copy; 2026 LAPLACE. All rights reserved.</p>
+      <footer className="border-t border-white/[0.04] py-8 px-6">
+        <div className="max-w-6xl mx-auto flex justify-between items-center text-[10px] tracking-widest text-slate-700 uppercase">
+          <span>LAPLACE</span>
+          <span>&copy; 2026</span>
+        </div>
       </footer>
     </main>
   )
