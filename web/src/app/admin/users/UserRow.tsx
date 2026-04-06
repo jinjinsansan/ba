@@ -16,7 +16,7 @@ export default function UserRow({ user, billing }: { user: any; billing: any }) 
   const [rate, setRate] = useState(billing?.profit_share_rate ? (billing.profit_share_rate * 100).toString() : '20')
   const [loading, setLoading] = useState(false)
   const [showConfig, setShowConfig] = useState(false)
-  const [cfg, setCfg] = useState<any>({ ...DEFAULT_BOT_CONFIG, ...(billing?.bot_config || {}) })
+  const cfg = { ...DEFAULT_BOT_CONFIG, ...(billing?.bot_config || {}) }
   const router = useRouter()
 
   async function updateUser(action: string, value?: any) {
@@ -100,54 +100,16 @@ export default function UserRow({ user, billing }: { user: any; billing: any }) 
 
       {showConfig && (
         <tr className="border-b border-white/5 bg-white/[0.02]">
-          <td colSpan={7} className="py-4 px-4">
-            <div className="text-xs text-slate-400 mb-3 font-semibold tracking-widest">BOT TABLE FILTER CONFIG</div>
-            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
-              {[
-                { key: 'players_primary', label: 'PRIMARY PLAYERS', min: 1, max: 50 },
-                { key: 'relax_wait_sec',  label: 'RELAX (SEC)',      min: 10, max: 300 },
-                { key: 'min_hands',       label: 'MIN HANDS',        min: 5,  max: 40 },
-                { key: 'max_hands',       label: 'MAX HANDS',        min: 20, max: 80 },
-                { key: 'dragon_limit',    label: 'DRAGON LIMIT',     min: 0,  max: 10 },
-              ].map(({ key, label, min, max }) => (
-                <div key={key}>
-                  <div className="text-slate-500 text-[10px] mb-1 tracking-wider">{label}</div>
-                  <input
-                    type="number" min={min} max={max} value={cfg[key] ?? DEFAULT_BOT_CONFIG[key as keyof typeof DEFAULT_BOT_CONFIG]}
-                    onChange={e => setCfg((p: any) => ({ ...p, [key]: parseInt(e.target.value) }))}
-                    className="w-full px-2 py-1 rounded bg-bg-primary border border-white/10 text-white text-sm"
-                  />
-                </div>
-              ))}
-
-              <div>
-                <div className="text-slate-500 text-[10px] mb-1 tracking-wider">P {'>'} B REQUIRED</div>
-                <button
-                  onClick={() => setCfg((p: any) => ({ ...p, require_pb: !p.require_pb }))}
-                  className={`px-3 py-1 rounded text-xs font-bold transition ${cfg.require_pb ? 'bg-player/20 text-player' : 'bg-white/5 text-slate-500'}`}
-                >
-                  {cfg.require_pb ? 'ON' : 'OFF'}
-                </button>
-              </div>
-            </div>
-
-            <div className="mt-4 flex gap-2">
-              <button
-                onClick={async () => {
-                  await updateUser('set_bot_config', cfg)
-                  setShowConfig(false)
-                }}
-                disabled={loading}
-                className="px-3 py-1.5 rounded text-xs bg-player/20 text-player hover:bg-player/30 transition disabled:opacity-50"
-              >
-                保存
-              </button>
-              <button
-                onClick={() => setCfg({ ...DEFAULT_BOT_CONFIG })}
-                className="px-3 py-1.5 rounded text-xs bg-white/5 text-slate-400 hover:text-white transition"
-              >
-                デフォルトに戻す
-              </button>
+          <td colSpan={7} className="py-3 px-4">
+            <div className="text-[10px] text-slate-500 mb-2 tracking-widest">TABLE FILTER</div>
+            <div className="flex flex-wrap gap-2 text-xs">
+              <span className="px-2 py-0.5 rounded bg-white/5 text-slate-300">PRIMARY ≥ <b>{cfg.players_primary}</b>人</span>
+              <span className="px-2 py-0.5 rounded bg-white/5 text-slate-300">RELAX <b>{cfg.relax_wait_sec}</b>秒</span>
+              <span className="px-2 py-0.5 rounded bg-white/5 text-slate-300">HANDS <b>{cfg.min_hands}〜{cfg.max_hands}</b></span>
+              <span className="px-2 py-0.5 rounded bg-white/5 text-slate-300">DRAGON ≥ <b>{cfg.dragon_limit === 0 ? 'OFF' : cfg.dragon_limit}</b></span>
+              <span className={`px-2 py-0.5 rounded text-xs font-bold ${cfg.require_pb ? 'bg-player/20 text-player' : 'bg-white/5 text-slate-500'}`}>
+                P{'>'} B: {cfg.require_pb ? 'ON' : 'OFF'}
+              </span>
             </div>
           </td>
         </tr>
