@@ -380,7 +380,7 @@ class RemoteLaplaceSession:
             return {"action": "exit"}
 
         if not self.executor.check_and_dismiss_error():
-            logger.warning("エラーダイアログ検出 → セッション中断")
+            logger.warning("エラーダイアログ検出 → セッション中断 [exit reason: error_dialog]")
             return {"action": "exit"}
 
         is_first = (self.total_bets == 0 and len(self.tracker.current_turns) == 0)
@@ -388,8 +388,9 @@ class RemoteLaplaceSession:
             timeout=180 if is_first else 120, skip_round=is_first
         ):
             if not self.executor.check_and_dismiss_error():
+                logger.warning("エラーダイアログ検出(bet phase後) → セッション中断 [exit reason: error_dialog_after_wait]")
                 return {"action": "exit"}
-            logger.warning("BETフェーズ待ちタイムアウト")
+            logger.warning("BETフェーズ待ちタイムアウト [exit reason: bet_phase_timeout]")
             return {"action": "exit"}
 
         # Ask the server for the next BET parameters (always player side)

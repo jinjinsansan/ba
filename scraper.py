@@ -136,13 +136,29 @@ class BaccaratScraper:
         """Stake.comにログイン"""
         logger.info("Stakeにアクセス中...")
         self.page.goto(config.STAKE_URL, wait_until="domcontentloaded", timeout=60000)
-        time.sleep(5)
+        # Stake is a SPA — wait for the page to fully render before
+        # checking login status.  The domcontentloaded event fires long
+        # before React hydrates, so we poll for known UI elements.
+        for _wait in range(20):  # up to ~20s
+            time.sleep(1)
+            try:
+                has_ui = self.page.evaluate("""() => {
+                    return !!(document.querySelector('[data-testid="login-link"]')
+                           || document.querySelector('[data-testid="balance"]')
+                           || document.querySelector('[class*="wallet"]')
+                           || (document.body.innerText && /wallet/i.test(document.body.innerText)));
+                }""")
+                if has_ui:
+                    break
+            except Exception:
+                pass
 
         self.page.screenshot(path=str(config.SCREENSHOTS_DIR / "after_goto.png"))
         logger.info(f"ページタイトル: {self.page.title()}")
 
         if self._is_logged_in():
             logger.info("すでにログイン済み")
+            self._save_cookies()
             return
 
         # If credentials are empty, fall back to manual login mode:
