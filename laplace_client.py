@@ -446,6 +446,12 @@ class RemoteLaplaceSession:
         if not self.executor.place_bet(side, bet_amount):
             return self._exit("place_bet failed")
 
+        # 部分BETが発生した可能性 → 実際にテーブルに置かれた額で上書き
+        actual_total = self.executor._get_total_bet()
+        if actual_total > 0 and abs(actual_total - bet_amount) > 0.5:
+            logger.warning(f"部分BET検出: 計画${bet_amount:.0f} → 実際${actual_total:.2f}")
+            bet_amount = actual_total
+
         # wait for result
         result_info = self.executor.wait_for_result(timeout=90, bet_amount=bet_amount)
         if not result_info or not result_info.get("result"):

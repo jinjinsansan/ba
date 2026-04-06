@@ -251,12 +251,14 @@ class BetExecutor:
     # ─── BET実行 ───
 
     def place_bet(self, side: str, amount: float) -> bool:
-        """チップ選択 → BETスポットクリック → WS受理確認
+        """チップ選択 → BETスポットクリック → 受理確認
 
-        複数チップ額を組み合わせてクリック数を最小化。
-        例: $13 → $5×2 + $2 + $1 = 4クリック (従来は13クリック)
+        - $500チップ対応で大額BETのクリック数を最小化
+        - locatorはチップ額ごとに1回のみ取得 (失敗時のみ再取得)
+        - 11秒タイムリミット: 超過前に部分BETを検出して続行
+        - 部分BETが置かれていれば失敗扱いにせずTrueを返す
 
-        Returns: True=BET受理, False=失敗
+        Returns: True=BET受理(全額または部分), False=未BET
         """
         if self.demo_mode:
             logger.info(f"[DEMO] ${amount:.0f} {side.upper()} BET")
@@ -272,14 +274,33 @@ class BetExecutor:
         total_clicks = sum(count for _, count in chip_plan)
         logger.info(f"チップ計画: {chip_plan} ({total_clicks}クリック)")
 
+        _bet_start = time.time()
+        _time_limit = 11.0  # BETウィンドウ残り約2秒でアボート
+
         for chip_value, count in chip_plan:
             evo = self._get_evo_locator()
             if not self._select_chip(evo, chip_value):
+                total = self._get_total_bet()
+                if total > 0:
+                    logger.warning(f"チップ選択失敗だが${total:.2f}が置かれている — 部分BETで続行")
+                    return True
                 return False
 
+            # locatorはチップ額切り替え時に1回だけ取得
+            evo = self._get_evo_locator()
+            bet_loc = evo.locator(f'[data-betspot-destination="{dest}"]').first
+
             for click_i in range(count):
-                evo = self._get_evo_locator()
-                bet_loc = evo.locator(f'[data-betspot-destination="{dest}"]').first
+                # タイムリミットチェック
+                elapsed = time.time() - _bet_start
+                if elapsed > _time_limit:
+                    total = self._get_total_bet()
+                    if total > 0:
+                        logger.warning(f"BETタイムリミット({elapsed:.1f}s) — 部分BET ${total:.2f} で続行")
+                        return True
+                    logger.error(f"BETタイムリミット({elapsed:.1f}s) — 未BET")
+                    return False
+
                 clicked = False
                 for attempt in range(5):
                     try:
@@ -295,11 +316,19 @@ class BetExecutor:
                         clicked = True
                         break
                     except Exception:
+                        # 失敗時のみlocatorを再取得
+                        evo = self._get_evo_locator()
+                        bet_loc = evo.locator(f'[data-betspot-destination="{dest}"]').first
                         time.sleep(0.3)
+
                 if not clicked:
+                    total = self._get_total_bet()
+                    if total > 0:
+                        logger.warning(f"クリック失敗だが${total:.2f}が置かれている — 部分BETで続行")
+                        return True
                     logger.error(f"BETスポットクリック失敗 (chip=${chip_value} {click_i+1}/{count})")
                     return False
-                time.sleep(0.25)
+                time.sleep(0.15)
 
         for _ in range(10):
             total = self._get_total_bet()
@@ -308,19 +337,26 @@ class BetExecutor:
                 return True
             time.sleep(0.5)
 
+        # 最終確認 — 部分BETでも受理とみなす
+        total = self._get_total_bet()
+        if total > 0:
+            logger.warning(f"BET確認タイムアウトだが${total:.2f}が存在 — 部分BETとして受理")
+            return True
+
         logger.error("BET受理確認タイムアウト")
         return False
 
     @staticmethod
     def _calc_chip_plan(amount: int) -> list[tuple[int, int]]:
         """金額を最少クリック数のチップ組み合わせに分解。
-        利用可能チップ: $100, $25, $5, $2, $1
-        例: 250 → [(100,2),(25,2)] = 4クリック
-            13 → [(5,2),(2,1),(1,1)] = 4クリック
+        利用可能チップ: $500, $100, $25, $5, $2, $1
+        例: 2500 → [(500,5)] = 5クリック (旧: $100×25 = 25クリック)
+             250 → [(100,2),(25,2)] = 4クリック
+              13 → [(5,2),(2,1),(1,1)] = 4クリック
         """
         plan = []
         remaining = amount
-        for chip in [100, 25, 5, 2, 1]:
+        for chip in [500, 100, 25, 5, 2, 1]:
             if remaining >= chip:
                 n = remaining // chip
                 plan.append((chip, n))
@@ -430,7 +466,13 @@ class BetExecutor:
 
         # Step 3: 結果判定
         time.sleep(0.3)
-        new_balance = self._get_balance_dom()
+        # 残高取得に失敗(0.0)した場合は最大3回リトライ
+        new_balance = 0.0
+        for _bi in range(3):
+            new_balance = self._get_balance_dom()
+            if new_balance > 0:
+                break
+            time.sleep(0.5)
 
         if bet_amount > 0 and pre_balance > 0 and new_balance > 0:
             # BETした場合: 残高変化で勝敗判定

@@ -10,7 +10,7 @@ distribution には含めてはいけません (.dist_excludes 参照)。
 条件:
   ① 除外テーブル: Always9, Lightning, XXXtreme, Golden Wealth, Prosperity, Peek,
                     No Commission, Salon Prive, Elite VIP, Stake Exclusive(0.1$)
-  ② 参加者数: 50人優先 → 30人緩和 → 30人未満は打たない
+  ② 参加者数: 10人優先 → 60秒待機後1人まで緩和 → 1人未満は打たない
   ③ バンカー5連続(ドラゴン)回避: 直近5ハンドがバンカー連続なら入らない
   ⑥ ゲーム進行度: 20~40ハンド進行中かつプレイヤー数 > バンカー数
 
@@ -54,6 +54,8 @@ EXCLUDE_TITLE_KEYWORDS = [
 REQUIRED_MIN_BET = 1
 
 # 参加者数しきい値
+# PRIMARY: 優先候補 (10人以上)
+# RELAXED: 60秒待機後の緩和候補 (1人以上)
 PLAYERS_PRIMARY = 10
 PLAYERS_RELAXED = 1
 

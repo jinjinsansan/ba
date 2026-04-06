@@ -243,6 +243,12 @@ class MaruBatsuBetSession:
             logger.error("BET失敗")
             return {"action": "exit"}
 
+        # 部分BETが発生した可能性 → 実際にテーブルに置かれた額で上書き
+        actual_total = self.executor._get_total_bet()
+        if actual_total > 0 and abs(actual_total - bet_amount) > 0.5:
+            logger.warning(f"部分BET検出: 計画${bet_amount:.0f} → 実際${actual_total:.2f}")
+            bet_amount = actual_total
+
         self.total_bets += 1
 
         # 結果待ち
