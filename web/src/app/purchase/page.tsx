@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { Suspense, useState } from 'react'
 import { useSearchParams, useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase-browser'
 
@@ -9,7 +9,7 @@ const PLANS = {
   pro: { name: 'Professional', price: 3000 },
 }
 
-export default function PurchasePage() {
+function PurchaseForm() {
   const searchParams = useSearchParams()
   const router = useRouter()
   const [plan, setPlan] = useState<'starter' | 'pro'>((searchParams.get('plan') as 'starter' | 'pro') || 'starter')
@@ -105,7 +105,6 @@ export default function PurchasePage() {
         <h1 className="text-3xl font-black text-center mb-2">Purchase License</h1>
         <p className="text-center text-slate-400 mb-12">Select your plan and payment method</p>
 
-        {/* Plan Selection */}
         <div className="grid grid-cols-2 gap-4 mb-8">
           {(Object.entries(PLANS) as [string, { name: string; price: number }][]).map(([key, p]) => (
             <button
@@ -119,7 +118,6 @@ export default function PurchasePage() {
           ))}
         </div>
 
-        {/* Network */}
         <div className="mb-8">
           <label className="block text-sm text-slate-400 mb-2">USDT Network</label>
           <div className="grid grid-cols-2 gap-4">
@@ -135,7 +133,6 @@ export default function PurchasePage() {
           </div>
         </div>
 
-        {/* Promo Code */}
         <div className="mb-8">
           <label className="block text-sm text-slate-400 mb-2">Promo Code <span className="text-slate-600">(optional)</span></label>
           <div className="flex gap-3">
@@ -155,7 +152,6 @@ export default function PurchasePage() {
           )}
         </div>
 
-        {/* Summary */}
         <div className="p-6 rounded-xl bg-bg-card border border-white/10 mb-8">
           <div className="flex justify-between items-center mb-2">
             <span className="text-slate-400">Plan</span>
@@ -182,5 +178,13 @@ export default function PurchasePage() {
         </button>
       </div>
     </div>
+  )
+}
+
+export default function PurchasePage() {
+  return (
+    <Suspense fallback={<div className="min-h-screen flex items-center justify-center text-slate-400">Loading...</div>}>
+      <PurchaseForm />
+    </Suspense>
   )
 }
