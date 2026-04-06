@@ -2,6 +2,7 @@ import { createClient } from '@/lib/supabase-server'
 import { redirect } from 'next/navigation'
 import Link from 'next/link'
 import DashboardClient from './DashboardClient'
+import SupportForm from './SupportForm'
 
 export default async function DashboardPage() {
   const supabase = await createClient()
@@ -183,6 +184,9 @@ export default async function DashboardPage() {
             </table>
           ) : <p className="text-slate-500 text-sm">No settlements yet.</p>}
         </div>
+
+        {/* Support */}
+        <SupportForm />
       </div>
     </div>
   )

@@ -1,7 +1,10 @@
 import { createClient } from '@/lib/supabase-server'
+import { createAdminClient } from '@/lib/supabase-admin'
 import { redirect } from 'next/navigation'
 import Link from 'next/link'
 import OrderActions from './OrderActions'
+
+export const dynamic = 'force-dynamic'
 
 export default async function AdminOrdersPage() {
   const supabase = await createClient()
@@ -11,14 +14,15 @@ export default async function AdminOrdersPage() {
   const { data: profile } = await supabase.from('profiles').select('is_admin').eq('id', user.id).single()
   if (!profile?.is_admin) redirect('/dashboard')
 
-  const { data: orders } = await supabase
+  const admin = createAdminClient()
+  const { data: orders } = await admin
     .from('orders')
-    .select('*, profiles!inner(email)')
+    .select('*, profiles(email)')
     .order('created_at', { ascending: false })
 
-  const { data: charges } = await supabase
+  const { data: charges } = await admin
     .from('charges')
-    .select('*, profiles!inner(email)')
+    .select('*, profiles(email)')
     .order('created_at', { ascending: false })
 
   return (
@@ -30,12 +34,13 @@ export default async function AdminOrdersPage() {
             <Link href="/admin" className="text-slate-400 hover:text-white">Admin</Link>
             <Link href="/admin/orders" className="text-white font-semibold">Orders</Link>
             <Link href="/admin/users" className="text-slate-400 hover:text-white">Users</Link>
+            <Link href="/admin/promos" className="text-slate-400 hover:text-white">Promos</Link>
+            <Link href="/admin/tickets" className="text-slate-400 hover:text-white">Tickets</Link>
           </div>
         </div>
       </nav>
 
       <div className="max-w-6xl mx-auto px-6 py-10">
-        {/* Package Orders */}
         <h2 className="text-2xl font-bold mb-4">Package Orders</h2>
         <div className="overflow-x-auto mb-12">
           <table className="w-full text-sm">
@@ -43,9 +48,9 @@ export default async function AdminOrdersPage() {
               <th className="pb-3">Email</th><th className="pb-3">Plan</th><th className="pb-3">Amount</th><th className="pb-3">Network</th><th className="pb-3">Promo</th><th className="pb-3">Status</th><th className="pb-3">Date</th><th className="pb-3">Action</th>
             </tr></thead>
             <tbody>
-              {orders?.map(o => (
+              {orders?.map((o: any) => (
                 <tr key={o.id} className="border-b border-white/5">
-                  <td className="py-3">{(o as any).profiles?.email}</td>
+                  <td className="py-3">{o.profiles?.email}</td>
                   <td className="py-3 capitalize">{o.plan}</td>
                   <td className="py-3 font-bold">${Number(o.amount).toLocaleString()}</td>
                   <td className="py-3">{o.usdt_network}</td>
@@ -63,11 +68,11 @@ export default async function AdminOrdersPage() {
                   </td>
                 </tr>
               ))}
+              {!orders?.length && <tr><td colSpan={8} className="py-6 text-center text-slate-500">No orders yet</td></tr>}
             </tbody>
           </table>
         </div>
 
-        {/* Charges */}
         <h2 className="text-2xl font-bold mb-4">Charge Requests</h2>
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
@@ -75,9 +80,9 @@ export default async function AdminOrdersPage() {
               <th className="pb-3">Email</th><th className="pb-3">Amount</th><th className="pb-3">Network</th><th className="pb-3">Promo</th><th className="pb-3">Status</th><th className="pb-3">Date</th><th className="pb-3">Action</th>
             </tr></thead>
             <tbody>
-              {charges?.map(c => (
+              {charges?.map((c: any) => (
                 <tr key={c.id} className="border-b border-white/5">
-                  <td className="py-3">{(c as any).profiles?.email}</td>
+                  <td className="py-3">{c.profiles?.email}</td>
                   <td className="py-3 font-bold">${Number(c.amount).toLocaleString()}</td>
                   <td className="py-3">{c.usdt_network}</td>
                   <td className="py-3 text-slate-500">{c.promo_code || '—'}</td>
@@ -92,6 +97,7 @@ export default async function AdminOrdersPage() {
                   </td>
                 </tr>
               ))}
+              {!charges?.length && <tr><td colSpan={7} className="py-6 text-center text-slate-500">No charges yet</td></tr>}
             </tbody>
           </table>
         </div>

@@ -1,0 +1,119 @@
+'use client'
+
+import { useState } from 'react'
+import { useRouter } from 'next/navigation'
+
+export default function PromoActions({ promos }: { promos: any[] }) {
+  const [code, setCode] = useState('')
+  const [type, setType] = useState('package_free')
+  const [maxUses, setMaxUses] = useState('10')
+  const [discount, setDiscount] = useState('100')
+  const [loading, setLoading] = useState(false)
+  const router = useRouter()
+
+  async function handleCreate(e: React.FormEvent) {
+    e.preventDefault()
+    setLoading(true)
+    const res = await fetch('/api/admin/promos', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        action: 'create',
+        code: code.toUpperCase(),
+        type,
+        max_uses: parseInt(maxUses),
+        discount_percent: parseInt(discount),
+      }),
+    })
+    if (res.ok) {
+      setCode('')
+      router.refresh()
+    } else alert('Error: ' + (await res.text()))
+    setLoading(false)
+  }
+
+  async function handleToggle(id: string, active: boolean) {
+    await fetch('/api/admin/promos', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action: active ? 'deactivate' : 'activate', id }),
+    })
+    router.refresh()
+  }
+
+  return (
+    <>
+      <form onSubmit={handleCreate} className="p-6 rounded-2xl bg-bg-card border border-white/5 mb-8">
+        <h2 className="text-lg font-bold mb-4">Create Promo Code</h2>
+        <div className="grid md:grid-cols-4 gap-4 mb-4">
+          <div>
+            <label className="block text-sm text-slate-400 mb-1">Code</label>
+            <input
+              value={code} onChange={e => setCode(e.target.value)} required
+              className="w-full px-3 py-2 rounded-lg bg-bg-primary border border-white/10 text-white text-sm"
+              placeholder="BETA2026"
+            />
+          </div>
+          <div>
+            <label className="block text-sm text-slate-400 mb-1">Type</label>
+            <select
+              value={type} onChange={e => setType(e.target.value)}
+              className="w-full px-3 py-2 rounded-lg bg-bg-primary border border-white/10 text-white text-sm"
+            >
+              <option value="package_free">Package Free</option>
+              <option value="charge_free">Charge Free</option>
+              <option value="discount">Discount %</option>
+            </select>
+          </div>
+          <div>
+            <label className="block text-sm text-slate-400 mb-1">Max Uses</label>
+            <input
+              type="number" value={maxUses} onChange={e => setMaxUses(e.target.value)}
+              className="w-full px-3 py-2 rounded-lg bg-bg-primary border border-white/10 text-white text-sm"
+            />
+          </div>
+          <div>
+            <label className="block text-sm text-slate-400 mb-1">Discount %</label>
+            <input
+              type="number" value={discount} onChange={e => setDiscount(e.target.value)}
+              className="w-full px-3 py-2 rounded-lg bg-bg-primary border border-white/10 text-white text-sm"
+            />
+          </div>
+        </div>
+        <button type="submit" disabled={loading} className="px-6 py-2 rounded-lg bg-gradient-to-r from-player to-accent text-white font-bold text-sm disabled:opacity-50">
+          {loading ? 'Creating...' : 'Create'}
+        </button>
+      </form>
+
+      <table className="w-full text-sm">
+        <thead><tr className="text-slate-500 text-left border-b border-white/10">
+          <th className="pb-3">Code</th><th className="pb-3">Type</th><th className="pb-3">Discount</th><th className="pb-3">Uses</th><th className="pb-3">Status</th><th className="pb-3">Action</th>
+        </tr></thead>
+        <tbody>
+          {promos.map(p => (
+            <tr key={p.id} className="border-b border-white/5">
+              <td className="py-3 font-mono text-player">{p.code}</td>
+              <td className="py-3">{p.type}</td>
+              <td className="py-3">{p.discount_percent}%</td>
+              <td className="py-3">{p.used_count}/{p.max_uses}</td>
+              <td className="py-3">
+                <span className={`px-2 py-0.5 rounded text-xs ${p.active ? 'bg-green-500/20 text-green-400' : 'bg-slate-500/20 text-slate-400'}`}>
+                  {p.active ? 'Active' : 'Inactive'}
+                </span>
+              </td>
+              <td className="py-3">
+                <button
+                  onClick={() => handleToggle(p.id, p.active)}
+                  className={`px-3 py-1 rounded text-xs ${p.active ? 'bg-banker/20 text-banker' : 'bg-green-500/20 text-green-400'}`}
+                >
+                  {p.active ? 'Deactivate' : 'Activate'}
+                </button>
+              </td>
+            </tr>
+          ))}
+          {!promos.length && <tr><td colSpan={6} className="py-6 text-center text-slate-500">No promo codes yet</td></tr>}
+        </tbody>
+      </table>
+    </>
+  )
+}
