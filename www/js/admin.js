@@ -232,6 +232,10 @@
           <label>Share Rate</label>
           <input type="number" id="reg-rate" value="0.20" step="0.05" min="0" max="1">
         </div>
+        <div class="form-group" style="margin:0;flex:1;min-width:120px">
+          <label>Password</label>
+          <input type="text" id="reg-pw" placeholder="mypage login">
+        </div>
         <div class="form-group" style="margin:0">
           <label>&nbsp;</label>
           <label style="color:var(--text-secondary);font-weight:400;cursor:pointer">
@@ -275,7 +279,8 @@
         user_id: uid,
         bot_price: parseFloat(document.getElementById('reg-bot').value) || 0,
         profit_share_rate: parseFloat(document.getElementById('reg-rate').value) || 0.20,
-        is_free: document.getElementById('reg-free').checked
+        is_free: document.getElementById('reg-free').checked,
+        password: document.getElementById('reg-pw').value.trim()
       })
     });
     if (r.ok) { alert('User registered!'); loadData(); }

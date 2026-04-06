@@ -56,6 +56,8 @@ class UserBilling:
     carry_loss: float = 0.0      # accumulated losses to offset future profits
     # Free tier
     is_free: bool = False        # True = no billing at all
+    # User login
+    password: str = ""           # simple password for mypage login
     # Grace period
     grace_deadline: Optional[str] = None  # ISO datetime, set when balance <= 0
     suspended: bool = False      # True = API returns 403
@@ -76,6 +78,7 @@ class UserBilling:
             "profit_share_rate": self.profit_share_rate,
             "carry_loss": round(self.carry_loss, 2),
             "is_free": self.is_free,
+            "password": self.password,
             "grace_deadline": self.grace_deadline,
             "suspended": self.suspended,
             "charges": [{"amount": c.amount, "date": c.date, "note": c.note} for c in self.charges],
@@ -99,6 +102,7 @@ class UserBilling:
             profit_share_rate=float(d.get("profit_share_rate", 0.20)),
             carry_loss=float(d.get("carry_loss", 0)),
             is_free=bool(d.get("is_free", False)),
+            password=d.get("password", ""),
             grace_deadline=d.get("grace_deadline"),
             suspended=bool(d.get("suspended", False)),
             created_at=d.get("created_at", ""),
@@ -167,6 +171,7 @@ class BillingManager:
         bot_price: float = 0.0,
         profit_share_rate: float = 0.20,
         is_free: bool = False,
+        password: str = "",
     ) -> UserBilling:
         with self._lock:
             if user_id in self._users:
@@ -176,6 +181,7 @@ class BillingManager:
                 bot_price=bot_price,
                 profit_share_rate=profit_share_rate,
                 is_free=is_free,
+                password=password,
                 created_at=self._now_iso(),
                 updated_at=self._now_iso(),
             )
@@ -329,14 +335,23 @@ class BillingManager:
         self.save()
         return True
 
+    def authenticate(self, user_id: str, password: str) -> bool:
+        with self._lock:
+            ub = self._users.get(user_id)
+            if not ub or not ub.password:
+                return False
+            return ub.password == password
+
     def get_summary(self, user_id: str) -> Optional[dict]:
         ub = self.get(user_id)
         if not ub:
             return None
         total_deducted = sum(d.amount for d in ub.deductions)
-        return {
+        summary = {
             **ub.to_dict(),
             "total_deducted": round(total_deducted, 2),
             "unpaid_balance": round(ub.balance, 2),
             "status": "free" if ub.is_free else ("suspended" if ub.suspended else ("grace" if ub.grace_deadline else "active")),
         }
+        summary.pop("password", None)  # never expose password
+        return summary

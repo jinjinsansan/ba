@@ -1588,6 +1588,65 @@ async def confirm_order(
     return {"ok": True, "user_id": user_id}
 
 
+# ======== User MyPage API ========
+
+
+# Server-side session tokens for mypage login
+_user_sessions: dict[str, str] = {}  # token -> user_id
+_user_sessions_lock = threading.Lock()
+
+
+@app.post("/api/user/login")
+async def user_login(request: Request):
+    body = await request.json()
+    user_id = body.get("user_id", "").strip()
+    password = body.get("password", "").strip()
+    if not user_id or not password:
+        raise HTTPException(400, "user_id and password required")
+    if not _billing.authenticate(user_id, password):
+        raise HTTPException(401, "Invalid credentials")
+    token = secrets.token_hex(32)
+    with _user_sessions_lock:
+        _user_sessions[token] = user_id
+    return {"ok": True, "token": token, "user_id": user_id}
+
+
+def _verify_user_token(authorization: str = Header(default="")) -> str:
+    """Verify user session token. Returns user_id."""
+    if not authorization.startswith("Bearer "):
+        raise HTTPException(401, "Missing token")
+    token = authorization[7:]
+    with _user_sessions_lock:
+        user_id = _user_sessions.get(token)
+    if not user_id:
+        raise HTTPException(401, "Invalid or expired token")
+    return user_id
+
+
+@app.get("/api/user/me")
+async def user_mypage(user_id: str = Depends(_verify_user_token)):
+    summary = _billing.get_summary(user_id)
+    if not summary:
+        raise HTTPException(404, "User not found")
+    # Add session stats if available
+    with _sessions_lock:
+        sess = _SESSIONS.get(user_id)
+        if sess:
+            total = sess.total_wins + sess.total_losses
+            summary["session"] = {
+                "total_bets": sess.total_bets,
+                "total_wins": sess.total_wins,
+                "total_losses": sess.total_losses,
+                "total_ties": sess.total_ties,
+                "win_rate": round(sess.total_wins / total * 100, 1) if total > 0 else 0,
+                "cumulative_profit_chips": sess.tracker.cumulative_profit,
+                "cumulative_profit_money": round(sess.tracker.cumulative_profit * sess.chip_base, 2),
+                "sets": len(sess.tracker.sets),
+                "updated_at": sess.updated_at,
+            }
+    return summary
+
+
 # ======== Billing Endpoints ========
 
 
@@ -1607,6 +1666,7 @@ async def billing_register(
             bot_price=float(body.get("bot_price", 0)),
             profit_share_rate=float(body.get("profit_share_rate", 0.20)),
             is_free=bool(body.get("is_free", False)),
+            password=body.get("password", ""),
         )
     except ValueError as e:
         raise HTTPException(400, str(e))
@@ -1768,6 +1828,10 @@ if WWW_DIR.is_dir():
     @app.get("/admin.html")
     async def admin_page():
         return FileResponse(str(WWW_DIR / "admin.html"))
+
+    @app.get("/mypage.html")
+    async def mypage():
+        return FileResponse(str(WWW_DIR / "mypage.html"))
 else:
     logger.warning(f"WWW_DIR {WWW_DIR} not found, static pages disabled")
 

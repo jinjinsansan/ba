@@ -1,0 +1,52 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>LAPLACE - My Page</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/css/style.css">
+</head>
+<body>
+
+<nav class="navbar">
+  <a href="/" class="logo">LAPLACE</a>
+  <button class="nav-cta" id="btn-logout" style="display:none">Logout</button>
+</nav>
+
+<!-- Login -->
+<div class="admin-login" id="login-view">
+  <h2>My Page</h2>
+  <p style="color:var(--text-secondary);margin-bottom:20px;font-size:0.9em">Enter your credentials to view your account</p>
+  <input type="text" id="login-uid" placeholder="Username">
+  <input type="password" id="login-pw" placeholder="Password">
+  <button class="btn-primary" id="btn-login">Login</button>
+</div>
+
+<!-- Dashboard -->
+<div class="admin-container" id="mypage-view" style="display:none">
+  <div class="admin-header">
+    <h2>Welcome, <span id="user-name"></span></h2>
+    <span style="color:var(--text-muted);font-size:0.82em" id="last-refresh"></span>
+  </div>
+
+  <!-- Status Banner -->
+  <div id="status-banner" style="margin-bottom:20px"></div>
+
+  <!-- Metrics -->
+  <div class="metric-cards" id="metrics"></div>
+
+  <!-- Tabs -->
+  <div class="admin-tabs">
+    <div class="admin-tab active" data-tab="overview">Overview</div>
+    <div class="admin-tab" data-tab="history">Charge History</div>
+    <div class="admin-tab" data-tab="settlements">Daily Settlements</div>
+  </div>
+
+  <div class="admin-panel" id="panel-content"></div>
+</div>
+
+<script src="/js/mypage.js"></script>
+</body>
+</html>
