@@ -23,6 +23,10 @@ export default function Home() {
             <Link href="/login" className="hover:text-white transition">Login</Link>
             <Link href="/signup" className="px-4 py-2 rounded-lg bg-gradient-to-r from-player to-accent text-white font-semibold text-sm hover:opacity-90 transition">Get Started</Link>
           </div>
+          <div className="flex md:hidden items-center gap-3">
+            <Link href="/login" className="text-sm text-slate-400 hover:text-white">Login</Link>
+            <Link href="/signup" className="px-3 py-1.5 rounded-lg bg-gradient-to-r from-player to-accent text-white font-semibold text-xs">Start</Link>
+          </div>
         </div>
       </nav>
 
