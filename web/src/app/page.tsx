@@ -152,7 +152,7 @@ export default function Home() {
               </Link>
             </div>
             <p className="text-xs text-slate-700 mt-6 leading-relaxed">
-              Daily profit share applied at midnight JST. Losses carry forward and offset future fees before any deduction is made.
+              Daily profit share applied at end of each session day. Losses carry forward and offset future fees before any deduction is made.
             </p>
           </div>
         </div>
@@ -189,7 +189,7 @@ export default function Home() {
           </div>
           <div className="space-y-0">
             {[
-              { q: 'How does the profit share work?', a: 'At midnight JST, net session profit is calculated. A percentage is deducted from your balance. Losing days carry forward — no fees until prior losses are recovered.' },
+              { q: 'How does the profit share work?', a: 'At end of each session day, net profit is calculated. A percentage is deducted from your balance. Losing days carry forward — no fees until prior losses are recovered.' },
               { q: 'What happens when the balance hits zero?', a: 'A 24-hour grace period activates. Bot pauses. Recharge at any time to resume. No penalties, no account loss.' },
               { q: 'How is the license fee charged?', a: 'Deducted automatically from your first charge. Pay $2,000 license + $3,000 charge = $3,000 operational balance.' },
               { q: 'What payment methods are accepted?', a: 'USDT only. TRC-20 (TRON) or ERC-20 (Ethereum). Manual confirmation, typically under 30 minutes.' },
