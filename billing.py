@@ -306,7 +306,7 @@ class BillingManager:
         with self._lock:
             ub = self._users.get(user_id)
             if not ub:
-                return False
+                return True  # not registered in billing = no billing enforcement
             if ub.is_free:
                 return True
             if ub.suspended:

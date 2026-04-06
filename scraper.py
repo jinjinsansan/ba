@@ -98,12 +98,25 @@ class BaccaratScraper:
         """ブラウザ起動 → ログイン → WS傍受設定 → ロビーに移動"""
         logger.info(f"Camoufox起動中... (profile={config.PROFILE_NAME})")
         exe_path = self._resolve_executable_path()
-        launch_opts = {"headless": config.HEADLESS}
+
+        # Use persistent context so cookies + localStorage survive restarts
+        profile_dir = str(config.AUTH_STATE_DIR / "camoufox_profile")
+        launch_opts = {
+            "headless": config.HEADLESS,
+            "persistent_context": True,
+            "user_data_dir": profile_dir,
+        }
         if exe_path:
             launch_opts["executable_path"] = exe_path
         self._camoufox_ctx = Camoufox(**launch_opts)
-        self.browser = self._camoufox_ctx.__enter__()
-        self.page = self.browser.new_page()
+        # persistent_context returns BrowserContext directly (not Browser)
+        ctx = self._camoufox_ctx.__enter__()
+        self.browser = ctx
+        # Reuse existing page or create new one
+        if ctx.pages:
+            self.page = ctx.pages[0]
+        else:
+            self.page = ctx.new_page()
 
         # Cookie復元
         self._restore_cookies()

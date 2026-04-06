@@ -375,30 +375,36 @@ class RemoteLaplaceSession:
 
     # --- BET cycle (mirrors MaruBatsuBetSession.run_round) ---
 
+    def _exit(self, reason: str) -> dict:
+        logger.warning(f"run_round exit: {reason}")
+        try:
+            import json, sys
+            sys.stdout.write(json.dumps({"type": "log", "message": f"[DEBUG EXIT] {reason}"}) + "\n")
+            sys.stdout.flush()
+        except Exception:
+            pass
+        return {"action": "exit"}
+
     def run_round(self, running_flag) -> dict:
         if not running_flag():
-            return {"action": "exit"}
+            return self._exit("running_flag=False (stop requested)")
 
         if not self.executor.check_and_dismiss_error():
-            logger.warning("エラーダイアログ検出 → セッション中断 [exit reason: error_dialog]")
-            return {"action": "exit"}
+            return self._exit("error_dialog detected")
 
         is_first = (self.total_bets == 0 and len(self.tracker.current_turns) == 0)
         if not self.executor.wait_for_betting_phase(
             timeout=180 if is_first else 120, skip_round=is_first
         ):
             if not self.executor.check_and_dismiss_error():
-                logger.warning("エラーダイアログ検出(bet phase後) → セッション中断 [exit reason: error_dialog_after_wait]")
-                return {"action": "exit"}
-            logger.warning("BETフェーズ待ちタイムアウト [exit reason: bet_phase_timeout]")
-            return {"action": "exit"}
+                return self._exit("error_dialog_after_bet_phase_wait")
+            return self._exit("bet_phase_timeout")
 
         # Ask the server for the next BET parameters (always player side)
         try:
             decision = self.client.decide(self.user_id)
         except LaplaceApiError as e:
-            logger.error(f"API decide failed: {e}")
-            return {"action": "exit"}
+            return self._exit(f"API decide failed: {e}")
 
         self._apply_state(decision["state"])
 
@@ -429,7 +435,7 @@ class RemoteLaplaceSession:
                     f"必要: ${bet_amount:.2f} ({unit} chips)\n"
                     f"残高: ${balance:.2f}"
                 )
-                return {"action": "exit"}
+                return self._exit(f"insufficient_balance: ${balance:.2f} < ${bet_amount:.2f}")
 
         side = "player"
         logger.info(
@@ -438,14 +444,12 @@ class RemoteLaplaceSession:
         )
 
         if not self.executor.place_bet(side, bet_amount):
-            logger.error("BET失敗")
-            return {"action": "exit"}
+            return self._exit("place_bet failed")
 
         # wait for result
         result_info = self.executor.wait_for_result(timeout=90, bet_amount=bet_amount)
         if not result_info or not result_info.get("result"):
-            logger.error("結果取得失敗")
-            return {"action": "exit"}
+            return self._exit("wait_for_result failed or empty")
 
         result = result_info["result"]
         balance = result_info.get("balance", 0)
@@ -454,8 +458,7 @@ class RemoteLaplaceSession:
         try:
             resp = self.client.submit_result(self.user_id, result)
         except LaplaceApiError as e:
-            logger.error(f"API submit_result failed: {e}")
-            return {"action": "exit"}
+            return self._exit(f"API submit_result failed: {e}")
 
         self._apply_state(resp["state"])
 
