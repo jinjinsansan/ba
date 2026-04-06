@@ -23,18 +23,18 @@ export default async function AdminPromosPage() {
         <div className="max-w-6xl mx-auto px-6 h-16 flex items-center justify-between">
           <Link href="/" className="text-xl font-black bg-gradient-to-r from-player to-banker bg-clip-text text-transparent">LAPLACE</Link>
           <div className="flex items-center gap-4 text-sm">
-            <Link href="/admin" className="text-slate-400 hover:text-white">Admin</Link>
-            <Link href="/admin/orders" className="text-slate-400 hover:text-white">Orders</Link>
-            <Link href="/admin/users" className="text-slate-400 hover:text-white">Users</Link>
-            <Link href="/admin/promos" className="text-white font-semibold">Promos</Link>
-            <Link href="/admin/tickets" className="text-slate-400 hover:text-white">Tickets</Link>
+            <Link href="/admin" className="text-slate-400 hover:text-white">管理</Link>
+            <Link href="/admin/orders" className="text-slate-400 hover:text-white">注文</Link>
+            <Link href="/admin/users" className="text-slate-400 hover:text-white">ユーザー</Link>
+            <Link href="/admin/promos" className="text-white font-semibold">プロモ</Link>
+            <Link href="/admin/tickets" className="text-slate-400 hover:text-white">チケット</Link>
           </div>
         </div>
       </nav>
 
       <div className="max-w-6xl mx-auto px-6 py-10">
         <div className="flex items-center justify-between mb-8">
-          <h1 className="text-3xl font-black">Promo Codes</h1>
+          <h1 className="text-3xl font-black">プロモコード</h1>
         </div>
 
         <PromoActions promos={promos || []} />

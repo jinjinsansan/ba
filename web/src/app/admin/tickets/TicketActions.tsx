@@ -43,26 +43,26 @@ export default function TicketActions({ ticketId, status }: { ticketId: string; 
               <input
                 value={reply} onChange={e => setReply(e.target.value)}
                 className="flex-1 px-3 py-2 rounded-lg bg-bg-primary border border-white/10 text-white text-sm"
-                placeholder="Type reply..."
+                placeholder="返信内容を入力..."
               />
               <button onClick={handleReply} disabled={loading}
                 className="px-3 py-2 rounded-lg bg-player/20 text-player text-xs font-semibold">
-                Send
+                送信
               </button>
               <button onClick={() => setShowReply(false)}
                 className="px-3 py-2 rounded-lg bg-slate-500/20 text-slate-400 text-xs">
-                Cancel
+                キャンセル
               </button>
             </div>
           ) : (
             <button onClick={() => setShowReply(true)}
               className="px-3 py-1 rounded-lg bg-player/20 text-player text-xs font-semibold">
-              Reply
+              返信
             </button>
           )}
           <button onClick={handleClose}
             className="px-3 py-1 rounded-lg bg-slate-500/20 text-slate-400 text-xs">
-            Close
+            クローズ
           </button>
         </>
       )}

@@ -44,10 +44,10 @@ export default function PromoActions({ promos }: { promos: any[] }) {
   return (
     <>
       <form onSubmit={handleCreate} className="p-6 rounded-2xl bg-bg-card border border-white/5 mb-8">
-        <h2 className="text-lg font-bold mb-4">Create Promo Code</h2>
+        <h2 className="text-lg font-bold mb-4">プロモコード作成</h2>
         <div className="grid md:grid-cols-4 gap-4 mb-4">
           <div>
-            <label className="block text-sm text-slate-400 mb-1">Code</label>
+            <label className="block text-sm text-slate-400 mb-1">コード</label>
             <input
               value={code} onChange={e => setCode(e.target.value)} required
               className="w-full px-3 py-2 rounded-lg bg-bg-primary border border-white/10 text-white text-sm"
@@ -55,25 +55,25 @@ export default function PromoActions({ promos }: { promos: any[] }) {
             />
           </div>
           <div>
-            <label className="block text-sm text-slate-400 mb-1">Type</label>
+            <label className="block text-sm text-slate-400 mb-1">種別</label>
             <select
               value={type} onChange={e => setType(e.target.value)}
               className="w-full px-3 py-2 rounded-lg bg-bg-primary border border-white/10 text-white text-sm"
             >
-              <option value="package_free">Package Free</option>
-              <option value="charge_free">Charge Free</option>
-              <option value="discount">Discount %</option>
+              <option value="package_free">パッケージ無料</option>
+              <option value="charge_free">チャージ無料</option>
+              <option value="discount">割引 %</option>
             </select>
           </div>
           <div>
-            <label className="block text-sm text-slate-400 mb-1">Max Uses</label>
+            <label className="block text-sm text-slate-400 mb-1">最大利用回数</label>
             <input
               type="number" value={maxUses} onChange={e => setMaxUses(e.target.value)}
               className="w-full px-3 py-2 rounded-lg bg-bg-primary border border-white/10 text-white text-sm"
             />
           </div>
           <div>
-            <label className="block text-sm text-slate-400 mb-1">Discount %</label>
+            <label className="block text-sm text-slate-400 mb-1">割引率 %</label>
             <input
               type="number" value={discount} onChange={e => setDiscount(e.target.value)}
               className="w-full px-3 py-2 rounded-lg bg-bg-primary border border-white/10 text-white text-sm"
@@ -81,24 +81,24 @@ export default function PromoActions({ promos }: { promos: any[] }) {
           </div>
         </div>
         <button type="submit" disabled={loading} className="px-6 py-2 rounded-lg bg-gradient-to-r from-player to-accent text-white font-bold text-sm disabled:opacity-50">
-          {loading ? 'Creating...' : 'Create'}
+          {loading ? '作成中...' : '作成'}
         </button>
       </form>
 
       <table className="w-full text-sm">
         <thead><tr className="text-slate-500 text-left border-b border-white/10">
-          <th className="pb-3">Code</th><th className="pb-3">Type</th><th className="pb-3">Discount</th><th className="pb-3">Uses</th><th className="pb-3">Status</th><th className="pb-3">Action</th>
+          <th className="pb-3">コード</th><th className="pb-3">種別</th><th className="pb-3">割引率</th><th className="pb-3">利用数</th><th className="pb-3">状態</th><th className="pb-3">操作</th>
         </tr></thead>
         <tbody>
           {promos.map(p => (
             <tr key={p.id} className="border-b border-white/5">
               <td className="py-3 font-mono text-player">{p.code}</td>
-              <td className="py-3">{p.type}</td>
+              <td className="py-3">{p.type === 'package_free' ? 'パッケージ無料' : p.type === 'charge_free' ? 'チャージ無料' : '割引'}</td>
               <td className="py-3">{p.discount_percent}%</td>
               <td className="py-3">{p.used_count}/{p.max_uses}</td>
               <td className="py-3">
                 <span className={`px-2 py-0.5 rounded text-xs ${p.active ? 'bg-green-500/20 text-green-400' : 'bg-slate-500/20 text-slate-400'}`}>
-                  {p.active ? 'Active' : 'Inactive'}
+                  {p.active ? '有効' : '無効'}
                 </span>
               </td>
               <td className="py-3">
@@ -106,12 +106,12 @@ export default function PromoActions({ promos }: { promos: any[] }) {
                   onClick={() => handleToggle(p.id, p.active)}
                   className={`px-3 py-1 rounded text-xs ${p.active ? 'bg-banker/20 text-banker' : 'bg-green-500/20 text-green-400'}`}
                 >
-                  {p.active ? 'Deactivate' : 'Activate'}
+                  {p.active ? '無効化' : '有効化'}
                 </button>
               </td>
             </tr>
           ))}
-          {!promos.length && <tr><td colSpan={6} className="py-6 text-center text-slate-500">No promo codes yet</td></tr>}
+          {!promos.length && <tr><td colSpan={6} className="py-6 text-center text-slate-500">プロモコードはまだありません</td></tr>}
         </tbody>
       </table>
     </>
