@@ -119,7 +119,14 @@ export default async function DashboardPage() {
         <div className="grid md:grid-cols-4 gap-4 mb-8">
           <div className="p-5 rounded-xl bg-bg-card border border-white/5">
             <div className="text-sm text-slate-400">Balance</div>
-            <div className="text-2xl font-bold text-white">${billing?.balance?.toFixed(2) || '0.00'}</div>
+            {billing?.is_free ? (
+              <div className="flex items-center gap-2 mt-1">
+                <div className="text-2xl font-bold text-white">—</div>
+                <span className="px-2 py-0.5 rounded text-xs font-black bg-accent/20 text-accent tracking-widest">FREE</span>
+              </div>
+            ) : (
+              <div className="text-2xl font-bold text-white">${billing?.balance?.toFixed(2) || '0.00'}</div>
+            )}
           </div>
           <div className="p-5 rounded-xl bg-bg-card border border-white/5">
             <div className="text-sm text-slate-400">Profit Share Rate</div>
