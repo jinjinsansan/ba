@@ -308,14 +308,14 @@ def _run_bet_session_inner(config: dict, stop_event: threading.Event, skip_event
     mode = "DRY RUN" if dry_run else "LIVE"
     send_action(f"Starting {mode} mode...")
 
-    # Setup 3-tier notifier system
-    public_notifier = PublicNotifier()  # reads PUBLIC_BOT_TOKEN / PUBLIC_CHANNEL_ID from env
+    # Setup notifier system
+    # Public channel is for independent monitoring only, NOT for GUI BET activity
     admin_notifier = AdminNotifier()  # reads ADMIN_BOT_TOKEN / ADMIN_CHAT_ID from env
     if dry_run:
         user_notifier = UserNotifier("", "")
     else:
         user_notifier = UserNotifier()  # reads TELEGRAM_BOT_TOKEN / TELEGRAM_CHAT_ID from env
-    composite = CompositeNotifier(public_notifier, admin_notifier, user_notifier)
+    composite = CompositeNotifier(public=None, admin=admin_notifier, user=user_notifier)
     # Legacy alias: existing code uses `notifier` with .send(), .notify_*() — use UserNotifier
     notifier = user_notifier
 
