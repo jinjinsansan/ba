@@ -137,13 +137,13 @@ const DEFAULT_SETTINGS = {
 const SITE_URL = 'https://bafather.uk';
 const LAPLACE_API_KEY = 'c6gDoe0xIyBOTQ7bvzRaAHNYn4ZE1W9Mriumqkw8Shf5Jlsd';
 
-async function syncTableFilterToServer(userId, filter) {
-  if (!userId) return;
+async function syncTableFilterToServer(email, filter) {
+  if (!email) return;
   try {
     await fetch(`${SITE_URL}/api/bot-config`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ user_id: userId, bot_config: filter, api_key: LAPLACE_API_KEY }),
+      body: JSON.stringify({ email, bot_config: filter, api_key: LAPLACE_API_KEY }),
     });
   } catch (e) {
     console.warn('[sync] bot-config sync failed:', e);
