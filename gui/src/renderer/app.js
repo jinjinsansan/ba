@@ -131,7 +131,24 @@ const DEFAULT_SETTINGS = {
   loss_cut: 200,
   telegram_chat_id: '',
   dry_run: false,
+  user_id: '',
 };
+
+const SITE_URL = 'https://bafather.uk';
+const LAPLACE_API_KEY = 'c6gDoe0xIyBOTQ7bvzRaAHNYn4ZE1W9Mriumqkw8Shf5Jlsd';
+
+async function syncTableFilterToServer(userId, filter) {
+  if (!userId) return;
+  try {
+    await fetch(`${SITE_URL}/api/bot-config`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ user_id: userId, bot_config: filter, api_key: LAPLACE_API_KEY }),
+    });
+  } catch (e) {
+    console.warn('[sync] bot-config sync failed:', e);
+  }
+}
 
 // --- Table Filter ---
 const DEFAULT_TABLE_FILTER = {
@@ -158,18 +175,18 @@ function saveTableFilter(f) {
 const _steppers = {};
 function initStepper(decId, incId, valId, min, max, step) {
   function clamp(v) { return Math.max(min, Math.min(max, v)); }
-  function read() { return parseInt($(valId).textContent) || min; }
-  function write(v) { $(valId).textContent = clamp(v); }
-  $(decId).addEventListener('click', () => write(read() - step));
-  $(incId).addEventListener('click', () => write(read() + step));
-  _steppers[valId] = { get: () => parseInt($(valId).textContent) || min, set: write };
+  function read() { return parseInt($('#' + valId).textContent) || min; }
+  function write(v) { $('#' + valId).textContent = clamp(v); }
+  $('#' + decId).addEventListener('click', () => write(read() - step));
+  $('#' + incId).addEventListener('click', () => write(read() + step));
+  _steppers[valId] = { get: () => parseInt($('#' + valId).textContent) || min, set: write };
 }
 
 // Segment state
 const _segments = {};
 function initSegment(containerId) {
   let cur = null;
-  const btns = () => $$(` #${containerId} .fx-seg-btn`);
+  const btns = () => $$('#' + containerId + ' .fx-seg-btn');
   btns().forEach(btn => {
     if (btn.classList.contains('active')) cur = parseInt(btn.dataset.val);
     btn.addEventListener('click', () => {
@@ -193,14 +210,14 @@ function initSegment(containerId) {
 // Toggle state
 const _toggles = {};
 function initToggle(toggleId, trackId) {
-  let on = $(trackId).classList.contains('on');
-  $(toggleId).addEventListener('click', () => {
+  let on = $('#' + trackId).classList.contains('on');
+  $('#' + toggleId).addEventListener('click', () => {
     on = !on;
-    $(trackId).classList.toggle('on', on);
+    $('#' + trackId).classList.toggle('on', on);
   });
   _toggles[trackId] = {
     get: () => on,
-    set: (v) => { on = v; $(trackId).classList.toggle('on', v); }
+    set: (v) => { on = v; $('#' + trackId).classList.toggle('on', v); }
   };
 }
 
@@ -239,6 +256,8 @@ function initTableFilterControls() {
       require_pb: _toggles['pbTrack'].get(),
     };
     saveTableFilter(f);
+    const userId = loadSettings().user_id;
+    syncTableFilterToServer(userId, f);
     addLog(`Table filter saved: primary≥${f.players_primary}p relax=${f.relax_wait_sec}s hands=${f.min_hands}-${f.max_hands} dragon=${f.dragon_limit||'OFF'} P>B=${f.require_pb}`, 'info');
     $('#settingsModal').classList.add('hidden');
   });
@@ -266,6 +285,7 @@ $('#btnSettings').addEventListener('click', () => {
   $('#inputProfitTarget').value = s.profit_target;
   $('#inputLossCut').value = s.loss_cut;
   $('#inputTelegramChat').value = s.telegram_chat_id || '';
+  $('#inputUserId').value = s.user_id || '';
   $('#inputDryRun').checked = !!s.dry_run;
   // Load table filter into UI
   applyTableFilterToUI(loadTableFilter());
@@ -283,6 +303,7 @@ $('#btnSaveSettings').addEventListener('click', async () => {
     profit_target: parseFloat($('#inputProfitTarget').value) || 50,
     loss_cut: parseFloat($('#inputLossCut').value) || 200,
     telegram_chat_id: $('#inputTelegramChat').value.trim(),
+    user_id: $('#inputUserId').value.trim(),
     dry_run: $('#inputDryRun').checked,
   };
   localStorage.setItem('valhalla_settings', JSON.stringify(settings));
