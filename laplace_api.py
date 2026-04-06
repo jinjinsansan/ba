@@ -1005,6 +1005,12 @@ async def decide_bet(
 ):
     """Return next BET parameters (always Player side for maru-batsu)."""
     require_user_scope(ctx, user_id)
+    # Billing enforcement: suspended users cannot place bets
+    if not _billing.check_grace(user_id):
+        raise HTTPException(
+            status_code=403,
+            detail="Account suspended: insufficient balance. Please top up your charge.",
+        )
     with _sessions_lock:
         sess = get_required(user_id)
         should, reason = sess.should_reset()
@@ -1428,6 +1434,349 @@ async def list_sessions(ctx: UserContext = Depends(verify_api_key)):
         }
 
 
+# ======== Billing ========
+
+from billing import BillingManager
+
+_billing = BillingManager()
+
+
+@app.post("/api/admin/billing/register")
+async def billing_register(
+    request: Request,
+    ctx: UserContext = Depends(verify_api_key),
+):
+    require_admin(ctx)
+    body = await request.json()
+    uid = body.get("user_id", "").strip()
+    if not uid:
+        raise HTTPException(400, "user_id required")
+    try:
+        ub = _billing.register(
+            user_id=uid,
+            bot_price=float(body.get("bot_price", 0)),
+            profit_share_rate=float(body.get("profit_share_rate", 0.20)),
+            is_free=bool(body.get("is_free", False)),
+        )
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+    return ub.to_dict()
+
+
+@app.patch("/api/admin/billing/{user_id}")
+async def billing_update(
+    user_id: str,
+    request: Request,
+    ctx: UserContext = Depends(verify_api_key),
+):
+    require_admin(ctx)
+    body = await request.json()
+    try:
+        ub = _billing.update_plan(
+            user_id,
+            bot_price=body.get("bot_price"),
+            profit_share_rate=body.get("profit_share_rate"),
+            is_free=body.get("is_free"),
+        )
+    except ValueError as e:
+        raise HTTPException(404, str(e))
+    return ub.to_dict()
+
+
+@app.post("/api/admin/billing/{user_id}/charge")
+async def billing_charge(
+    user_id: str,
+    request: Request,
+    ctx: UserContext = Depends(verify_api_key),
+):
+    require_admin(ctx)
+    body = await request.json()
+    amount = float(body.get("amount", 0))
+    if amount <= 0:
+        raise HTTPException(400, "amount must be > 0")
+    try:
+        ub = _billing.charge(user_id, amount, note=body.get("note", ""))
+    except ValueError as e:
+        raise HTTPException(404, str(e))
+    return ub.to_dict()
+
+
+@app.post("/api/admin/billing/{user_id}/daily")
+async def billing_daily_settle(
+    user_id: str,
+    request: Request,
+    ctx: UserContext = Depends(verify_api_key),
+):
+    require_admin(ctx)
+    body = await request.json()
+    daily_profit = float(body.get("daily_profit", 0))
+    rec = _billing.process_daily_profit(user_id, daily_profit)
+    return {"deduction": rec.__dict__ if rec else None, "billing": _billing.get_summary(user_id)}
+
+
+@app.post("/api/admin/billing/{user_id}/unsuspend")
+async def billing_unsuspend(
+    user_id: str,
+    ctx: UserContext = Depends(verify_api_key),
+):
+    require_admin(ctx)
+    ok = _billing.unsuspend(user_id)
+    if not ok:
+        raise HTTPException(404, "user not found")
+    return {"ok": True}
+
+
+@app.get("/api/admin/billing")
+async def billing_list(ctx: UserContext = Depends(verify_api_key)):
+    require_admin(ctx)
+    return {"users": [_billing.get_summary(ub.user_id) for ub in _billing.list_all()]}
+
+
+@app.get("/api/admin/billing/{user_id}")
+async def billing_detail(user_id: str, ctx: UserContext = Depends(verify_api_key)):
+    require_admin(ctx)
+    s = _billing.get_summary(user_id)
+    if not s:
+        raise HTTPException(404, "user not found")
+    return s
+
+
+# ======== Admin Stats (for dashboard) ========
+
+
+@app.get("/api/admin/stats")
+async def admin_stats(ctx: UserContext = Depends(verify_api_key)):
+    require_admin(ctx)
+    with _sessions_lock:
+        for f in STATE_DIR.glob("*.json"):
+            uid = f.stem
+            if uid not in _SESSIONS:
+                loaded = LaplaceSession.load(uid)
+                if loaded:
+                    _SESSIONS[uid] = loaded
+
+        users = []
+        for sid, s in _SESSIONS.items():
+            total = s.total_wins + s.total_losses
+            win_rate = (s.total_wins / total * 100) if total > 0 else 0
+            billing_info = _billing.get_summary(sid)
+            # Find max consecutive losses across all sets
+            max_loss_streak = 0
+            for st in s.tracker.sets:
+                streak = 0
+                for r in st.results:
+                    if r == "x":
+                        streak += 1
+                        max_loss_streak = max(max_loss_streak, streak)
+                    else:
+                        streak = 0
+            key_info = None
+            for k in _api_keys.list():
+                if k.user_id == sid:
+                    key_info = k.to_public_dict()
+                    break
+            users.append({
+                "user_id": sid,
+                "total_bets": s.total_bets,
+                "total_wins": s.total_wins,
+                "total_losses": s.total_losses,
+                "total_ties": s.total_ties,
+                "win_rate": round(win_rate, 1),
+                "cumulative_profit_chips": s.tracker.cumulative_profit,
+                "cumulative_profit_money": round(s.tracker.cumulative_profit * s.chip_base, 2),
+                "chip_base": s.chip_base,
+                "sets": len(s.tracker.sets),
+                "current_turn": len(s.tracker.current_turns),
+                "max_loss_streak": max_loss_streak,
+                "updated_at": s.updated_at,
+                "created_at": s.created_at,
+                "billing": billing_info,
+                "api_key": key_info,
+            })
+    return {"users": users, "timestamp": datetime.utcnow().isoformat() + "Z"}
+
+
+# ======== Admin Dashboard HTML ========
+
+from fastapi.responses import HTMLResponse
+
+DASHBOARD_HTML = """<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>LAPLACE Admin</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:#0d1117;color:#c9d1d9;padding:16px}
+h1{color:#58a6ff;margin-bottom:8px;font-size:1.4em}
+.meta{color:#8b949e;font-size:0.85em;margin-bottom:16px}
+.cards{display:flex;gap:12px;margin-bottom:20px;flex-wrap:wrap}
+.card{background:#161b22;border:1px solid #30363d;border-radius:8px;padding:14px 18px;min-width:140px}
+.card .label{color:#8b949e;font-size:0.75em;text-transform:uppercase}
+.card .value{font-size:1.6em;font-weight:700;margin-top:2px}
+.card .value.pos{color:#3fb950}
+.card .value.neg{color:#f85149}
+.card .value.neutral{color:#58a6ff}
+table{width:100%;border-collapse:collapse;margin-top:12px;font-size:0.88em}
+th{background:#161b22;color:#58a6ff;text-align:left;padding:8px 10px;border-bottom:2px solid #30363d;position:sticky;top:0}
+td{padding:7px 10px;border-bottom:1px solid #21262d}
+tr:hover td{background:#161b22}
+.status{display:inline-block;width:8px;height:8px;border-radius:50%;margin-right:6px}
+.status.active{background:#3fb950}
+.status.suspended{background:#f85149}
+.status.grace{background:#d29922}
+.status.free{background:#58a6ff}
+.pos{color:#3fb950}.neg{color:#f85149}
+.detail{display:none;background:#0d1117;padding:12px}
+.detail table{font-size:0.82em}
+.detail th{background:#0d1117}
+.badge{display:inline-block;padding:2px 8px;border-radius:10px;font-size:0.75em;font-weight:600}
+.badge.free{background:#1f6feb33;color:#58a6ff}
+.badge.active{background:#23863533;color:#3fb950}
+.badge.suspended{background:#da363333;color:#f85149}
+.badge.grace{background:#9e6a0333;color:#d29922}
+button{background:#21262d;color:#c9d1d9;border:1px solid #30363d;padding:4px 10px;border-radius:4px;cursor:pointer;font-size:0.8em}
+button:hover{background:#30363d}
+.refresh{position:fixed;top:12px;right:16px;font-size:0.8em;color:#8b949e}
+</style>
+</head>
+<body>
+<h1>LAPLACE Admin Dashboard</h1>
+<div class="meta" id="meta">Loading...</div>
+<div class="cards" id="summary"></div>
+<table id="usertable">
+<thead><tr>
+<th>User</th><th>Status</th><th>Bets</th><th>Win%</th>
+<th>Profit ($)</th><th>Balance ($)</th><th>Carry Loss</th>
+<th>Max Lose Streak</th><th>Sets</th><th>Updated</th>
+</tr></thead>
+<tbody id="tbody"></tbody>
+</table>
+<div class="refresh" id="refresh"></div>
+<script>
+const KEY = new URLSearchParams(location.search).get('key') || '';
+const BASE = location.origin;
+const H = {'Authorization': 'Bearer ' + KEY, 'Content-Type': 'application/json'};
+
+function fmt$(v){return (v>=0?'+':'')+v.toFixed(2)}
+function fmtTime(iso){
+  if(!iso) return '-';
+  const d=new Date(iso);
+  const now=new Date();
+  const diff=Math.floor((now-d)/1000);
+  if(diff<60) return diff+'s ago';
+  if(diff<3600) return Math.floor(diff/60)+'m ago';
+  if(diff<86400) return Math.floor(diff/3600)+'h ago';
+  return d.toLocaleDateString('ja-JP');
+}
+
+async function load(){
+  try{
+    const r=await fetch(BASE+'/api/admin/stats',{headers:H});
+    if(!r.ok){document.getElementById('meta').textContent='Auth failed ('+r.status+')';return;}
+    const data=await r.json();
+    render(data);
+    document.getElementById('refresh').textContent='Last: '+new Date().toLocaleTimeString('ja-JP');
+  }catch(e){document.getElementById('meta').textContent='Error: '+e;}
+}
+
+function render(data){
+  const users=data.users||[];
+  let totalProfit=0, totalBets=0, active=0;
+  users.forEach(u=>{
+    totalProfit+=u.cumulative_profit_money;
+    totalBets+=u.total_bets;
+    const b=u.billing;
+    if(b && (b.status==='active'||b.status==='free')) active++;
+  });
+  document.getElementById('meta').textContent=
+    users.length+' users | '+data.timestamp;
+  document.getElementById('summary').innerHTML=
+    card('Total P&L','$'+fmt$(totalProfit),totalProfit>=0?'pos':'neg')+
+    card('Total Bets',totalBets,'neutral')+
+    card('Active',active+' / '+users.length,'neutral');
+
+  const tb=document.getElementById('tbody');
+  tb.innerHTML='';
+  users.forEach(u=>{
+    const b=u.billing||{};
+    const st=b.status||'active';
+    const tr=document.createElement('tr');
+    tr.style.cursor='pointer';
+    tr.innerHTML=`
+      <td><strong>${u.user_id}</strong></td>
+      <td><span class="status ${st}"></span><span class="badge ${st}">${st.toUpperCase()}</span></td>
+      <td>${u.total_bets}</td>
+      <td>${u.win_rate}%</td>
+      <td class="${u.cumulative_profit_money>=0?'pos':'neg'}">$${fmt$(u.cumulative_profit_money)}</td>
+      <td class="${(b.balance||0)>=0?'pos':'neg'}">$${(b.balance||0).toFixed(2)}</td>
+      <td>${(b.carry_loss||0).toFixed(2)}</td>
+      <td>${u.max_loss_streak}</td>
+      <td>${u.sets}</td>
+      <td>${fmtTime(u.updated_at)}</td>`;
+    tr.onclick=()=>{
+      const next=tr.nextElementSibling;
+      if(next && next.classList.contains('detail-row')){next.remove();return;}
+      const dr=document.createElement('tr');
+      dr.className='detail-row';
+      dr.innerHTML='<td colspan="10">'+renderDetail(u)+'</td>';
+      tr.after(dr);
+    };
+    tb.appendChild(tr);
+  });
+}
+
+function renderDetail(u){
+  const b=u.billing||{};
+  let html='<div class="detail" style="display:block">';
+  html+='<h3 style="color:#58a6ff;margin-bottom:8px">'+u.user_id+' Detail</h3>';
+  html+='<div class="cards">';
+  html+=card('Bot Price','$'+(b.bot_price||0).toFixed(0),'neutral');
+  html+=card('Total Charged','$'+(b.total_charged||0).toFixed(2),'neutral');
+  html+=card('Total Deducted','$'+(b.total_deducted||0).toFixed(2),'neg');
+  html+=card('Share Rate',(b.profit_share_rate||0.2)*100+'%','neutral');
+  html+=card('Chip Base','$'+u.chip_base,'neutral');
+  html+='</div>';
+  if(u.api_key){
+    html+='<p style="color:#8b949e;font-size:0.82em">API Key: '+u.api_key.prefix+' | Rate: '+u.api_key.rate_limit_per_hour+'/h | Enabled: '+u.api_key.enabled+'</p>';
+  }
+  // Deduction history
+  const deds=b.deductions||[];
+  if(deds.length){
+    html+='<h4 style="color:#8b949e;margin:12px 0 6px">Daily Settlements (recent 30)</h4>';
+    html+='<table><tr><th>Date</th><th>Daily P&L</th><th>Fee</th><th>Carry Loss</th><th>Note</th></tr>';
+    deds.slice(-30).reverse().forEach(d=>{
+      html+=`<tr><td>${d.date}</td><td class="${d.daily_profit>=0?'pos':'neg'}">$${d.daily_profit.toFixed(2)}</td><td>$${d.amount.toFixed(2)}</td><td>${d.carry_loss.toFixed(2)}</td><td>${d.note}</td></tr>`;
+    });
+    html+='</table>';
+  }
+  // Sets
+  html+='<h4 style="color:#8b949e;margin:12px 0 6px">Sets ('+u.sets+')</h4>';
+  html+='</div>';
+  return html;
+}
+
+function card(label,value,cls){
+  return '<div class="card"><div class="label">'+label+'</div><div class="value '+cls+'">'+value+'</div></div>';
+}
+
+load();
+setInterval(load, 10000);
+</script>
+</body>
+</html>"""
+
+
+@app.get("/admin/dashboard", response_class=HTMLResponse)
+async def admin_dashboard(key: str = ""):
+    if not ADMIN_KEY:
+        raise HTTPException(403, "admin key not configured")
+    if key != ADMIN_KEY:
+        raise HTTPException(403, "invalid admin key")
+    return DASHBOARD_HTML
+
+
 if __name__ == "__main__":
     import uvicorn
 
@@ -1443,4 +1792,5 @@ if __name__ == "__main__":
     if ADMIN_KEY:
         logger.info("admin key configured (LAPLACE_ADMIN_KEY)")
     logger.info(f"keys file: {KEYS_FILE}")
+    _billing.load()
     uvicorn.run(app, host=host, port=port)
