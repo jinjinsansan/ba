@@ -12,4 +12,6 @@ contextBridge.exposeInMainWorld('valhalla', {
   windowMinimize: () => ipcRenderer.invoke('window-minimize'),
   windowMaximize: () => ipcRenderer.invoke('window-maximize'),
   windowClose: () => ipcRenderer.invoke('window-close'),
+
+  getEnv: () => ipcRenderer.invoke('get-env'),
 });

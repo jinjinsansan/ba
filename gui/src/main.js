@@ -313,6 +313,11 @@ ipcMain.handle('send-command', (event, cmd) => {
   return { ok: true };
 });
 
+ipcMain.handle('get-env', () => {
+  const env = loadDotEnv();
+  return { stake_username: env.STAKE_USERNAME || '' };
+});
+
 ipcMain.handle('window-minimize', () => mainWindow?.minimize());
 ipcMain.handle('window-maximize', () => {
   if (mainWindow?.isMaximized()) mainWindow.unmaximize();
