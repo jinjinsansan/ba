@@ -34,12 +34,12 @@ export default function Home() {
         <div className="max-w-6xl mx-auto w-full grid md:grid-cols-2 gap-16 items-center py-24">
           {/* Left — text */}
           <div>
-            <p className="text-xs tracking-[0.3em] text-slate-600 uppercase mb-8">Automated Baccarat Intelligence</p>
+            <p className="text-xs tracking-[0.3em] text-player/60 uppercase mb-8">Automated Baccarat Intelligence</p>
             <h1 className="text-6xl md:text-8xl font-black leading-[0.9] tracking-tight mb-8">
               <span className="block text-white">THE</span>
               <span className="block text-white/20">EDGE</span>
               <span className="block text-white">IS</span>
-              <span className="block text-player">REAL.</span>
+              <span className="block text-banker">REAL.</span>
             </h1>
             <p className="text-slate-500 text-sm leading-relaxed max-w-sm mb-12">
               Pattern recognition. Automated execution. Surgical risk control.
@@ -57,12 +57,12 @@ export default function Home() {
             {/* Stats inline */}
             <div className="mt-16 grid grid-cols-3 gap-6 border-t border-white/5 pt-10">
               {[
-                { num: '52%+', label: 'Win Rate' },
-                { num: '<2s', label: 'Per Decision' },
-                { num: '24/7', label: 'Operation' },
+                { num: '52%+', label: 'Win Rate', color: 'text-player' },
+                { num: '<2s', label: 'Per Decision', color: 'text-banker' },
+                { num: '24/7', label: 'Operation', color: 'text-player' },
               ].map((s, i) => (
                 <div key={i}>
-                  <div className="text-2xl font-black text-white tabular-nums">{s.num}</div>
+                  <div className={`text-2xl font-black tabular-nums ${s.color}`}>{s.num}</div>
                   <div className="text-[10px] tracking-widest text-slate-600 uppercase mt-1">{s.label}</div>
                 </div>
               ))}
@@ -92,22 +92,22 @@ export default function Home() {
       <section id="features" className="py-32 px-6 border-t border-white/[0.04]">
         <div className="max-w-6xl mx-auto">
           <div className="grid md:grid-cols-2 gap-4 mb-4">
-            <p className="text-[10px] tracking-[0.3em] text-slate-600 uppercase">System Architecture</p>
+            <p className="text-[10px] tracking-[0.3em] text-player/60 uppercase">System Architecture</p>
           </div>
           <h2 className="text-4xl md:text-5xl font-black text-white mb-20 leading-tight">
             Built for<br /><span className="text-white/20">precision.</span>
           </h2>
           <div className="grid md:grid-cols-3 gap-px bg-white/[0.04]">
             {[
-              { num: '01', title: 'Pattern Recognition', desc: 'Proprietary Maru-Batsu strategy. Multi-layer sequence analysis across full shoe history.' },
-              { num: '02', title: 'Zero Touch Execution', desc: 'Table selection, bet sizing, result logging. Fully automated from entry to exit.' },
-              { num: '03', title: 'Risk Architecture', desc: 'Hard profit targets. Hard loss limits. Automatic session termination. No overrides.' },
-              { num: '04', title: 'Live Intelligence', desc: 'Win rate, P&L curve, set-by-set breakdown. Every hand accounted for.' },
-              { num: '05', title: 'Cloud Logic Engine', desc: 'Prediction computed server-side. Your machine handles execution only. Low latency.' },
-              { num: '06', title: 'Bound Distribution', desc: 'Each binary is cryptographically tied to your license. Redistribution is structurally impossible.' },
+              { num: '01', title: 'Pattern Recognition', desc: 'Proprietary Maru-Batsu strategy. Multi-layer sequence analysis across full shoe history.', c: 'text-player' },
+              { num: '02', title: 'Zero Touch Execution', desc: 'Table selection, bet sizing, result logging. Fully automated from entry to exit.', c: 'text-banker' },
+              { num: '03', title: 'Risk Architecture', desc: 'Hard profit targets. Hard loss limits. Automatic session termination. No overrides.', c: 'text-player' },
+              { num: '04', title: 'Live Intelligence', desc: 'Win rate, P&L curve, set-by-set breakdown. Every hand accounted for.', c: 'text-banker' },
+              { num: '05', title: 'Cloud Logic Engine', desc: 'Prediction computed server-side. Your machine handles execution only. Low latency.', c: 'text-player' },
+              { num: '06', title: 'Bound Distribution', desc: 'Each binary is cryptographically tied to your license. Redistribution is structurally impossible.', c: 'text-banker' },
             ].map((f, i) => (
               <div key={i} className="bg-bg-primary p-8 hover:bg-white/[0.02] transition-colors group">
-                <div className="text-[10px] tracking-widest text-slate-700 mb-6 font-mono">{f.num}</div>
+                <div className={`text-[10px] tracking-widest mb-6 font-mono ${f.c}`}>{f.num}</div>
                 <h3 className="text-sm font-bold text-white mb-3 tracking-wide">{f.title}</h3>
                 <p className="text-xs text-slate-500 leading-relaxed">{f.desc}</p>
               </div>
@@ -119,14 +119,14 @@ export default function Home() {
       {/* Pricing */}
       <section id="pricing" className="py-32 px-6 border-t border-white/[0.04]">
         <div className="max-w-6xl mx-auto">
-          <p className="text-[10px] tracking-[0.3em] text-slate-600 uppercase mb-4">Access</p>
+          <p className="text-[10px] tracking-[0.3em] text-player/60 uppercase mb-4">Access</p>
           <h2 className="text-4xl md:text-5xl font-black text-white mb-20">One license.<br /><span className="text-white/20">No subscription.</span></h2>
           <div className="max-w-lg">
             <div className="border border-white/10 p-10 relative">
               <div className="absolute top-0 left-0 w-8 h-px bg-player" />
               <div className="absolute top-0 left-0 w-px h-8 bg-player" />
-              <div className="absolute bottom-0 right-0 w-8 h-px bg-player" />
-              <div className="absolute bottom-0 right-0 w-px h-8 bg-player" />
+              <div className="absolute bottom-0 right-0 w-8 h-px bg-banker" />
+              <div className="absolute bottom-0 right-0 w-px h-8 bg-banker" />
 
               <p className="text-[10px] tracking-widest text-slate-600 uppercase mb-4">LAPLACE License</p>
               <div className="text-5xl font-black text-white mb-1">$2,000</div>
@@ -161,17 +161,17 @@ export default function Home() {
       {/* How It Works */}
       <section className="py-32 px-6 border-t border-white/[0.04]">
         <div className="max-w-6xl mx-auto">
-          <p className="text-[10px] tracking-[0.3em] text-slate-600 uppercase mb-4">Deployment</p>
+          <p className="text-[10px] tracking-[0.3em] text-banker/60 uppercase mb-4">Deployment</p>
           <h2 className="text-4xl md:text-5xl font-black text-white mb-20">Four steps.<br /><span className="text-white/20">Then nothing.</span></h2>
           <div className="grid md:grid-cols-4 gap-px bg-white/[0.04]">
             {[
-              { step: '01', title: 'Pay', desc: 'Purchase license with USDT. TRC-20 or ERC-20. Confirmed within 30 minutes.' },
-              { step: '02', title: 'Download', desc: 'Receive your personalized LAPLACE.exe. Bound to your license key.' },
-              { step: '03', title: 'Connect', desc: 'Sign into Stake once inside the built-in browser. Credentials stay local.' },
-              { step: '04', title: 'Run', desc: 'Press START. The system operates autonomously. No further input required.' },
+              { step: '01', title: 'Pay', desc: 'Purchase license with USDT. TRC-20 or ERC-20. Confirmed within 30 minutes.', c: 'text-player' },
+              { step: '02', title: 'Download', desc: 'Receive your personalized LAPLACE.exe. Bound to your license key.', c: 'text-banker' },
+              { step: '03', title: 'Connect', desc: 'Sign into Stake once inside the built-in browser. Credentials stay local.', c: 'text-player' },
+              { step: '04', title: 'Run', desc: 'Press START. The system operates autonomously. No further input required.', c: 'text-banker' },
             ].map((s, i) => (
               <div key={i} className="bg-bg-primary p-8">
-                <div className="text-[10px] tracking-widest text-slate-700 font-mono mb-6">{s.step}</div>
+                <div className={`text-[10px] tracking-widest font-mono mb-6 ${s.c}`}>{s.step}</div>
                 <h4 className="text-sm font-bold text-white mb-3">{s.title}</h4>
                 <p className="text-xs text-slate-500 leading-relaxed">{s.desc}</p>
               </div>
@@ -184,7 +184,7 @@ export default function Home() {
       <section id="faq" className="py-32 px-6 border-t border-white/[0.04]">
         <div className="max-w-6xl mx-auto grid md:grid-cols-2 gap-20">
           <div>
-            <p className="text-[10px] tracking-[0.3em] text-slate-600 uppercase mb-4">FAQ</p>
+            <p className="text-[10px] tracking-[0.3em] text-player/60 uppercase mb-4">FAQ</p>
             <h2 className="text-4xl md:text-5xl font-black text-white leading-tight">Questions<br /><span className="text-white/20">answered.</span></h2>
           </div>
           <div className="space-y-0">
@@ -198,7 +198,7 @@ export default function Home() {
               <details key={i} className="group border-b border-white/[0.04] py-6">
                 <summary className="cursor-pointer text-sm font-semibold text-white flex justify-between items-center gap-4 list-none">
                   {f.q}
-                  <span className="text-slate-700 group-open:text-white transition-colors flex-shrink-0 font-light text-lg leading-none">+</span>
+                  <span className="text-slate-700 group-open:text-player transition-colors flex-shrink-0 font-light text-lg leading-none">+</span>
                 </summary>
                 <p className="mt-4 text-xs text-slate-500 leading-relaxed">{f.a}</p>
               </details>
@@ -211,7 +211,7 @@ export default function Home() {
       <section className="py-32 px-6 border-t border-white/[0.04]">
         <div className="max-w-6xl mx-auto flex flex-col md:flex-row items-start md:items-end justify-between gap-12">
           <div>
-            <p className="text-[10px] tracking-[0.3em] text-slate-600 uppercase mb-6">Start Operating</p>
+            <p className="text-[10px] tracking-[0.3em] text-banker/60 uppercase mb-6">Start Operating</p>
             <h2 className="text-5xl md:text-7xl font-black text-white leading-none">
               Ready<br />when<br /><span className="text-white/20">you are.</span>
             </h2>
