@@ -1,4 +1,5 @@
 import Link from 'next/link'
+import Image from 'next/image'
 
 function Card({ suit, value, color }: { suit: string; value: string; color: string }) {
   return (
@@ -37,11 +38,16 @@ export default function Home() {
           <div className="absolute bottom-1/4 right-1/4 w-96 h-96 bg-banker/5 rounded-full blur-3xl" />
         </div>
         <div className="relative z-10">
-          <div className="flex gap-3 justify-center mb-8">
-            <Card suit="♠" value="A" color="blue" />
-            <Card suit="♥" value="K" color="red" />
-            <Card suit="♦" value="9" color="red" />
-            <Card suit="♣" value="7" color="blue" />
+          <div className="relative mx-auto mb-8 w-64 md:w-80">
+            <Image
+              src="/foodblack.jpg"
+              alt="LAPLACE"
+              width={400}
+              height={500}
+              className="w-full rounded-2xl object-cover"
+              priority
+            />
+            <div className="absolute inset-x-0 bottom-0 h-24 bg-gradient-to-t from-bg-primary to-transparent rounded-b-2xl" />
           </div>
           <h1 className="text-5xl md:text-7xl font-black mb-6 leading-tight">
             <span className="text-player">Predict.</span>{' '}
