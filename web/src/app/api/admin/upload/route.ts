@@ -2,6 +2,9 @@ import { createAdminClient } from '@/lib/supabase-admin'
 import { createClient as createServerSupabase } from '@/lib/supabase-server'
 import { NextRequest, NextResponse } from 'next/server'
 
+export const maxDuration = 60
+export const dynamic = 'force-dynamic'
+
 export async function POST(req: NextRequest) {
   const serverSupabase = await createServerSupabase()
   const { data: { user } } = await serverSupabase.auth.getUser()
@@ -26,11 +29,13 @@ export async function POST(req: NextRequest) {
 
   if (uploadError) return NextResponse.json({ error: uploadError.message }, { status: 500 })
 
-  await admin.from('deliverables').upsert({
+  // delete existing then insert (avoids missing UNIQUE constraint issue)
+  await admin.from('deliverables').delete().eq('user_id', userId)
+  await admin.from('deliverables').insert({
     user_id: userId,
     file_path: filePath,
     version,
-  }, { onConflict: 'user_id' })
+  })
 
   return NextResponse.json({ ok: true, path: filePath })
 }

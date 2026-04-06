@@ -34,6 +34,7 @@ export default function OrderActions({ type, id, userId, status, amount }: {
     formData.append('userId', userId)
     formData.append('version', '1.0')
     const res = await fetch('/api/admin/upload', { method: 'POST', body: formData })
+    const data = await res.json().catch(() => ({}))
     if (res.ok) {
       await fetch('/api/admin/confirm', {
         method: 'POST',
@@ -41,7 +42,7 @@ export default function OrderActions({ type, id, userId, status, amount }: {
         body: JSON.stringify({ type: 'deliver', id, userId }),
       })
       router.refresh()
-    } else alert('Upload failed')
+    } else alert('Upload failed: ' + (data.error || res.status))
     setLoading(false)
   }
 
