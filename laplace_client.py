@@ -444,13 +444,29 @@ class RemoteLaplaceSession:
         )
 
         if not self.executor.place_bet(side, bet_amount):
-            return self._exit("place_bet failed")
-
-        # 部分BETが発生した可能性 → 実際にテーブルに置かれた額で上書き
-        actual_total = self.executor._get_total_bet()
-        if actual_total > 0 and abs(actual_total - bet_amount) > 0.5:
-            logger.warning(f"部分BET検出: 計画${bet_amount:.0f} → 実際${actual_total:.2f}")
-            bet_amount = actual_total
+            actual_total = self.executor._get_total_bet()
+            if actual_total > 0:
+                # 部分BET: 置かれた額で続行
+                logger.warning(f"部分BET検出: 計画${bet_amount:.0f} → 実際${actual_total:.2f}")
+                bet_amount = actual_total
+            else:
+                # BET完全失敗 — 観戦モードでターンを記録してシーケンス維持
+                logger.warning("BET完全失敗 — 観戦モードで結果を記録してシーケンス維持")
+                result_info = self.executor.wait_for_result(timeout=90, bet_amount=0)
+                if result_info and result_info.get("result") not in (None, "unknown"):
+                    obs_result = result_info["result"]
+                    try:
+                        self.client.submit_result(self.user_id, obs_result)
+                    except Exception as e:
+                        logger.error(f"観戦結果送信失敗: {e}")
+                return {"action": "bet", "result": None, "won": None, "bet_amount": 0,
+                        "completed_set": None, "should_reset": self.should_reset()}
+        else:
+            # 部分BETが発生した可能性 → 実際にテーブルに置かれた額で上書き
+            actual_total = self.executor._get_total_bet()
+            if actual_total > 0 and abs(actual_total - bet_amount) > 0.5:
+                logger.warning(f"部分BET検出: 計画${bet_amount:.0f} → 実際${actual_total:.2f}")
+                bet_amount = actual_total
 
         # wait for result
         result_info = self.executor.wait_for_result(timeout=90, bet_amount=bet_amount)
