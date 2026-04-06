@@ -11,39 +11,50 @@ export default async function DashboardPage() {
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) redirect('/login')
 
-  const { data: profile } = await supabase.from('profiles').select('*').eq('id', user.id).single()
-  const { data: billing } = await supabase.from('billing').select('*').eq('user_id', user.id).single()
-  const { data: orders } = await supabase.from('orders').select('*').eq('user_id', user.id).order('created_at', { ascending: false })
-  const { data: charges } = await supabase.from('charges').select('*').eq('user_id', user.id).order('created_at', { ascending: false })
-  const { data: deductions } = await supabase.from('deductions').select('*').eq('user_id', user.id).order('date', { ascending: false }).limit(30)
-  const { data: deliverables } = await supabase.from('deliverables').select('*').eq('user_id', user.id).order('created_at', { ascending: false }).limit(1)
-  const { data: commissions } = await supabase.from('referral_commissions').select('*').eq('referrer_id', user.id).order('created_at', { ascending: false })
-  const { data: withdrawals } = await supabase.from('referral_withdrawals').select('*').eq('user_id', user.id).order('created_at', { ascending: false })
-
-  // 紹介したユーザー一覧と各自のチャージ合計を取得
   const admin = createAdminClient()
+
+  // 全クエリを並列実行
+  const [
+    { data: profile },
+    { data: billing },
+    { data: orders },
+    { data: charges },
+    { data: deductions },
+    { data: deliverables },
+    { data: commissions },
+    { data: withdrawals },
+  ] = await Promise.all([
+    supabase.from('profiles').select('*').eq('id', user.id).single(),
+    supabase.from('billing').select('*').eq('user_id', user.id).single(),
+    supabase.from('orders').select('*').eq('user_id', user.id).order('created_at', { ascending: false }),
+    supabase.from('charges').select('*').eq('user_id', user.id).order('created_at', { ascending: false }),
+    supabase.from('deductions').select('*').eq('user_id', user.id).order('date', { ascending: false }).limit(30),
+    supabase.from('deliverables').select('*').eq('user_id', user.id).order('created_at', { ascending: false }).limit(1),
+    supabase.from('referral_commissions').select('*').eq('referrer_id', user.id),
+    supabase.from('referral_withdrawals').select('*').eq('user_id', user.id).order('created_at', { ascending: false }),
+  ])
+
   const referralCode = profile?.referral_code || ''
   const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || 'https://bafather.uk'
   const referralUrl = `${siteUrl}/signup?ref=${referralCode}`
 
+  // 紹介ユーザーと全チャージを一括取得 (N+1解消)
   const { data: referredProfiles } = await admin
     .from('profiles')
     .select('id, email, created_at')
     .eq('referred_by', referralCode)
 
-  // 各紹介ユーザーの確認済みチャージ合計を集計
-  const referredWithCharges = await Promise.all(
-    (referredProfiles || []).map(async (p) => {
-      const { data: ch } = await admin
-        .from('charges')
-        .select('amount')
-        .eq('user_id', p.id)
-        .eq('status', 'confirmed')
-      const totalCharged = ch?.reduce((s, c) => s + Number(c.amount), 0) ?? 0
-      const commission = totalCharged * 0.05
-      return { ...p, total_charged: totalCharged, commission }
-    })
-  )
+  const referredIds = (referredProfiles || []).map(p => p.id)
+  const { data: allReferredCharges } = referredIds.length > 0
+    ? await admin.from('charges').select('user_id, amount').in('user_id', referredIds).eq('status', 'confirmed')
+    : { data: [] }
+
+  const referredWithCharges = (referredProfiles || []).map(p => {
+    const totalCharged = (allReferredCharges || [])
+      .filter(c => c.user_id === p.id)
+      .reduce((s, c) => s + Number(c.amount), 0)
+    return { ...p, total_charged: totalCharged, commission: totalCharged * 0.05 }
+  })
 
   const totalEarned = commissions?.reduce((s, c) => s + Number(c.commission_amount), 0) ?? 0
   const totalWithdrawn = withdrawals?.filter(w => ['pending', 'approved'].includes(w.status))

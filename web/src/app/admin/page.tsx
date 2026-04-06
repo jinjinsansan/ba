@@ -14,11 +14,19 @@ export default async function AdminPage() {
   if (!profile?.is_admin) redirect('/dashboard')
 
   const admin = createAdminClient()
-  const { count: userCount } = await admin.from('profiles').select('*', { count: 'exact', head: true })
-  const { count: pendingOrders } = await admin.from('orders').select('*', { count: 'exact', head: true }).eq('status', 'pending')
-  const { count: pendingCharges } = await admin.from('charges').select('*', { count: 'exact', head: true }).eq('status', 'pending')
-  const { count: openTickets } = await admin.from('support_tickets').select('*', { count: 'exact', head: true }).eq('status', 'open')
-  const { count: pendingWithdrawals } = await admin.from('referral_withdrawals').select('*', { count: 'exact', head: true }).eq('status', 'pending')
+  const [
+    { count: userCount },
+    { count: pendingOrders },
+    { count: pendingCharges },
+    { count: openTickets },
+    { count: pendingWithdrawals },
+  ] = await Promise.all([
+    admin.from('profiles').select('*', { count: 'exact', head: true }),
+    admin.from('orders').select('*', { count: 'exact', head: true }).eq('status', 'pending'),
+    admin.from('charges').select('*', { count: 'exact', head: true }).eq('status', 'pending'),
+    admin.from('support_tickets').select('*', { count: 'exact', head: true }).eq('status', 'open'),
+    admin.from('referral_withdrawals').select('*', { count: 'exact', head: true }).eq('status', 'pending'),
+  ])
 
   return (
     <div className="min-h-screen">
