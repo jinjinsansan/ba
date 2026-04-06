@@ -1,0 +1,111 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>LAPLACE - Purchase</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/css/style.css">
+</head>
+<body>
+
+<nav class="navbar">
+  <a href="/" class="logo">LAPLACE</a>
+  <ul class="nav-links">
+    <li><a href="/">Home</a></li>
+  </ul>
+</nav>
+
+<div class="purchase-container" id="app">
+  <!-- Step 1: Plan Selection -->
+  <div id="step-plan">
+    <h2 style="margin-bottom:6px">Choose Your Plan</h2>
+    <p style="color:var(--text-secondary);margin-bottom:20px;font-size:0.92em">License fee is deducted from your first charge</p>
+
+    <div class="plan-selector">
+      <div class="plan-btn" data-plan="starter" data-price="1000">
+        <div class="plan-name">Starter</div>
+        <div class="plan-price">$1,000</div>
+      </div>
+      <div class="plan-btn" data-plan="pro" data-price="3000">
+        <div class="plan-name">Professional</div>
+        <div class="plan-price">$3,000</div>
+      </div>
+    </div>
+
+    <div class="form-group">
+      <label>Charge Amount (USDT)</label>
+      <input type="number" id="charge-amount" min="1000" step="100" placeholder="e.g. 3000">
+      <p style="color:var(--text-muted);font-size:0.8em;margin-top:4px" id="balance-preview"></p>
+    </div>
+
+    <div class="form-group">
+      <label>Your Name / Username</label>
+      <input type="text" id="user-name" placeholder="Used for your account">
+    </div>
+
+    <div class="form-group">
+      <label>Contact (Telegram / Email)</label>
+      <input type="text" id="user-contact" placeholder="For delivery and support">
+    </div>
+
+    <button class="btn-primary" style="width:100%;margin-top:12px" id="btn-create-order">
+      Proceed to Payment
+    </button>
+  </div>
+
+  <!-- Step 2: Payment -->
+  <div id="step-payment" style="display:none">
+    <h2 style="margin-bottom:6px">Send USDT</h2>
+    <p style="color:var(--text-secondary);margin-bottom:20px;font-size:0.92em">
+      Send exactly <strong id="pay-amount" style="color:var(--accent)"></strong> USDT to the address below
+    </p>
+
+    <div class="wallet-display">
+      <div class="network-tabs">
+        <div class="network-tab active" data-net="trc20">TRC-20 (TRON)</div>
+        <div class="network-tab" data-net="erc20">ERC-20 (ETH)</div>
+      </div>
+      <p style="font-size:0.82em;color:var(--text-muted);margin-bottom:6px" id="net-label">TRON Network (Low fees)</p>
+      <div class="wallet-address" id="wallet-addr" title="Click to copy"></div>
+      <button class="copy-btn" id="btn-copy">Copy Address</button>
+    </div>
+
+    <div style="background:var(--bg-card);border:1px solid var(--border);border-radius:8px;padding:14px;margin-bottom:16px">
+      <p style="font-size:0.85em;color:var(--text-secondary)">
+        <strong>Order ID:</strong> <span id="order-id" style="font-family:var(--mono);color:var(--accent)"></span>
+      </p>
+      <p style="font-size:0.85em;color:var(--text-secondary);margin-top:4px">
+        <strong>Plan:</strong> <span id="order-plan"></span> &middot;
+        <strong>Charge:</strong> $<span id="order-charge"></span>
+      </p>
+    </div>
+
+    <button class="btn-primary" style="width:100%" id="btn-sent">
+      I've Sent the Payment
+    </button>
+    <p style="color:var(--text-muted);font-size:0.8em;text-align:center;margin-top:10px">
+      Payments are confirmed manually, usually within 30 minutes.
+    </p>
+  </div>
+
+  <!-- Step 3: Waiting / Confirmed -->
+  <div id="step-status" style="display:none">
+    <div class="order-status" id="order-status-box">
+      <div class="status-icon" id="status-icon">&#x23F3;</div>
+      <div class="status-text" id="status-text">Waiting for Confirmation</div>
+      <div class="status-sub" id="status-sub">
+        We're verifying your payment. This usually takes less than 30 minutes.
+        You'll see this page update automatically.
+      </div>
+    </div>
+    <p style="color:var(--text-muted);font-size:0.82em;text-align:center;margin-top:16px">
+      Order: <span id="status-order-id" style="font-family:var(--mono)"></span>
+    </p>
+  </div>
+</div>
+
+<script src="/js/purchase.js"></script>
+</body>
+</html>

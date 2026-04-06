@@ -1434,11 +1434,161 @@ async def list_sessions(ctx: UserContext = Depends(verify_api_key)):
         }
 
 
-# ======== Billing ========
+# ======== Billing (loaded before Orders so confirm_order can use it) ========
 
 from billing import BillingManager
 
 _billing = BillingManager()
+
+
+# ======== Orders (Purchase Flow) ========
+
+ORDERS_FILE = Path(os.getenv("LAPLACE_ORDERS_FILE", str(STATE_DIR.parent / "orders.json")))
+USDT_WALLET_TRC20 = os.getenv("LAPLACE_USDT_TRC20", "").strip()
+USDT_WALLET_ERC20 = os.getenv("LAPLACE_USDT_ERC20", "").strip()
+
+_orders_lock = threading.RLock()
+_orders: dict[str, dict] = {}
+
+
+def _load_orders() -> None:
+    with _orders_lock:
+        _orders.clear()
+        if ORDERS_FILE.exists():
+            try:
+                data = json.loads(ORDERS_FILE.read_text(encoding="utf-8"))
+                _orders.update(data.get("orders", {}))
+            except Exception as e:
+                logger.error(f"orders load error: {e}")
+
+
+def _save_orders() -> None:
+    with _orders_lock:
+        ORDERS_FILE.parent.mkdir(parents=True, exist_ok=True)
+        tmp = ORDERS_FILE.with_suffix(".tmp")
+        tmp.write_text(json.dumps({"orders": _orders}, indent=2, ensure_ascii=False), encoding="utf-8")
+        tmp.replace(ORDERS_FILE)
+
+
+_load_orders()
+
+
+@app.get("/api/config")
+async def public_config():
+    """Public endpoint: returns wallet addresses for purchase page."""
+    return {
+        "wallets": {
+            "trc20": USDT_WALLET_TRC20,
+            "erc20": USDT_WALLET_ERC20,
+        },
+        "plans": {
+            "starter": {"name": "Starter", "price": 1000},
+            "pro": {"name": "Professional", "price": 3000},
+        },
+    }
+
+
+@app.post("/api/orders")
+async def create_order(request: Request):
+    body = await request.json()
+    plan = body.get("plan", "").strip()
+    if plan not in ("starter", "pro"):
+        raise HTTPException(400, "Invalid plan")
+    amount = float(body.get("amount", 0))
+    plan_prices = {"starter": 1000, "pro": 3000}
+    if amount < plan_prices[plan]:
+        raise HTTPException(400, f"Minimum charge for {plan}: ${plan_prices[plan]}")
+    name = body.get("name", "").strip()
+    if not name:
+        raise HTTPException(400, "name required")
+    contact = body.get("contact", "").strip()
+
+    order_id = "ORD-" + secrets.token_hex(6).upper()
+    order = {
+        "order_id": order_id,
+        "plan": plan,
+        "amount": amount,
+        "name": name,
+        "contact": contact,
+        "status": "pending",  # pending -> sent -> confirmed
+        "created_at": datetime.utcnow().isoformat() + "Z",
+        "confirmed_at": None,
+    }
+    with _orders_lock:
+        _orders[order_id] = order
+    _save_orders()
+    logger.info(f"[order] NEW {order_id}: {plan} ${amount} by {name}")
+    return order
+
+
+@app.get("/api/orders/{order_id}")
+async def get_order(order_id: str):
+    with _orders_lock:
+        order = _orders.get(order_id)
+    if not order:
+        raise HTTPException(404, "Order not found")
+    return {"order_id": order["order_id"], "status": order["status"],
+            "plan": order["plan"], "amount": order["amount"],
+            "contact": order.get("contact", ""), "name": order.get("name", "")}
+
+
+@app.post("/api/orders/{order_id}/sent")
+async def mark_order_sent(order_id: str):
+    with _orders_lock:
+        order = _orders.get(order_id)
+        if not order:
+            raise HTTPException(404, "Order not found")
+        if order["status"] == "pending":
+            order["status"] = "sent"
+    _save_orders()
+    logger.info(f"[order] SENT {order_id}")
+    return {"ok": True}
+
+
+@app.get("/api/admin/orders")
+async def list_orders(ctx: UserContext = Depends(verify_api_key)):
+    require_admin(ctx)
+    with _orders_lock:
+        return {"orders": sorted(_orders.values(), key=lambda o: o["created_at"], reverse=True)}
+
+
+@app.post("/api/admin/orders/{order_id}/confirm")
+async def confirm_order(
+    order_id: str,
+    ctx: UserContext = Depends(verify_api_key),
+):
+    require_admin(ctx)
+    with _orders_lock:
+        order = _orders.get(order_id)
+        if not order:
+            raise HTTPException(404, "Order not found")
+        if order["status"] == "confirmed":
+            raise HTTPException(400, "Already confirmed")
+        order["status"] = "confirmed"
+        order["confirmed_at"] = datetime.utcnow().isoformat() + "Z"
+    _save_orders()
+
+    # Auto-register billing if not exists
+    plan_prices = {"starter": 1000, "pro": 3000}
+    user_id = order["name"].lower().replace(" ", "_")
+    try:
+        _billing.register(
+            user_id=user_id,
+            bot_price=float(plan_prices.get(order["plan"], 1000)),
+            profit_share_rate=0.20,
+        )
+    except ValueError:
+        pass  # already registered
+    try:
+        _billing.charge(user_id, order["amount"], note=f"Order {order_id}")
+    except ValueError:
+        pass
+
+    logger.info(f"[order] CONFIRMED {order_id}: {user_id} charged ${order['amount']}")
+    return {"ok": True, "user_id": user_id}
+
+
+# ======== Billing Endpoints ========
 
 
 @app.post("/api/admin/billing/register")
@@ -1596,185 +1746,30 @@ async def admin_stats(ctx: UserContext = Depends(verify_api_key)):
     return {"users": users, "timestamp": datetime.utcnow().isoformat() + "Z"}
 
 
-# ======== Admin Dashboard HTML ========
+# ======== Static File Serving (Landing / Purchase / Admin) ========
 
-from fastapi.responses import HTMLResponse
+from fastapi.staticfiles import StaticFiles
+from fastapi.responses import FileResponse
 
-DASHBOARD_HTML = """<!DOCTYPE html>
-<html lang="ja">
-<head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width,initial-scale=1">
-<title>LAPLACE Admin</title>
-<style>
-*{margin:0;padding:0;box-sizing:border-box}
-body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:#0d1117;color:#c9d1d9;padding:16px}
-h1{color:#58a6ff;margin-bottom:8px;font-size:1.4em}
-.meta{color:#8b949e;font-size:0.85em;margin-bottom:16px}
-.cards{display:flex;gap:12px;margin-bottom:20px;flex-wrap:wrap}
-.card{background:#161b22;border:1px solid #30363d;border-radius:8px;padding:14px 18px;min-width:140px}
-.card .label{color:#8b949e;font-size:0.75em;text-transform:uppercase}
-.card .value{font-size:1.6em;font-weight:700;margin-top:2px}
-.card .value.pos{color:#3fb950}
-.card .value.neg{color:#f85149}
-.card .value.neutral{color:#58a6ff}
-table{width:100%;border-collapse:collapse;margin-top:12px;font-size:0.88em}
-th{background:#161b22;color:#58a6ff;text-align:left;padding:8px 10px;border-bottom:2px solid #30363d;position:sticky;top:0}
-td{padding:7px 10px;border-bottom:1px solid #21262d}
-tr:hover td{background:#161b22}
-.status{display:inline-block;width:8px;height:8px;border-radius:50%;margin-right:6px}
-.status.active{background:#3fb950}
-.status.suspended{background:#f85149}
-.status.grace{background:#d29922}
-.status.free{background:#58a6ff}
-.pos{color:#3fb950}.neg{color:#f85149}
-.detail{display:none;background:#0d1117;padding:12px}
-.detail table{font-size:0.82em}
-.detail th{background:#0d1117}
-.badge{display:inline-block;padding:2px 8px;border-radius:10px;font-size:0.75em;font-weight:600}
-.badge.free{background:#1f6feb33;color:#58a6ff}
-.badge.active{background:#23863533;color:#3fb950}
-.badge.suspended{background:#da363333;color:#f85149}
-.badge.grace{background:#9e6a0333;color:#d29922}
-button{background:#21262d;color:#c9d1d9;border:1px solid #30363d;padding:4px 10px;border-radius:4px;cursor:pointer;font-size:0.8em}
-button:hover{background:#30363d}
-.refresh{position:fixed;top:12px;right:16px;font-size:0.8em;color:#8b949e}
-</style>
-</head>
-<body>
-<h1>LAPLACE Admin Dashboard</h1>
-<div class="meta" id="meta">Loading...</div>
-<div class="cards" id="summary"></div>
-<table id="usertable">
-<thead><tr>
-<th>User</th><th>Status</th><th>Bets</th><th>Win%</th>
-<th>Profit ($)</th><th>Balance ($)</th><th>Carry Loss</th>
-<th>Max Lose Streak</th><th>Sets</th><th>Updated</th>
-</tr></thead>
-<tbody id="tbody"></tbody>
-</table>
-<div class="refresh" id="refresh"></div>
-<script>
-const KEY = new URLSearchParams(location.search).get('key') || '';
-const BASE = location.origin;
-const H = {'Authorization': 'Bearer ' + KEY, 'Content-Type': 'application/json'};
+WWW_DIR = Path(os.getenv("LAPLACE_WWW_DIR", "/opt/laplace/www"))
+if WWW_DIR.is_dir():
+    app.mount("/css", StaticFiles(directory=str(WWW_DIR / "css")), name="css")
+    app.mount("/js", StaticFiles(directory=str(WWW_DIR / "js")), name="js")
+    app.mount("/img", StaticFiles(directory=str(WWW_DIR / "img")), name="img")
 
-function fmt$(v){return (v>=0?'+':'')+v.toFixed(2)}
-function fmtTime(iso){
-  if(!iso) return '-';
-  const d=new Date(iso);
-  const now=new Date();
-  const diff=Math.floor((now-d)/1000);
-  if(diff<60) return diff+'s ago';
-  if(diff<3600) return Math.floor(diff/60)+'m ago';
-  if(diff<86400) return Math.floor(diff/3600)+'h ago';
-  return d.toLocaleDateString('ja-JP');
-}
+    @app.get("/")
+    async def landing_page():
+        return FileResponse(str(WWW_DIR / "index.html"))
 
-async function load(){
-  try{
-    const r=await fetch(BASE+'/api/admin/stats',{headers:H});
-    if(!r.ok){document.getElementById('meta').textContent='Auth failed ('+r.status+')';return;}
-    const data=await r.json();
-    render(data);
-    document.getElementById('refresh').textContent='Last: '+new Date().toLocaleTimeString('ja-JP');
-  }catch(e){document.getElementById('meta').textContent='Error: '+e;}
-}
+    @app.get("/purchase.html")
+    async def purchase_page():
+        return FileResponse(str(WWW_DIR / "purchase.html"))
 
-function render(data){
-  const users=data.users||[];
-  let totalProfit=0, totalBets=0, active=0;
-  users.forEach(u=>{
-    totalProfit+=u.cumulative_profit_money;
-    totalBets+=u.total_bets;
-    const b=u.billing;
-    if(b && (b.status==='active'||b.status==='free')) active++;
-  });
-  document.getElementById('meta').textContent=
-    users.length+' users | '+data.timestamp;
-  document.getElementById('summary').innerHTML=
-    card('Total P&L','$'+fmt$(totalProfit),totalProfit>=0?'pos':'neg')+
-    card('Total Bets',totalBets,'neutral')+
-    card('Active',active+' / '+users.length,'neutral');
-
-  const tb=document.getElementById('tbody');
-  tb.innerHTML='';
-  users.forEach(u=>{
-    const b=u.billing||{};
-    const st=b.status||'active';
-    const tr=document.createElement('tr');
-    tr.style.cursor='pointer';
-    tr.innerHTML=`
-      <td><strong>${u.user_id}</strong></td>
-      <td><span class="status ${st}"></span><span class="badge ${st}">${st.toUpperCase()}</span></td>
-      <td>${u.total_bets}</td>
-      <td>${u.win_rate}%</td>
-      <td class="${u.cumulative_profit_money>=0?'pos':'neg'}">$${fmt$(u.cumulative_profit_money)}</td>
-      <td class="${(b.balance||0)>=0?'pos':'neg'}">$${(b.balance||0).toFixed(2)}</td>
-      <td>${(b.carry_loss||0).toFixed(2)}</td>
-      <td>${u.max_loss_streak}</td>
-      <td>${u.sets}</td>
-      <td>${fmtTime(u.updated_at)}</td>`;
-    tr.onclick=()=>{
-      const next=tr.nextElementSibling;
-      if(next && next.classList.contains('detail-row')){next.remove();return;}
-      const dr=document.createElement('tr');
-      dr.className='detail-row';
-      dr.innerHTML='<td colspan="10">'+renderDetail(u)+'</td>';
-      tr.after(dr);
-    };
-    tb.appendChild(tr);
-  });
-}
-
-function renderDetail(u){
-  const b=u.billing||{};
-  let html='<div class="detail" style="display:block">';
-  html+='<h3 style="color:#58a6ff;margin-bottom:8px">'+u.user_id+' Detail</h3>';
-  html+='<div class="cards">';
-  html+=card('Bot Price','$'+(b.bot_price||0).toFixed(0),'neutral');
-  html+=card('Total Charged','$'+(b.total_charged||0).toFixed(2),'neutral');
-  html+=card('Total Deducted','$'+(b.total_deducted||0).toFixed(2),'neg');
-  html+=card('Share Rate',(b.profit_share_rate||0.2)*100+'%','neutral');
-  html+=card('Chip Base','$'+u.chip_base,'neutral');
-  html+='</div>';
-  if(u.api_key){
-    html+='<p style="color:#8b949e;font-size:0.82em">API Key: '+u.api_key.prefix+' | Rate: '+u.api_key.rate_limit_per_hour+'/h | Enabled: '+u.api_key.enabled+'</p>';
-  }
-  // Deduction history
-  const deds=b.deductions||[];
-  if(deds.length){
-    html+='<h4 style="color:#8b949e;margin:12px 0 6px">Daily Settlements (recent 30)</h4>';
-    html+='<table><tr><th>Date</th><th>Daily P&L</th><th>Fee</th><th>Carry Loss</th><th>Note</th></tr>';
-    deds.slice(-30).reverse().forEach(d=>{
-      html+=`<tr><td>${d.date}</td><td class="${d.daily_profit>=0?'pos':'neg'}">$${d.daily_profit.toFixed(2)}</td><td>$${d.amount.toFixed(2)}</td><td>${d.carry_loss.toFixed(2)}</td><td>${d.note}</td></tr>`;
-    });
-    html+='</table>';
-  }
-  // Sets
-  html+='<h4 style="color:#8b949e;margin:12px 0 6px">Sets ('+u.sets+')</h4>';
-  html+='</div>';
-  return html;
-}
-
-function card(label,value,cls){
-  return '<div class="card"><div class="label">'+label+'</div><div class="value '+cls+'">'+value+'</div></div>';
-}
-
-load();
-setInterval(load, 10000);
-</script>
-</body>
-</html>"""
-
-
-@app.get("/admin/dashboard", response_class=HTMLResponse)
-async def admin_dashboard(key: str = ""):
-    if not ADMIN_KEY:
-        raise HTTPException(403, "admin key not configured")
-    if key != ADMIN_KEY:
-        raise HTTPException(403, "invalid admin key")
-    return DASHBOARD_HTML
+    @app.get("/admin.html")
+    async def admin_page():
+        return FileResponse(str(WWW_DIR / "admin.html"))
+else:
+    logger.warning(f"WWW_DIR {WWW_DIR} not found, static pages disabled")
 
 
 if __name__ == "__main__":

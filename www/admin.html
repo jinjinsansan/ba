@@ -1,0 +1,45 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>LAPLACE - Admin</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/css/style.css">
+</head>
+<body>
+
+<nav class="navbar">
+  <div class="logo">LAPLACE <span style="font-size:0.55em;color:var(--text-muted);font-weight:400">ADMIN</span></div>
+  <button class="nav-cta" id="btn-logout" style="display:none">Logout</button>
+</nav>
+
+<!-- Login -->
+<div class="admin-login" id="login-view">
+  <h2>Admin Access</h2>
+  <input type="password" id="admin-key" placeholder="Enter admin key">
+  <button class="btn-primary" id="btn-login">Login</button>
+</div>
+
+<!-- Dashboard -->
+<div class="admin-container" id="dashboard-view" style="display:none">
+  <div class="admin-header">
+    <h2>Dashboard</h2>
+    <span style="color:var(--text-muted);font-size:0.82em" id="last-refresh"></span>
+  </div>
+
+  <div class="metric-cards" id="metrics"></div>
+
+  <div class="admin-tabs">
+    <div class="admin-tab active" data-tab="users">Users</div>
+    <div class="admin-tab" data-tab="orders">Orders</div>
+    <div class="admin-tab" data-tab="billing">Billing</div>
+  </div>
+
+  <div class="admin-panel" id="panel-content"></div>
+</div>
+
+<script src="/js/admin.js"></script>
+</body>
+</html>
