@@ -176,7 +176,30 @@ CREATE POLICY "Admins can do anything on deliverables" ON deliverables FOR ALL U
   EXISTS (SELECT 1 FROM profiles WHERE id = auth.uid() AND is_admin = TRUE)
 );
 
--- 9. Support tickets
+-- 9. Referral withdrawals
+CREATE TABLE referral_withdrawals (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id UUID NOT NULL REFERENCES profiles(id) ON DELETE CASCADE,
+  amount NUMERIC(12,2) NOT NULL,
+  wallet_address TEXT NOT NULL,
+  network TEXT NOT NULL CHECK (network IN ('TRC-20', 'ERC-20')),
+  status TEXT DEFAULT 'pending' CHECK (status IN ('pending', 'approved', 'rejected')),
+  admin_note TEXT,
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  processed_at TIMESTAMPTZ
+);
+
+ALTER TABLE referral_withdrawals ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "Users can view own withdrawals" ON referral_withdrawals FOR SELECT USING (auth.uid() = user_id);
+CREATE POLICY "Users can insert own withdrawals" ON referral_withdrawals FOR INSERT WITH CHECK (auth.uid() = user_id);
+CREATE POLICY "Admins can do anything on withdrawals" ON referral_withdrawals FOR ALL USING (
+  EXISTS (SELECT 1 FROM profiles WHERE id = auth.uid() AND is_admin = TRUE)
+);
+
+-- Migration (既存DBに追加する場合):
+-- CREATE TABLE IF NOT EXISTS referral_withdrawals ( ... );
+
+-- 10. Support tickets
 CREATE TABLE support_tickets (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   user_id UUID NOT NULL REFERENCES profiles(id) ON DELETE CASCADE,

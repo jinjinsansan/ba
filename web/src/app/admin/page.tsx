@@ -18,6 +18,7 @@ export default async function AdminPage() {
   const { count: pendingOrders } = await admin.from('orders').select('*', { count: 'exact', head: true }).eq('status', 'pending')
   const { count: pendingCharges } = await admin.from('charges').select('*', { count: 'exact', head: true }).eq('status', 'pending')
   const { count: openTickets } = await admin.from('support_tickets').select('*', { count: 'exact', head: true }).eq('status', 'open')
+  const { count: pendingWithdrawals } = await admin.from('referral_withdrawals').select('*', { count: 'exact', head: true }).eq('status', 'pending')
 
   return (
     <div className="min-h-screen">
@@ -30,6 +31,7 @@ export default async function AdminPage() {
             <Link href="/admin/users" className="text-slate-400 hover:text-white">ユーザー</Link>
             <Link href="/admin/promos" className="text-slate-400 hover:text-white">プロモ</Link>
             <Link href="/admin/tickets" className="text-slate-400 hover:text-white">チケット</Link>
+            <Link href="/admin/withdrawals" className="text-slate-400 hover:text-white">出金申請</Link>
             <Link href="/dashboard" className="text-slate-400 hover:text-white">マイページ</Link>
           </div>
         </div>
@@ -54,6 +56,10 @@ export default async function AdminPage() {
           <Link href="/admin/tickets" className="p-6 rounded-2xl bg-bg-card border border-white/5 hover:border-banker/30 transition">
             <div className="text-3xl font-black text-banker">{openTickets || 0}</div>
             <div className="text-sm text-slate-400 mt-1">未対応チケット</div>
+          </Link>
+          <Link href="/admin/withdrawals" className="p-6 rounded-2xl bg-bg-card border border-white/5 hover:border-green-500/30 transition">
+            <div className="text-3xl font-black text-green-400">{pendingWithdrawals || 0}</div>
+            <div className="text-sm text-slate-400 mt-1">出金申請</div>
           </Link>
         </div>
       </div>

@@ -1,8 +1,10 @@
 import { createClient } from '@/lib/supabase-server'
+import { createAdminClient } from '@/lib/supabase-admin'
 import { redirect } from 'next/navigation'
 import Link from 'next/link'
 import DashboardClient from './DashboardClient'
 import SupportForm from './SupportForm'
+import ReferralSection from './ReferralSection'
 
 export default async function DashboardPage() {
   const supabase = await createClient()
@@ -16,6 +18,36 @@ export default async function DashboardPage() {
   const { data: deductions } = await supabase.from('deductions').select('*').eq('user_id', user.id).order('date', { ascending: false }).limit(30)
   const { data: deliverables } = await supabase.from('deliverables').select('*').eq('user_id', user.id).order('created_at', { ascending: false }).limit(1)
   const { data: commissions } = await supabase.from('referral_commissions').select('*').eq('referrer_id', user.id).order('created_at', { ascending: false })
+  const { data: withdrawals } = await supabase.from('referral_withdrawals').select('*').eq('user_id', user.id).order('created_at', { ascending: false })
+
+  // 紹介したユーザー一覧と各自のチャージ合計を取得
+  const admin = createAdminClient()
+  const referralCode = profile?.referral_code || ''
+  const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || 'https://bafather.uk'
+  const referralUrl = `${siteUrl}/signup?ref=${referralCode}`
+
+  const { data: referredProfiles } = await admin
+    .from('profiles')
+    .select('id, email, created_at')
+    .eq('referred_by', referralCode)
+
+  // 各紹介ユーザーの確認済みチャージ合計を集計
+  const referredWithCharges = await Promise.all(
+    (referredProfiles || []).map(async (p) => {
+      const { data: ch } = await admin
+        .from('charges')
+        .select('amount')
+        .eq('user_id', p.id)
+        .eq('status', 'confirmed')
+      const totalCharged = ch?.reduce((s, c) => s + Number(c.amount), 0) ?? 0
+      const commission = totalCharged * 0.05
+      return { ...p, total_charged: totalCharged, commission }
+    })
+  )
+
+  const totalEarned = commissions?.reduce((s, c) => s + Number(c.commission_amount), 0) ?? 0
+  const totalWithdrawn = withdrawals?.filter(w => ['pending', 'approved'].includes(w.status))
+    .reduce((s, w) => s + Number(w.amount), 0) ?? 0
 
   const latestOrder = orders?.[0]
   const hasPackage = latestOrder?.status === 'delivered' || latestOrder?.status === 'confirmed'
@@ -122,20 +154,16 @@ export default async function DashboardPage() {
             )}
           </div>
 
-          {/* Referral */}
-          <div className="p-6 rounded-2xl bg-bg-card border border-white/5">
-            <h2 className="text-lg font-bold mb-4">Referral Code</h2>
-            <div className="flex gap-2 items-center">
-              <code className="px-4 py-2 rounded-lg bg-bg-primary border border-white/10 text-player font-mono">
-                {profile?.referral_code}
-              </code>
-            </div>
-            <p className="text-slate-400 text-sm mt-2">
-              Share this code. Earn commission on referral charges.
-              {commissions?.length ? ` Total earned: $${commissions.reduce((s, c) => s + Number(c.commission_amount), 0).toFixed(2)}` : ''}
-            </p>
-          </div>
         </div>
+
+        {/* Referral Section */}
+        <ReferralSection
+          referralUrl={referralUrl}
+          referred={referredWithCharges}
+          totalEarned={totalEarned}
+          totalWithdrawn={totalWithdrawn}
+          withdrawals={withdrawals || []}
+        />
 
         {/* Charge History */}
         <div className="p-6 rounded-2xl bg-bg-card border border-white/5 mb-8">
