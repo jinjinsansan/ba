@@ -143,6 +143,7 @@ class SelectTableRequest(BaseModel):
     histories: dict = Field(..., description="tid -> list of {c, ties, ...}")
     excluded_ids: list[str] = Field(default_factory=list)
     fixed_name: Optional[str] = None
+    selector_config: Optional[dict] = Field(default=None, description="GUI-configured thresholds")
 
 
 class SelectTableResponse(BaseModel):
@@ -1166,7 +1167,17 @@ async def select_table_endpoint(
         RELAX_WAIT_SECONDS,
         MIN_HANDS,
         MAX_HANDS,
+        DRAGON_LIMIT,
     )
+
+    sc = req.selector_config or {}
+    _players_primary = sc.get("players_primary", PLAYERS_PRIMARY)
+    _players_relaxed = sc.get("players_relaxed", PLAYERS_RELAXED)
+    _relax_wait = sc.get("relax_wait_sec", RELAX_WAIT_SECONDS)
+    _min_hands = sc.get("min_hands", MIN_HANDS)
+    _max_hands = sc.get("max_hands", MAX_HANDS)
+    _dragon_limit = sc.get("dragon_limit", DRAGON_LIMIT)
+    _require_pb = sc.get("require_pb", True)
 
     candidates: list = []
     debug_stats = {
@@ -1197,13 +1208,13 @@ async def select_table_endpoint(
         raw = req.histories.get(tid, []) or []
         hands, p, b, tie, last5 = analyze_history(raw)
         if not req.fixed_name:
-            if has_banker_dragon(raw):
+            if has_banker_dragon(raw, limit=_dragon_limit):
                 debug_stats["dragon"] += 1
                 continue
-            if hands < MIN_HANDS or hands > MAX_HANDS:
+            if hands < _min_hands or hands > _max_hands:
                 debug_stats["bad_hands"] += 1
                 continue
-            if p <= b:
+            if _require_pb and p <= b:
                 debug_stats["bad_pb_ratio"] += 1
                 continue
         candidates.append(
@@ -1220,8 +1231,8 @@ async def select_table_endpoint(
         )
 
     now = _time.time()
-    primary_cands = [c for c in candidates if c.players >= PLAYERS_PRIMARY]
-    relaxed_cands = [c for c in candidates if c.players >= PLAYERS_RELAXED]
+    primary_cands = [c for c in candidates if c.players >= _players_primary]
+    relaxed_cands = [c for c in candidates if c.players >= _players_relaxed]
 
     logger.info(
         f"[select-table] user={req.user_id} configs={len(req.configs)} "
@@ -1244,7 +1255,7 @@ async def select_table_endpoint(
                 return SelectTableResponse(
                     found=False, wait_status="waiting_primary", debug=debug_stats
                 )
-            if now - wait_start < RELAX_WAIT_SECONDS:
+            if now - wait_start < _relax_wait:
                 return SelectTableResponse(
                     found=False, wait_status="still_waiting", debug=debug_stats
                 )

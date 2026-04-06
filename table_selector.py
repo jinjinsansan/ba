@@ -112,18 +112,19 @@ def is_excluded(cfg: dict) -> str | None:
 
 # === ③ ドラゴン判定 ===
 
-def has_banker_dragon(raw_history: list) -> bool:
-    """直近5ハンド以上が連続バンカーか判定。
+def has_banker_dragon(raw_history: list, limit: int = DRAGON_LIMIT) -> bool:
+    """直近 limit ハンド以上が連続バンカーか判定。limit=0 で無効。
 
     raw_history: [{c: "B"/"R", ties: N, ...}] — "B"=Banker, "R"=Player(Red)
     Evolution履歴は新しい順ではなく bead plate position順なので、末尾が最新。
     ties はセル内の引き分けカウントで、結果自体ではない。
     """
-    if len(raw_history) < DRAGON_LIMIT:
+    if limit == 0:
+        return False  # dragon avoidance disabled
+    if len(raw_history) < limit:
         return False
 
-    # 末尾から DRAGON_LIMIT 件を取得
-    last_entries = raw_history[-DRAGON_LIMIT:]
+    last_entries = raw_history[-limit:]
     for e in last_entries:
         if e.get("c") != "B":
             return False
@@ -199,11 +200,21 @@ class TableSelector:
         self._primary_wait_start: float | None = None
         self.excluded_table_ids: set[str] = set()  # ユーザー分散TODO用
 
-    def find_best_table(self, fixed_name: str = None) -> TableCandidate | None:
+    def find_best_table(self, fixed_name: str = None, selector_config: dict = None) -> TableCandidate | None:
         """現在の状況で最適なテーブルを選ぶ。なければNone。
 
         fixed_name: 指定するとそのテーブル名を含むテーブルのみ候補にする (検証モード用)
+        selector_config: GUI から渡される動的しきい値設定
         """
+        sc = selector_config or {}
+        _players_primary = sc.get("players_primary", PLAYERS_PRIMARY)
+        _players_relaxed = sc.get("players_relaxed", PLAYERS_RELAXED)
+        _relax_wait = sc.get("relax_wait_sec", RELAX_WAIT_SECONDS)
+        _min_hands = sc.get("min_hands", MIN_HANDS)
+        _max_hands = sc.get("max_hands", MAX_HANDS)
+        _dragon_limit = sc.get("dragon_limit", DRAGON_LIMIT)
+        _require_pb = sc.get("require_pb", True)
+
         configs = self.scraper.get_all_table_configs()
         players = self.scraper.get_players_count()
 
@@ -221,7 +232,6 @@ class TableSelector:
                 continue
 
             title = cfg.get("title", tid)
-            # Fixed table filter (verification mode)
             if fixed_name and fixed_name.lower() not in title.lower():
                 continue
             p_count = players.get(tid, None)
@@ -229,25 +239,17 @@ class TableSelector:
                 debug_stats["no_players_data"] += 1
                 continue
 
-            # 履歴取得
             raw = self.scraper.get_raw_history(tid)
             hands, p, b, tie, last5 = analyze_history(raw)
 
-            # Fixed table (verification) mode: bypass dragon / hands / pb filters
-            # — we are locked to this specific table regardless of its stats.
             if not fixed_name:
-                # ③ ドラゴン除外
-                if has_banker_dragon(raw):
+                if has_banker_dragon(raw, limit=_dragon_limit):
                     debug_stats["dragon"] += 1
                     continue
-
-                # ⑥ ハンド進行度
-                if hands < MIN_HANDS or hands > MAX_HANDS:
+                if hands < _min_hands or hands > _max_hands:
                     debug_stats["bad_hands"] += 1
                     continue
-
-                # ⑥ プレイヤー > バンカー
-                if p <= b:
+                if _require_pb and p <= b:
                     debug_stats["bad_pb_ratio"] += 1
                     continue
 
@@ -262,15 +264,14 @@ class TableSelector:
                 last_5=last5,
             ))
 
-        # 参加者数しきい値で段階的フィルタ
         now = time.time()
-        primary_cands = [c for c in candidates if c.players >= PLAYERS_PRIMARY]
-        relaxed_cands = [c for c in candidates if c.players >= PLAYERS_RELAXED]
+        primary_cands = [c for c in candidates if c.players >= _players_primary]
+        relaxed_cands = [c for c in candidates if c.players >= _players_relaxed]
 
         logger.info(
             f"[selector] configs={len(configs)} candidates={len(candidates)} "
-            f"primary(>={PLAYERS_PRIMARY}p)={len(primary_cands)} "
-            f"relaxed(>={PLAYERS_RELAXED}p)={len(relaxed_cands)} "
+            f"primary(>={_players_primary}p)={len(primary_cands)} "
+            f"relaxed(>={_players_relaxed}p)={len(relaxed_cands)} "
             f"debug={debug_stats}"
         )
 
@@ -279,24 +280,22 @@ class TableSelector:
             chosen_list = primary_cands
             self._primary_wait_start = None
         else:
-            # primaryがない → 1分待機ロジック
             if self._primary_wait_start is None:
                 self._primary_wait_start = now
-                logger.info(f"[selector] No primary(>={PLAYERS_PRIMARY}p) tables. Waiting {RELAX_WAIT_SECONDS}s...")
+                logger.info(f"[selector] No primary(>={_players_primary}p) tables. Waiting {_relax_wait}s...")
                 return None
-            elif now - self._primary_wait_start < RELAX_WAIT_SECONDS:
-                remaining = RELAX_WAIT_SECONDS - (now - self._primary_wait_start)
+            elif now - self._primary_wait_start < _relax_wait:
+                remaining = _relax_wait - (now - self._primary_wait_start)
                 logger.info(f"[selector] Still waiting for primary ({remaining:.0f}s left)")
                 return None
             else:
-                logger.info("[selector] Relaxing to 30p threshold")
+                logger.info(f"[selector] Relaxing to {_players_relaxed}p threshold")
                 if relaxed_cands:
                     chosen_list = relaxed_cands
                 else:
                     logger.info("[selector] No relaxed candidates either. Skipping.")
                     return None
 
-        # スコア計算 + 選択
         for c in chosen_list:
             c.score = compute_score(c)
         chosen_list.sort(key=lambda x: -x.score)
@@ -309,18 +308,20 @@ class TableSelector:
                 logger.info(f"  {i+1}. {c} score={c.score:.1f}")
         return best
 
-    def should_exit_table(self, table_id: str) -> str | None:
+    def should_exit_table(self, table_id: str, selector_config: dict = None) -> str | None:
         """入場後に条件が崩れたかチェック。退出すべき理由を返す (問題なければNone)"""
+        sc = selector_config or {}
+        _players_relaxed = sc.get("players_relaxed", PLAYERS_RELAXED)
+        _dragon_limit = sc.get("dragon_limit", DRAGON_LIMIT)
+
         players = self.scraper.get_players_count()
         p_count = players.get(table_id, 0)
         raw = self.scraper.get_raw_history(table_id)
 
-        # 参加者数崩壊
-        if p_count < PLAYERS_RELAXED:
+        if p_count < _players_relaxed:
             return f"players dropped to {p_count}"
 
-        # ドラゴン発生
-        if has_banker_dragon(raw):
+        if has_banker_dragon(raw, limit=_dragon_limit):
             return "banker dragon detected"
 
         return None

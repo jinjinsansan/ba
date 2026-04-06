@@ -15,7 +15,7 @@ $('#btnClose').addEventListener('click', () => window.valhalla.windowClose());
 let sessionTotal = 0;
 
 $('#btnStart').addEventListener('click', async () => {
-  const config = loadSettings();
+  const config = { ...loadSettings(), table_filter: loadTableFilter() };
   const hasPrev = localStorage.getItem('valhalla_session_state');
   if (hasPrev) {
     const choice = await showContinueDialog();
@@ -133,6 +133,131 @@ const DEFAULT_SETTINGS = {
   dry_run: false,
 };
 
+// --- Table Filter ---
+const DEFAULT_TABLE_FILTER = {
+  players_primary: 10,
+  relax_wait_sec: 60,
+  min_hands: 20,
+  max_hands: 40,
+  dragon_limit: 5,
+  require_pb: true,
+};
+
+function loadTableFilter() {
+  try {
+    const stored = JSON.parse(localStorage.getItem('valhalla_table_filter') || '{}');
+    return { ...DEFAULT_TABLE_FILTER, ...stored };
+  } catch { return { ...DEFAULT_TABLE_FILTER }; }
+}
+
+function saveTableFilter(f) {
+  localStorage.setItem('valhalla_table_filter', JSON.stringify(f));
+}
+
+// Stepper state
+const _steppers = {};
+function initStepper(decId, incId, valId, min, max, step) {
+  function clamp(v) { return Math.max(min, Math.min(max, v)); }
+  function read() { return parseInt($(valId).textContent) || min; }
+  function write(v) { $(valId).textContent = clamp(v); }
+  $(decId).addEventListener('click', () => write(read() - step));
+  $(incId).addEventListener('click', () => write(read() + step));
+  _steppers[valId] = { get: () => parseInt($(valId).textContent) || min, set: write };
+}
+
+// Segment state
+const _segments = {};
+function initSegment(containerId) {
+  let cur = null;
+  const btns = () => $$(` #${containerId} .fx-seg-btn`);
+  btns().forEach(btn => {
+    if (btn.classList.contains('active')) cur = parseInt(btn.dataset.val);
+    btn.addEventListener('click', () => {
+      btns().forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      cur = parseInt(btn.dataset.val);
+    });
+  });
+  _segments[containerId] = {
+    get: () => cur,
+    set: (v) => {
+      btns().forEach(b => {
+        const match = parseInt(b.dataset.val) === v;
+        b.classList.toggle('active', match);
+        if (match) cur = v;
+      });
+    }
+  };
+}
+
+// Toggle state
+const _toggles = {};
+function initToggle(toggleId, trackId) {
+  let on = $(trackId).classList.contains('on');
+  $(toggleId).addEventListener('click', () => {
+    on = !on;
+    $(trackId).classList.toggle('on', on);
+  });
+  _toggles[trackId] = {
+    get: () => on,
+    set: (v) => { on = v; $(trackId).classList.toggle('on', v); }
+  };
+}
+
+// Tab switching
+function initModalTabs() {
+  function switchTab(active) {
+    $$('.modal-tab').forEach(t => t.classList.remove('active'));
+    $$('.tab-content').forEach(c => c.classList.add('hidden'));
+    if (active === 'bot') {
+      $('#tabBotBtn').classList.add('active');
+      $('#tabBotContent').classList.remove('hidden');
+    } else {
+      $('#tabTableBtn').classList.add('active');
+      $('#tabTableContent').classList.remove('hidden');
+    }
+  }
+  $('#tabBotBtn').addEventListener('click', () => switchTab('bot'));
+  $('#tabTableBtn').addEventListener('click', () => switchTab('table'));
+}
+
+function initTableFilterControls() {
+  initStepper('ppDec', 'ppInc', 'ppValue', 1, 50, 1);
+  initStepper('rwDec', 'rwInc', 'rwValue', 10, 300, 10);
+  initStepper('mnDec', 'mnInc', 'mnValue', 5, 40, 5);
+  initStepper('mxDec', 'mxInc', 'mxValue', 20, 80, 5);
+  initSegment('dragonSeg');
+  initToggle('pbToggle', 'pbTrack');
+
+  $('#btnSaveTable').addEventListener('click', () => {
+    const f = {
+      players_primary: _steppers['ppValue'].get(),
+      relax_wait_sec: _steppers['rwValue'].get(),
+      min_hands: _steppers['mnValue'].get(),
+      max_hands: _steppers['mxValue'].get(),
+      dragon_limit: _segments['dragonSeg'].get() ?? DEFAULT_TABLE_FILTER.dragon_limit,
+      require_pb: _toggles['pbTrack'].get(),
+    };
+    saveTableFilter(f);
+    addLog(`Table filter saved: primary≥${f.players_primary}p relax=${f.relax_wait_sec}s hands=${f.min_hands}-${f.max_hands} dragon=${f.dragon_limit||'OFF'} P>B=${f.require_pb}`, 'info');
+    $('#settingsModal').classList.add('hidden');
+  });
+
+  $('#btnResetTable').addEventListener('click', () => {
+    applyTableFilterToUI(DEFAULT_TABLE_FILTER);
+    addLog('Table filter reset to defaults.', 'info');
+  });
+}
+
+function applyTableFilterToUI(f) {
+  if (_steppers['ppValue']) _steppers['ppValue'].set(f.players_primary);
+  if (_steppers['rwValue']) _steppers['rwValue'].set(f.relax_wait_sec);
+  if (_steppers['mnValue']) _steppers['mnValue'].set(f.min_hands);
+  if (_steppers['mxValue']) _steppers['mxValue'].set(f.max_hands);
+  if (_segments['dragonSeg']) _segments['dragonSeg'].set(f.dragon_limit);
+  if (_toggles['pbTrack']) _toggles['pbTrack'].set(f.require_pb);
+}
+
 $('#btnSettings').addEventListener('click', () => {
   $('#settingsModal').classList.remove('hidden');
   const s = loadSettings();
@@ -142,6 +267,13 @@ $('#btnSettings').addEventListener('click', () => {
   $('#inputLossCut').value = s.loss_cut;
   $('#inputTelegramChat').value = s.telegram_chat_id || '';
   $('#inputDryRun').checked = !!s.dry_run;
+  // Load table filter into UI
+  applyTableFilterToUI(loadTableFilter());
+  // Reset to BOT tab
+  $$('.modal-tab').forEach(t => t.classList.remove('active'));
+  $$('.tab-content').forEach(c => c.classList.add('hidden'));
+  $('#tabBotBtn').classList.add('active');
+  $('#tabBotContent').classList.remove('hidden');
 });
 $('#settingsClose').addEventListener('click', () => $('#settingsModal').classList.add('hidden'));
 $('#btnSaveSettings').addEventListener('click', async () => {
@@ -556,3 +688,6 @@ renderDailyPnl();
 renderFeed();
 renderRecent();
 applyDevMode();
+initModalTabs();
+initTableFilterControls();
+applyTableFilterToUI(loadTableFilter());

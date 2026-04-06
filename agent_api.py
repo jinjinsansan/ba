@@ -285,6 +285,7 @@ def _run_bet_session_inner(config: dict, stop_event: threading.Event, skip_event
     loss_cut_dollars = config.get("loss_cut", 200)
     dry_run = config.get("dry_run", False)
     resume = config.get("resume", False)
+    table_filter = config.get("table_filter", {})
 
     # Allow overriding dry_run via environment (safe for CI / first-run testing)
     if os.getenv("LAPLACE_FORCE_DRYRUN", "").strip() in ("1", "true", "True", "yes"):
@@ -322,8 +323,8 @@ def _run_bet_session_inner(config: dict, stop_event: threading.Event, skip_event
     def pick_table():
         """Verification modeなら固定テーブル、それ以外は通常選定"""
         if verification_mode:
-            return selector.find_best_table(fixed_name=fixed_table_name)
-        return selector.find_best_table()
+            return selector.find_best_table(fixed_name=fixed_table_name, selector_config=table_filter)
+        return selector.find_best_table(selector_config=table_filter)
 
     # Startup broadcast (admin + user + public if verification)
     try:
@@ -449,10 +450,10 @@ def _run_bet_session_inner(config: dict, stop_event: threading.Event, skip_event
     while not stop_event.is_set() and target_tid is None:
         if verification_mode:
             send_action(f"[VERIFICATION] Looking for fixed table: {fixed_table_name}")
-            best = selector.find_best_table(fixed_name=fixed_table_name)
+            best = selector.find_best_table(fixed_name=fixed_table_name, selector_config=table_filter)
         else:
             send_action("Selecting best table...")
-            best = selector.find_best_table()
+            best = selector.find_best_table(selector_config=table_filter)
         if best:
             target_tid = best.table_id
             target_name = best.title
@@ -541,7 +542,7 @@ def _run_bet_session_inner(config: dict, stop_event: threading.Event, skip_event
 
         # Condition check (only when not in the middle of a set)
         if len(session.tracker.current_turns) == 0:
-            exit_reason = "User requested skip" if user_skip else selector.should_exit_table(target_tid)
+            exit_reason = "User requested skip" if user_skip else selector.should_exit_table(target_tid, selector_config=table_filter)
             if exit_reason:
                 send_action(f"Table conditions broke: {exit_reason} — exiting...")
                 send_log(f"Leaving {target_name}: {exit_reason}")

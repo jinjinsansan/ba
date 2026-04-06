@@ -194,6 +194,7 @@ class LaplaceClient:
         histories: dict,
         excluded_ids: Optional[list[str]] = None,
         fixed_name: Optional[str] = None,
+        selector_config: Optional[dict] = None,
     ) -> dict:
         body = {
             "user_id": user_id,
@@ -202,6 +203,7 @@ class LaplaceClient:
             "histories": histories,
             "excluded_ids": excluded_ids or [],
             "fixed_name": fixed_name,
+            "selector_config": selector_config or {},
         }
         return self._request("POST", "/api/select-table", json=body)
 
@@ -668,7 +670,7 @@ class RemoteTableSelector:
         return configs, players, histories
 
     def find_best_table(
-        self, fixed_name: Optional[str] = None
+        self, fixed_name: Optional[str] = None, selector_config: Optional[dict] = None
     ) -> Optional[RemoteTableResult]:
         configs, players, histories = self._gather_observations()
         if not configs:
@@ -683,6 +685,7 @@ class RemoteTableSelector:
                 histories=histories,
                 excluded_ids=list(self.excluded_table_ids),
                 fixed_name=fixed_name,
+                selector_config=selector_config,
             )
         except LaplaceApiError as e:
             logger.error(f"select_table API failed: {e}")
@@ -712,7 +715,7 @@ class RemoteTableSelector:
         )
         return result
 
-    def should_exit_table(self, table_id: str) -> Optional[str]:
+    def should_exit_table(self, table_id: str, selector_config: Optional[dict] = None) -> Optional[str]:
         try:
             players_map = self.scraper.get_players_count() or {}
             p_count = players_map.get(table_id, 0)
