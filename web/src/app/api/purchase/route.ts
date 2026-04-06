@@ -2,7 +2,7 @@ import { createAdminClient } from '@/lib/supabase-admin'
 import { createClient as createServerSupabase } from '@/lib/supabase-server'
 import { NextRequest, NextResponse } from 'next/server'
 
-const PLANS: Record<string, number> = { starter: 1000, pro: 3000 }
+const PLANS: Record<string, number> = { standard: 2000 }
 
 export async function POST(req: NextRequest) {
   const supabase = await createServerSupabase()

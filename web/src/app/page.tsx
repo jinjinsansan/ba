@@ -109,29 +109,18 @@ export default function Home() {
         <div className="max-w-4xl mx-auto">
           <h2 className="text-4xl font-bold text-center mb-4">Pricing</h2>
           <p className="text-center text-slate-400 mb-16">One-time license + charge-based profit sharing</p>
-          <div className="grid md:grid-cols-2 gap-6">
-            <div className="p-8 rounded-2xl bg-bg-card border border-white/5">
-              <h3 className="text-xl font-bold mb-1">Starter</h3>
-              <div className="text-4xl font-black my-4">$1,000 <span className="text-sm text-slate-500 font-normal">license</span></div>
+          <div className="max-w-md mx-auto">
+            <div className="p-8 rounded-2xl bg-bg-card border border-player/40 relative">
+              <h3 className="text-xl font-bold mb-1">LAPLACE License</h3>
+              <div className="text-4xl font-black my-4">$2,000 <span className="text-sm text-slate-500 font-normal">USDT</span></div>
               <ul className="space-y-3 text-sm text-slate-400 mb-8">
                 <li className="flex gap-2"><span className="text-player">✓</span> Full AI prediction engine</li>
                 <li className="flex gap-2"><span className="text-player">✓</span> Automated bet execution</li>
                 <li className="flex gap-2"><span className="text-player">✓</span> Real-time dashboard</li>
-                <li className="flex gap-2"><span className="text-player">✓</span> 20% daily profit share</li>
+                <li className="flex gap-2"><span className="text-player">✓</span> Cloud logic processing</li>
+                <li className="flex gap-2"><span className="text-player">✓</span> Lifetime updates</li>
               </ul>
-              <Link href="/signup?plan=starter" className="block text-center py-3 rounded-xl border border-player/30 text-player font-semibold hover:bg-player/10 transition">Get Starter</Link>
-            </div>
-            <div className="p-8 rounded-2xl bg-bg-card border border-player/40 relative">
-              <div className="absolute -top-3 left-1/2 -translate-x-1/2 px-4 py-1 rounded-full bg-gradient-to-r from-player to-accent text-xs font-bold text-white">POPULAR</div>
-              <h3 className="text-xl font-bold mb-1">Professional</h3>
-              <div className="text-4xl font-black my-4">$3,000 <span className="text-sm text-slate-500 font-normal">license</span></div>
-              <ul className="space-y-3 text-sm text-slate-400 mb-8">
-                <li className="flex gap-2"><span className="text-player">✓</span> Everything in Starter</li>
-                <li className="flex gap-2"><span className="text-player">✓</span> Priority cloud processing</li>
-                <li className="flex gap-2"><span className="text-player">✓</span> Advanced analytics</li>
-                <li className="flex gap-2"><span className="text-player">✓</span> Priority support</li>
-              </ul>
-              <Link href="/signup?plan=pro" className="block text-center py-3 rounded-xl bg-gradient-to-r from-player to-accent text-white font-semibold hover:opacity-90 transition">Get Professional</Link>
+              <Link href="/signup" className="block text-center py-3 rounded-xl bg-gradient-to-r from-player to-accent text-white font-semibold hover:opacity-90 transition">Get Started</Link>
             </div>
           </div>
           <p className="text-center text-slate-500 text-sm mt-6">License fee is deducted from your first charge. Daily profit share: losses carry forward.</p>

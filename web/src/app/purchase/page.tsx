@@ -1,18 +1,13 @@
 'use client'
 
 import { Suspense, useState } from 'react'
-import { useSearchParams, useRouter } from 'next/navigation'
+import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase-browser'
 
-const PLANS = {
-  starter: { name: 'Starter', price: 1000 },
-  pro: { name: 'Professional', price: 3000 },
-}
+const PRICE = 2000
 
 function PurchaseForm() {
-  const searchParams = useSearchParams()
   const router = useRouter()
-  const [plan, setPlan] = useState<'starter' | 'pro'>((searchParams.get('plan') as 'starter' | 'pro') || 'starter')
   const [network, setNetwork] = useState<'TRC-20' | 'ERC-20'>('TRC-20')
   const [promoCode, setPromoCode] = useState('')
   const [promoMessage, setPromoMessage] = useState('')
@@ -22,8 +17,6 @@ function PurchaseForm() {
   const [orderId, setOrderId] = useState('')
   const [finalAmount, setFinalAmount] = useState(0)
   const [isFree, setIsFree] = useState(false)
-
-  const selected = PLANS[plan]
 
   async function checkPromo() {
     if (!promoCode.trim()) return
@@ -58,7 +51,7 @@ function PurchaseForm() {
     const res = await fetch('/api/purchase', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ plan, promoCode: promoCode.trim() || null, network }),
+      body: JSON.stringify({ plan: 'standard', promoCode: promoCode.trim() || null, network }),
     })
     const data = await res.json()
     if (res.ok) {
@@ -99,18 +92,20 @@ function PurchaseForm() {
 
   return (
     <div className="min-h-screen py-24 px-6">
-      <div className="max-w-2xl mx-auto">
+      <div className="max-w-lg mx-auto">
         <h1 className="text-3xl font-black text-center mb-2">Purchase License</h1>
-        <p className="text-center text-slate-400 mb-12">Select your plan and payment method</p>
+        <p className="text-center text-slate-400 mb-12">Get full access to LAPLACE AI Engine</p>
 
-        <div className="grid grid-cols-2 gap-4 mb-8">
-          {(Object.entries(PLANS) as [string, { name: string; price: number }][]).map(([key, p]) => (
-            <button key={key} onClick={() => setPlan(key as 'starter' | 'pro')}
-              className={`p-6 rounded-xl border text-left transition ${plan === key ? 'border-player bg-player/10' : 'border-white/10 bg-bg-card hover:border-white/20'}`}>
-              <div className="font-bold text-lg">{p.name}</div>
-              <div className="text-2xl font-black mt-1">${p.price.toLocaleString()}</div>
-            </button>
-          ))}
+        <div className="p-8 rounded-2xl bg-bg-card border border-player/40 mb-8">
+          <h2 className="text-xl font-bold mb-1">LAPLACE License</h2>
+          <div className="text-4xl font-black my-4">${PRICE.toLocaleString()} <span className="text-sm text-slate-500 font-normal">USDT</span></div>
+          <ul className="space-y-3 text-sm text-slate-400">
+            <li className="flex gap-2"><span className="text-player">✓</span> Full AI prediction engine</li>
+            <li className="flex gap-2"><span className="text-player">✓</span> Automated bet execution</li>
+            <li className="flex gap-2"><span className="text-player">✓</span> Real-time dashboard</li>
+            <li className="flex gap-2"><span className="text-player">✓</span> Cloud logic processing</li>
+            <li className="flex gap-2"><span className="text-player">✓</span> Lifetime updates</li>
+          </ul>
         </div>
 
         <div className="mb-8">
@@ -138,8 +133,8 @@ function PurchaseForm() {
 
         <div className="p-6 rounded-xl bg-bg-card border border-white/10 mb-8">
           <div className="flex justify-between items-center mb-2">
-            <span className="text-slate-400">Plan</span>
-            <span className="font-bold">{selected.name}</span>
+            <span className="text-slate-400">License</span>
+            <span className="font-bold">LAPLACE</span>
           </div>
           <div className="flex justify-between items-center mb-2">
             <span className="text-slate-400">Network</span>
@@ -148,7 +143,7 @@ function PurchaseForm() {
           <div className="border-t border-white/10 my-3" />
           <div className="flex justify-between items-center">
             <span className="text-slate-400">Total</span>
-            <span className="text-2xl font-black">${selected.price.toLocaleString()}</span>
+            <span className="text-2xl font-black">${PRICE.toLocaleString()}</span>
           </div>
         </div>
 
