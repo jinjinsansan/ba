@@ -11,6 +11,73 @@ $('#btnMinimize').addEventListener('click', () => window.valhalla.windowMinimize
 $('#btnMaximize').addEventListener('click', () => window.valhalla.windowMaximize());
 $('#btnClose').addEventListener('click', () => window.valhalla.windowClose());
 
+// --- License / Setup Screen ---
+function showSetup(errorMsg) {
+  $('#setupScreen').style.display = 'flex';
+  $('#mainContent').style.display = 'none';
+  if (errorMsg) {
+    $('#setupError').style.display = 'block';
+    $('#setupError').textContent = errorMsg;
+  }
+}
+
+function showMain() {
+  $('#setupScreen').style.display = 'none';
+  $('#mainContent').style.display = 'block';
+}
+
+async function initLicense() {
+  const env = await window.valhalla.getEnv();
+  const email = env.account_email;
+
+  if (!email) {
+    showSetup();
+    return;
+  }
+
+  // 既存メールでライセンス確認
+  const result = await window.valhalla.checkLicense(email);
+  if (result.ok) {
+    showMain();
+  } else {
+    showSetup(result.reason);
+  }
+}
+
+$('#btnActivate').addEventListener('click', async () => {
+  const email = $('#setupEmail').value.trim();
+  const stakeUser = $('#setupStakeUser').value.trim();
+  const stakePass = $('#setupStakePass').value.trim();
+
+  if (!email || !stakeUser || !stakePass) {
+    $('#setupError').style.display = 'block';
+    $('#setupError').textContent = 'All fields are required.';
+    return;
+  }
+
+  $('#setupLoading').style.display = 'block';
+  $('#btnActivate').disabled = true;
+  $('#setupError').style.display = 'none';
+
+  const result = await window.valhalla.checkLicense(email);
+  if (!result.ok) {
+    $('#setupLoading').style.display = 'none';
+    $('#btnActivate').disabled = false;
+    $('#setupError').style.display = 'block';
+    $('#setupError').textContent = result.reason;
+    return;
+  }
+
+  await window.valhalla.saveCredentials({ email, stake_username: stakeUser, stake_password: stakePass });
+  $('#setupLoading').style.display = 'none';
+  showMain();
+});
+
+$('#linkBafather').addEventListener('click', () => window.valhalla.openExternal('https://bafather.uk'));
+
+// 起動時にライセンス確認
+initLicense();
+
 // --- Auto Updater ---
 window.valhalla.onUpdateStatus((data) => {
   const banner = $('#updateBanner');

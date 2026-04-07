@@ -91,6 +91,44 @@ function loadDotEnv() {
   return env;
 }
 
+function saveDotEnv(updates) {
+  const envPath = resolveEnvPath();
+  let content = '';
+  try { content = fs.readFileSync(envPath, 'utf-8'); } catch (e) { content = ''; }
+  for (const [key, val] of Object.entries(updates)) {
+    const re = new RegExp(`^${key}=.*$`, 'm');
+    if (re.test(content)) {
+      content = content.replace(re, `${key}=${val}`);
+    } else {
+      content += `\n${key}=${val}`;
+    }
+  }
+  fs.writeFileSync(envPath, content, 'utf-8');
+}
+
+async function checkLicenseApi(email) {
+  const envFile = loadDotEnv();
+  const apiKey = envFile.LAPLACE_API_KEY || '';
+  return new Promise((resolve) => {
+    const body = JSON.stringify({ email, api_key: apiKey });
+    const req = https.request(
+      { hostname: 'bafather.uk', path: '/api/auth/license', method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Content-Length': Buffer.byteLength(body) } },
+      (res) => {
+        let data = '';
+        res.on('data', (c) => data += c);
+        res.on('end', () => {
+          try { resolve(JSON.parse(data)); }
+          catch (e) { resolve({ ok: false, reason: 'Server error' }); }
+        });
+      }
+    );
+    req.on('error', () => resolve({ ok: false, reason: 'Network error — check your connection' }));
+    req.write(body);
+    req.end();
+  });
+}
+
 // === SSH tunnel (127.0.0.1:8000 -> VPS:8000) ===
 
 function startSshTunnel() {
@@ -335,7 +373,24 @@ ipcMain.handle('send-command', (event, cmd) => {
 
 ipcMain.handle('get-env', () => {
   const env = loadDotEnv();
-  return { stake_username: env.STAKE_USERNAME || '' };
+  return { stake_username: env.STAKE_USERNAME || '', account_email: env.LAPLACE_ACCOUNT_EMAIL || '' };
+});
+
+ipcMain.handle('check-license', async (_, email) => {
+  return await checkLicenseApi(email);
+});
+
+ipcMain.handle('save-credentials', (_, { email, stake_username, stake_password }) => {
+  saveDotEnv({
+    LAPLACE_ACCOUNT_EMAIL: email,
+    STAKE_USERNAME: stake_username,
+    STAKE_PASSWORD: stake_password,
+  });
+  return { ok: true };
+});
+
+ipcMain.handle('open-external', (_, url) => {
+  shell.openExternal(url);
 });
 
 ipcMain.handle('window-minimize', () => mainWindow?.minimize());
@@ -382,9 +437,8 @@ ipcMain.handle('open-update-page', () => {
 
 // === App ===
 
-app.whenReady().then(() => {
+app.whenReady().then(async () => {
   createWindow();
-  // 起動後10秒待ってからアップデートチェック
   setTimeout(checkForUpdates, 10000);
 });
 app.on('window-all-closed', () => { stopPython(); stopSshTunnel(); app.quit(); });

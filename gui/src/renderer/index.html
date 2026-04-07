@@ -29,8 +29,46 @@
     </div>
   </div>
 
+  <!-- Setup Screen (初回 / 認証失敗時) -->
+  <div id="setupScreen" style="display:none;position:fixed;inset:0;background:#0f1117;z-index:9999;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:32px;">
+    <div style="width:100%;max-width:360px;">
+      <div style="font-size:22px;font-weight:800;letter-spacing:0.1em;color:#fff;margin-bottom:4px;">LAPLACE</div>
+      <div style="font-size:11px;color:#666;margin-bottom:28px;letter-spacing:0.05em;">ACTIVATE YOUR LICENSE</div>
+
+      <div id="setupError" style="display:none;background:#2a1a1a;border:1px solid #5a2a2a;border-radius:6px;padding:10px 14px;font-size:11px;color:#ff7070;margin-bottom:16px;"></div>
+
+      <div style="margin-bottom:14px;">
+        <div style="font-size:10px;color:#888;margin-bottom:5px;letter-spacing:0.08em;text-transform:uppercase;">bafather.uk Account Email</div>
+        <input id="setupEmail" type="email" placeholder="your@email.com"
+          style="width:100%;box-sizing:border-box;background:#1a1d27;border:1px solid #2a2d3a;border-radius:6px;padding:9px 12px;color:#fff;font-size:13px;outline:none;">
+      </div>
+
+      <div style="margin-bottom:14px;">
+        <div style="font-size:10px;color:#888;margin-bottom:5px;letter-spacing:0.08em;text-transform:uppercase;">Stake.com Email</div>
+        <input id="setupStakeUser" type="email" placeholder="stake@email.com"
+          style="width:100%;box-sizing:border-box;background:#1a1d27;border:1px solid #2a2d3a;border-radius:6px;padding:9px 12px;color:#fff;font-size:13px;outline:none;">
+      </div>
+
+      <div style="margin-bottom:22px;">
+        <div style="font-size:10px;color:#888;margin-bottom:5px;letter-spacing:0.08em;text-transform:uppercase;">Stake.com Password</div>
+        <input id="setupStakePass" type="password" placeholder="••••••••"
+          style="width:100%;box-sizing:border-box;background:#1a1d27;border:1px solid #2a2d3a;border-radius:6px;padding:9px 12px;color:#fff;font-size:13px;outline:none;">
+      </div>
+
+      <button id="btnActivate"
+        style="width:100%;padding:11px;background:#1e3a5f;color:#7ab3e0;border:1px solid #2a5a8a;border-radius:6px;font-size:13px;font-weight:700;letter-spacing:0.1em;cursor:pointer;text-transform:uppercase;">
+        ACTIVATE
+      </button>
+      <div id="setupLoading" style="display:none;text-align:center;margin-top:12px;font-size:11px;color:#555;">Verifying license...</div>
+
+      <div style="margin-top:20px;text-align:center;font-size:10px;color:#444;">
+        No account? Visit <span style="color:#7ab3e0;cursor:pointer;" id="linkBafather">bafather.uk</span>
+      </div>
+    </div>
+  </div>
+
   <!-- Main -->
-  <div class="main-content">
+  <div class="main-content" id="mainContent" style="display:none;">
 
     <!-- Live Action Feed -->
     <div class="action-bar" id="actionBar">
