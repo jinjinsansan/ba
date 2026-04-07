@@ -5,6 +5,16 @@ echo  LAPLACE セットアップ
 echo  ========================
 echo.
 
+:: OpenSSHクライアントのインストール（未インストールの場合のみ）
+where ssh >nul 2>&1
+if errorlevel 1 (
+  echo  [INFO] OpenSSH クライアントをインストール中...
+  powershell -Command "Add-WindowsCapability -Online -Name OpenSSH.Client~~~~0.0.1.0" >nul 2>&1
+  echo  [OK] OpenSSH クライアントをインストールしました
+) else (
+  echo  [OK] OpenSSH クライアントは導入済みです
+)
+
 :: SSH鍵の配置
 set SSH_DIR=%USERPROFILE%\.ssh
 set KEY_SRC=%~dp0laplace_vps
