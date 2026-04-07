@@ -16,7 +16,23 @@ export default function UserRow({ user, billing }: { user: any; billing: any }) 
   const [rate, setRate] = useState(billing?.profit_share_rate ? (billing.profit_share_rate * 100).toString() : '20')
   const [loading, setLoading] = useState(false)
   const [showConfig, setShowConfig] = useState(false)
+  const [uploading, setUploading] = useState(false)
   const isActive = billing?.status === 'active'
+
+  async function uploadZip(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0]
+    if (!file) return
+    setUploading(true)
+    const form = new FormData()
+    form.append('file', file)
+    form.append('userId', user.id)
+    form.append('version', '1.0.4')
+    const res = await fetch('/api/admin/upload', { method: 'POST', body: form })
+    if (res.ok) { alert('ZIP送付完了'); router.refresh() }
+    else { alert('エラー: ' + (await res.text())) }
+    setUploading(false)
+    e.target.value = ''
+  }
   const cfg = { ...DEFAULT_BOT_CONFIG, ...(billing?.bot_config || {}) }
   const router = useRouter()
 
@@ -96,6 +112,10 @@ export default function UserRow({ user, billing }: { user: any; billing: any }) 
             >
               {isActive ? '無効化' : 'Activate'}
             </button>
+            <label className={`px-2 py-1 rounded text-xs cursor-pointer transition ${uploading ? 'opacity-50' : 'bg-purple-500/20 text-purple-400 hover:bg-purple-500/30'}`}>
+              {uploading ? '送付中...' : 'ZIP送付'}
+              <input type="file" accept=".zip" className="hidden" onChange={uploadZip} disabled={uploading} />
+            </label>
             <button
               onClick={() => setShowConfig(v => !v)}
               className="px-2 py-1 rounded text-xs bg-white/5 text-slate-400 hover:text-white transition"
