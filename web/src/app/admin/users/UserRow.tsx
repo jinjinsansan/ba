@@ -16,6 +16,7 @@ export default function UserRow({ user, billing }: { user: any; billing: any }) 
   const [rate, setRate] = useState(billing?.profit_share_rate ? (billing.profit_share_rate * 100).toString() : '20')
   const [loading, setLoading] = useState(false)
   const [showConfig, setShowConfig] = useState(false)
+  const isActive = billing?.status === 'active'
   const cfg = { ...DEFAULT_BOT_CONFIG, ...(billing?.bot_config || {}) }
   const router = useRouter()
 
@@ -87,6 +88,13 @@ export default function UserRow({ user, billing }: { user: any; billing: any }) 
               className="px-2 py-1 rounded text-xs bg-accent/20 text-accent hover:bg-accent/30 transition disabled:opacity-50"
             >
               {isFree ? '無料解除' : '無料設定'}
+            </button>
+            <button
+              onClick={() => updateUser(isActive ? 'deactivate' : 'activate')}
+              disabled={loading}
+              className={`px-2 py-1 rounded text-xs transition disabled:opacity-50 ${isActive ? 'bg-slate-500/20 text-slate-400' : 'bg-green-500/20 text-green-400 hover:bg-green-500/30'}`}
+            >
+              {isActive ? '無効化' : 'Activate'}
             </button>
             <button
               onClick={() => setShowConfig(v => !v)}

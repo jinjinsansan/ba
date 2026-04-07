@@ -16,12 +16,18 @@ export async function POST(req: NextRequest) {
   // メールからユーザーを検索
   const { data: profile, error: profileError } = await admin
     .from('profiles')
-    .select('id, email')
+    .select('id, email, is_admin')
     .eq('email', email.toLowerCase().trim())
     .single()
 
   if (profileError || !profile) {
     return NextResponse.json({ ok: false, reason: 'Account not found. Please check your email.' })
+  }
+
+  // 管理者は無条件で通過
+  if (profile.is_admin) {
+    const { data: billing } = await admin.from('billing').select('bot_config').eq('user_id', profile.id).single()
+    return NextResponse.json({ ok: true, bot_config: billing?.bot_config || {} })
   }
 
   // サブスクリプション確認
