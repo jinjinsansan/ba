@@ -133,6 +133,16 @@ function startSshTunnel() {
   sshTunnelProcess.on('exit', (code) => {
     console.log('[Main] SSH tunnel exited:', code);
     sshTunnelProcess = null;
+    // Bot稼働中なら5秒後に自動再接続
+    if (pythonProcess) {
+      sendToRenderer('agent-message', {
+        type: 'log',
+        message: `SSH tunnel dropped (code=${code}) — reconnecting in 5s...`,
+      });
+      setTimeout(() => {
+        if (pythonProcess) startSshTunnel();
+      }, 5000);
+    }
   });
 }
 

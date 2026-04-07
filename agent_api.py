@@ -494,7 +494,9 @@ def _run_bet_session_inner(config: dict, stop_event: threading.Event, skip_event
     entry_fail_count = 0
     session_start = time.time()
 
-    _FREEZE_TIMEOUT = 90  # WS無活動90秒でフリーズ判定
+    _FREEZE_TIMEOUT = 90      # WS無活動90秒でフリーズ判定
+    _SESSION_CHECK_INTERVAL = 300  # 5分おきにStakeログイン確認
+    _last_session_check = time.time()
 
     while not stop_event.is_set() and round_count < MAX_ROUNDS:
         # ── フリーズ検出ウォッチドッグ ──
@@ -517,6 +519,27 @@ def _run_bet_session_inner(config: dict, stop_event: threading.Event, skip_event
                 send_log(f"[watchdog] reload error: {_e}")
                 target_tid = None
             continue
+
+        # ── Stakeセッション確認（5分おき）──
+        if time.time() - _last_session_check > _SESSION_CHECK_INTERVAL:
+            _last_session_check = time.time()
+            try:
+                if not scraper._is_logged_in():
+                    send_action("Stake session expired — re-logging in...")
+                    send_log("[session] Stake logout detected — attempting re-login")
+                    scraper._login()
+                    send_log("[session] Re-login successful")
+                    executor.exit_table()
+                    time.sleep(3)
+                    if executor.enter_table(target_tid, target_name):
+                        send_action(f"Session restored — re-entered {target_name}")
+                    else:
+                        send_action("Re-entry failed after re-login — re-selecting table")
+                        target_tid = None
+                        target_name = None
+                    continue
+            except Exception as _se:
+                send_log(f"[session] re-login error: {_se}")
 
         # Shoe change check
         shoe_signals = scraper.get_new_shoe_signals()
