@@ -11,6 +11,23 @@ $('#btnMinimize').addEventListener('click', () => window.valhalla.windowMinimize
 $('#btnMaximize').addEventListener('click', () => window.valhalla.windowMaximize());
 $('#btnClose').addEventListener('click', () => window.valhalla.windowClose());
 
+// --- Auto Updater ---
+window.valhalla.onUpdateStatus((data) => {
+  const banner = $('#updateBanner');
+  const text = $('#updateText');
+  const btn = $('#btnInstallUpdate');
+  if (data.status === 'available') {
+    banner.style.display = 'flex';
+    text.textContent = `新バージョン ${data.version} をダウンロード中...`;
+    btn.style.display = 'none';
+  } else if (data.status === 'downloading') {
+    banner.style.display = 'flex';
+    text.textContent = `ダウンロード中... ${data.percent}%`;
+    btn.style.display = 'none';
+  }
+});
+$('#btnInstallUpdate').addEventListener('click', () => window.valhalla.openUpdatePage());
+
 // --- Start / Stop ---
 let sessionTotal = 0;
 

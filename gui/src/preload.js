@@ -14,4 +14,7 @@ contextBridge.exposeInMainWorld('valhalla', {
   windowClose: () => ipcRenderer.invoke('window-close'),
 
   getEnv: () => ipcRenderer.invoke('get-env'),
+
+  onUpdateStatus: (cb) => ipcRenderer.on('update-status', (_, data) => cb(data)),
+  openUpdatePage: () => ipcRenderer.invoke('open-update-page'),
 });

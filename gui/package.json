@@ -1,13 +1,14 @@
 {
   "name": "laplace-gui",
-  "version": "0.1.0",
+  "version": "1.0.0",
   "description": "LAPLACE — Baccarat Strategy Client (GUI)",
   "main": "src/main.js",
   "scripts": {
     "start": "electron .",
     "dev": "electron . --dev",
-    "build": "electron-builder --dir",
-    "build:installer": "electron-builder"
+    "build": "electron-builder --dir --config.win.signAndEditExecutable=false",
+    "build:installer": "electron-builder --win nsis --config.win.signAndEditExecutable=false",
+    "publish": "electron-builder --win nsis --publish=always --config.win.signAndEditExecutable=false"
   },
   "author": "",
   "license": "UNLICENSED",
@@ -24,11 +25,12 @@
     "win": {
       "target": [
         {
-          "target": "dir",
+          "target": "nsis",
           "arch": ["x64"]
         }
       ]
     },
+
     "directories": {
       "output": "dist",
       "buildResources": "assets"

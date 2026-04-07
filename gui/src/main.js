@@ -22,6 +22,8 @@ const path = require('path');
 const fs = require('fs');
 const os = require('os');
 const { spawn } = require('child_process');
+const https = require('https');
+const { shell } = require('electron');
 
 let mainWindow = null;
 let pythonProcess = null;
@@ -343,8 +345,47 @@ ipcMain.handle('window-maximize', () => {
 });
 ipcMain.handle('window-close', () => mainWindow?.close());
 
+// === Update Checker ===
+// GitHub Releases (laplace-releases リポジトリ) の最新バージョンと比較
+
+const CURRENT_VERSION = app.getVersion();
+const UPDATE_CHECK_URL = 'https://api.github.com/repos/jinjinsansan/laplace-releases/releases/latest';
+const UPDATE_DOWNLOAD_URL = 'https://github.com/jinjinsansan/laplace-releases/releases/latest';
+
+function checkForUpdates() {
+  const req = https.get(
+    UPDATE_CHECK_URL,
+    { headers: { 'User-Agent': 'LAPLACE-Client' } },
+    (res) => {
+      let body = '';
+      res.on('data', (c) => body += c);
+      res.on('end', () => {
+        try {
+          const data = JSON.parse(body);
+          const latest = (data.tag_name || '').replace(/^v/, '');
+          if (latest && latest !== CURRENT_VERSION) {
+            sendToRenderer('update-status', { status: 'available', version: latest });
+          }
+        } catch (e) {
+          // ignore parse errors
+        }
+      });
+    }
+  );
+  req.on('error', () => {});
+  req.end();
+}
+
+ipcMain.handle('open-update-page', () => {
+  shell.openExternal(UPDATE_DOWNLOAD_URL);
+});
+
 // === App ===
 
-app.whenReady().then(createWindow);
+app.whenReady().then(() => {
+  createWindow();
+  // 起動後10秒待ってからアップデートチェック
+  setTimeout(checkForUpdates, 10000);
+});
 app.on('window-all-closed', () => { stopPython(); stopSshTunnel(); app.quit(); });
 app.on('before-quit', () => { stopPython(); stopSshTunnel(); });
