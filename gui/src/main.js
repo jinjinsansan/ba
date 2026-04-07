@@ -186,9 +186,17 @@ function createWindow() {
 
 function startPython(config) {
   if (pythonProcess) {
-    pythonProcess.kill();
+    // 既存プロセスが終了するまで待ってから再起動
+    const old = pythonProcess;
+    pythonProcess = null;
+    old.kill();
+    old.once('close', () => _doStartPython(config));
+    return;
   }
+  _doStartPython(config);
+}
 
+function _doStartPython(config) {
   // Open SSH tunnel first (no-op if LAPLACE_USE_REMOTE is not set)
   startSshTunnel();
 

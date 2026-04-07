@@ -32,6 +32,7 @@ class GameWSMonitor:
         self._settled_balance = None   # Settled時の残高
         self._status_changed = threading.Event()
         self._connected = False
+        self._last_message_at = time.time()
 
     @property
     def status(self) -> str:
@@ -46,6 +47,13 @@ class GameWSMonitor:
     @property
     def is_connected(self) -> bool:
         return self._connected
+
+    @property
+    def last_message_at(self) -> float:
+        return self._last_message_at
+
+    def seconds_since_last_message(self) -> float:
+        return time.time() - self._last_message_at
 
     def reset(self):
         with self._lock:
@@ -67,6 +75,7 @@ class GameWSMonitor:
             return
 
         self._connected = True
+        self._last_message_at = time.time()
 
         log_entry = data.get("log", {})
         if not log_entry:

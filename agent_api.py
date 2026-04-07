@@ -494,7 +494,30 @@ def _run_bet_session_inner(config: dict, stop_event: threading.Event, skip_event
     entry_fail_count = 0
     session_start = time.time()
 
+    _FREEZE_TIMEOUT = 90  # WS無活動90秒でフリーズ判定
+
     while not stop_event.is_set() and round_count < MAX_ROUNDS:
+        # ── フリーズ検出ウォッチドッグ ──
+        ws_idle = scraper.game_ws.seconds_since_last_message() if hasattr(scraper, 'game_ws') and scraper.game_ws else 0
+        if ws_idle > _FREEZE_TIMEOUT and target_tid:
+            send_action(f"Browser freeze detected ({ws_idle:.0f}s no WS) — reloading...")
+            send_log(f"[watchdog] WS silent {ws_idle:.0f}s — page reload")
+            try:
+                scraper.page.reload(timeout=15000)
+                import time as _t; _t.sleep(5)
+                executor.exit_table()
+                _t.sleep(3)
+                if executor.enter_table(target_tid, target_name):
+                    send_action(f"Recovered — re-entered {target_name}")
+                else:
+                    send_action("Recovery failed — re-selecting table")
+                    target_tid = None
+                    target_name = None
+            except Exception as _e:
+                send_log(f"[watchdog] reload error: {_e}")
+                target_tid = None
+            continue
+
         # Shoe change check
         shoe_signals = scraper.get_new_shoe_signals()
         if target_tid in shoe_signals and shoe_signals[target_tid]:
