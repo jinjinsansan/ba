@@ -31,9 +31,18 @@ if not exist "%SSH_DIR%" mkdir "%SSH_DIR%"
 copy /Y "%KEY_SRC%" "%KEY_DST%" > nul
 echo  [OK] SSH鍵を配置しました: %KEY_DST%
 
-:: パーミッション設定（Windows）
-icacls "%KEY_DST%" /inheritance:r /grant:r "%USERNAME%:R" > nul 2>&1
+:: パーミッション設定（OpenSSH on Windows requires strict permissions）
+powershell -Command "& { $k='%KEY_DST%'; $acl=Get-Acl $k; $acl.SetAccessRuleProtection($true,$false); $r=New-Object System.Security.AccessControl.FileSystemAccessRule('%USERNAME%','FullControl','Allow'); $acl.SetAccessRule($r); Set-Acl $k $acl }" > nul 2>&1
 echo  [OK] SSH鍵のアクセス権を設定しました
+
+:: SSH接続テスト
+echo  [INFO] VPS接続を確認中...
+ssh -i "%KEY_DST%" -o StrictHostKeyChecking=no -o BatchMode=yes -o ConnectTimeout=10 laplace@210.131.215.116 "echo OK" > nul 2>&1
+if errorlevel 1 (
+  echo  [警告] VPS接続に失敗しました。ネットワーク環境を確認してください。
+) else (
+  echo  [OK] VPS接続確認済み
+)
 
 echo.
 echo  セットアップ完了！
