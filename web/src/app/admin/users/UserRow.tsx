@@ -17,21 +17,21 @@ export default function UserRow({ user, billing }: { user: any; billing: any }) 
   const [loading, setLoading] = useState(false)
   const [showConfig, setShowConfig] = useState(false)
   const [uploading, setUploading] = useState(false)
+  const [showUrlInput, setShowUrlInput] = useState(false)
+  const [zipUrl, setZipUrl] = useState('')
   const isActive = billing?.status === 'active'
 
-  async function uploadZip(e: React.ChangeEvent<HTMLInputElement>) {
-    const file = e.target.files?.[0]
-    if (!file) return
+  async function sendZipUrl() {
+    if (!zipUrl.startsWith('http')) { alert('正しいURLを入力してください'); return }
     setUploading(true)
-    const form = new FormData()
-    form.append('file', file)
-    form.append('userId', user.id)
-    form.append('version', '1.0.4')
-    const res = await fetch('/api/admin/upload', { method: 'POST', body: form })
-    if (res.ok) { alert('ZIP送付完了'); router.refresh() }
+    const res = await fetch('/api/admin/upload', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ userId: user.id, version: '1.0.4', url: zipUrl }),
+    })
+    if (res.ok) { alert('ZIP送付完了'); setShowUrlInput(false); setZipUrl(''); router.refresh() }
     else { alert('エラー: ' + (await res.text())) }
     setUploading(false)
-    e.target.value = ''
   }
   const cfg = { ...DEFAULT_BOT_CONFIG, ...(billing?.bot_config || {}) }
   const router = useRouter()
@@ -112,10 +112,12 @@ export default function UserRow({ user, billing }: { user: any; billing: any }) 
             >
               {isActive ? '無効化' : 'Activate'}
             </button>
-            <label className={`px-2 py-1 rounded text-xs cursor-pointer transition ${uploading ? 'opacity-50' : 'bg-purple-500/20 text-purple-400 hover:bg-purple-500/30'}`}>
-              {uploading ? '送付中...' : 'ZIP送付'}
-              <input type="file" accept=".zip" className="hidden" onChange={uploadZip} disabled={uploading} />
-            </label>
+            <button
+              onClick={() => setShowUrlInput(v => !v)}
+              className="px-2 py-1 rounded text-xs bg-purple-500/20 text-purple-400 hover:bg-purple-500/30 transition"
+            >
+              ZIP送付
+            </button>
             <button
               onClick={() => setShowConfig(v => !v)}
               className="px-2 py-1 rounded text-xs bg-white/5 text-slate-400 hover:text-white transition"
@@ -138,6 +140,28 @@ export default function UserRow({ user, billing }: { user: any; billing: any }) 
               <span className={`px-2 py-0.5 rounded text-xs font-bold ${cfg.require_pb ? 'bg-player/20 text-player' : 'bg-white/5 text-slate-500'}`}>
                 P{'>'} B: {cfg.require_pb ? 'ON' : 'OFF'}
               </span>
+            </div>
+          </td>
+        </tr>
+      )}
+      {showUrlInput && (
+        <tr className="border-b border-white/5 bg-purple-500/5">
+          <td colSpan={7} className="py-3 px-4">
+            <div className="flex gap-2 items-center">
+              <input
+                type="url"
+                placeholder="GitHub Release URL (https://github.com/...)"
+                value={zipUrl}
+                onChange={e => setZipUrl(e.target.value)}
+                className="flex-1 bg-white/5 border border-white/10 rounded px-3 py-1.5 text-xs text-white placeholder-slate-500 outline-none"
+              />
+              <button
+                onClick={sendZipUrl}
+                disabled={uploading}
+                className="px-3 py-1.5 rounded text-xs bg-purple-500/30 text-purple-300 hover:bg-purple-500/50 transition disabled:opacity-50"
+              >
+                {uploading ? '送付中...' : '送付'}
+              </button>
             </div>
           </td>
         </tr>

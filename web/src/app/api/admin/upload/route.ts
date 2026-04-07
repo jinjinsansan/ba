@@ -13,29 +13,19 @@ export async function POST(req: NextRequest) {
   const { data: profile } = await serverSupabase.from('profiles').select('is_admin').eq('id', user.id).single()
   if (!profile?.is_admin) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
 
-  const formData = await req.formData()
-  const file = formData.get('file') as File
-  const userId = formData.get('userId') as string
-  const version = formData.get('version') as string || '1.0'
+  const body = await req.json()
+  const { userId, version = '1.0', url } = body
 
-  if (!file || !userId) return NextResponse.json({ error: 'Missing file or userId' }, { status: 400 })
+  if (!userId || !url) return NextResponse.json({ error: 'Missing userId or url' }, { status: 400 })
 
   const admin = createAdminClient()
-  const filePath = `${userId}/LAPLACE-v${version}.zip`
 
-  const { error: uploadError } = await admin.storage
-    .from('deliverables')
-    .upload(filePath, file, { upsert: true })
-
-  if (uploadError) return NextResponse.json({ error: uploadError.message }, { status: 500 })
-
-  // delete existing then insert (avoids missing UNIQUE constraint issue)
   await admin.from('deliverables').delete().eq('user_id', userId)
   await admin.from('deliverables').insert({
     user_id: userId,
-    file_path: filePath,
+    file_path: url,
     version,
   })
 
-  return NextResponse.json({ ok: true, path: filePath })
+  return NextResponse.json({ ok: true })
 }
