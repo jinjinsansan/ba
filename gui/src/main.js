@@ -385,6 +385,7 @@ ipcMain.handle('save-credentials', (_, { email, stake_username, stake_password }
     LAPLACE_ACCOUNT_EMAIL: email,
     STAKE_USERNAME: stake_username,
     STAKE_PASSWORD: stake_password,
+    LAPLACE_USER: email,
   });
   return { ok: true };
 });
