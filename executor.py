@@ -69,32 +69,39 @@ class BetExecutor:
             return True
 
         try:
-            logger.info(f"{table_name}に入ります")
+            logger.info(f"{table_name}に入ります (table_id={table_id})")
             self.game_ws.reset()
 
             game = self._get_evo_game()
             if not game:
-                logger.error("Evolution iframe未検出")
+                all_frames = [f.url for f in self.page.frames]
+                logger.error(f"Evolution iframe未検出 — page.url={self.page.url} frames={all_frames}")
                 return False
 
+            logger.info(f"Evolution iframe検出OK — hash遷移実行")
             game.evaluate(f"() => {{ window.location.hash = 'table_id={table_id}'; }}")
 
-            # BETスポットが出現するまで待機 (最大40秒)
-            for i in range(20):
+            # BETスポットが出現するまで待機 (最大60秒)
+            for i in range(30):
                 time.sleep(2)
                 try:
                     evo = self._get_evo_locator()
                     if evo.locator('[data-betspot-destination]').first.is_visible(timeout=2000):
                         logger.info(f"テーブル読込完了 ({(i+1)*2}秒)")
                         break
-                except Exception:
-                    pass
+                except Exception as e:
+                    if i % 5 == 4:
+                        logger.info(f"テーブル読込待機中... ({(i+1)*2}秒) err={e}")
                 # TRY AGAIN ダイアログチェック
                 if not self.check_and_dismiss_error():
                     logger.warning("テーブル読込中にエラーダイアログ → 入場失敗")
                     return False
             else:
-                logger.error("テーブル読込タイムアウト (40秒)")
+                try:
+                    self.page.screenshot(path=str(__import__('config').SCREENSHOTS_DIR / "entry_timeout.png"))
+                except Exception:
+                    pass
+                logger.error("テーブル読込タイムアウト (60秒)")
                 return False
 
             # スクリーンネームダイアログ処理
@@ -464,9 +471,15 @@ class BetExecutor:
                 return None
             time.sleep(0.5)
 
-        # Step 3: 結果判定
+        # Step 3: 結果判定 (優先順位: WS → 残高変化 → DOM)
         time.sleep(0.3)
-        # 残高取得に失敗(0.0)した場合は最大3回リトライ
+
+        # 方法1: WebSocket結果 (最も信頼性が高い)
+        ws_result = self.game_ws.get_result_side() if self.game_ws else None
+        if ws_result:
+            logger.info(f"WS結果検出: {ws_result.upper()}")
+
+        # 方法2: 残高変化
         new_balance = 0.0
         for _bi in range(3):
             new_balance = self._get_balance_dom()
@@ -474,31 +487,30 @@ class BetExecutor:
                 break
             time.sleep(0.5)
 
+        balance_result = None
         if bet_amount > 0 and pre_balance > 0 and new_balance > 0:
-            # BETした場合: 残高変化で勝敗判定
             diff = new_balance - pre_balance
             logger.info(f"残高変化: ${pre_balance:.2f} → ${new_balance:.2f} (差${diff:+.2f}, BET${bet_amount:.0f})")
             if diff > 0.01:
-                result_side = "player"
+                balance_result = "player"
             elif diff < -0.01:
-                result_side = "banker"
+                balance_result = "banker"
             else:
-                result_side = "tie"
+                balance_result = "tie"
 
-        # BETなし or 残高判定失敗 → DOM結果オーバーレイ
-        if not result_side:
-            dom_result = self._detect_result_dom()
-            if dom_result:
-                result_side = dom_result
+        # 方法3: DOM結果オーバーレイ
+        dom_result = self._detect_result_dom()
 
-        # それでも取れない場合 (観戦時は "unknown" で返す)
+        # 最終判定: WS > 残高 > DOM
+        result_side = ws_result or balance_result or dom_result
+
         if not result_side:
             if bet_amount == 0:
                 return {"result": "unknown", "balance": new_balance}
-            logger.warning("結果取得タイムアウト")
+            logger.warning(f"結果取得失敗 (ws={ws_result}, balance={balance_result}, dom={dom_result})")
             return None
 
-        logger.info(f"結果検出: {result_side.upper()} 残高: ${new_balance:.2f}")
+        logger.info(f"結果検出: {result_side.upper()} (ws={ws_result}, bal={balance_result}, dom={dom_result}) 残高: ${new_balance:.2f}")
         return {"result": result_side, "balance": new_balance}
 
     def _detect_result_dom(self) -> str | None:

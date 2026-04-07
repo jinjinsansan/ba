@@ -469,6 +469,16 @@ class RemoteLaplaceSession:
             if actual_total > 0 and abs(actual_total - bet_amount) > 0.5:
                 logger.warning(f"部分BET検出: 計画${bet_amount:.0f} → 実際${actual_total:.2f}")
                 bet_amount = actual_total
+            elif actual_total == 0:
+                logger.warning("place_bet=Trueだがactual_total=0 — BET未置 → 観戦モード")
+                result_info = self.executor.wait_for_result(timeout=90, bet_amount=0)
+                if result_info and result_info.get("result") not in (None, "unknown"):
+                    try:
+                        self.client.submit_result(self.user_id, result_info["result"])
+                    except Exception:
+                        pass
+                return {"action": "bet", "result": None, "won": None, "bet_amount": 0,
+                        "completed_set": None, "should_reset": self.should_reset()}
 
         # wait for result
         result_info = self.executor.wait_for_result(timeout=90, bet_amount=bet_amount)

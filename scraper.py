@@ -105,9 +105,6 @@ class BaccaratScraper:
             "headless": config.HEADLESS,
             "persistent_context": True,
             "user_data_dir": profile_dir,
-            "screen": {"width": 1280, "height": 800},
-            "viewport": {"width": 1280, "height": 800},
-            "args": ["--window-size=1280,800", "--window-position=0,0"],
         }
         if exe_path:
             launch_opts["executable_path"] = exe_path

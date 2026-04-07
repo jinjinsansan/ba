@@ -476,38 +476,58 @@ def _run_bet_session_inner(config: dict, stop_event: threading.Event, skip_event
             scraper._shoe_epochs[target_tid] = int(time.time())
             scraper._new_shoe_signals[target_tid] = False
 
-    # === Enter table (最大3回リトライ) ===
+    # === Enter table (診断ログ付き) ===
     send_action(f"Entering table: {target_name}...")
+
+    # 診断: ブラウザ状態を出力
+    try:
+        page_url = scraper.page.url
+        frame_urls = [f.url[:80] for f in scraper.page.frames]
+        evo_frames = [u for u in frame_urls if "evo" in u.lower()]
+        send_log(f"[DIAG] page={page_url[:80]}")
+        send_log(f"[DIAG] frames={len(frame_urls)} evo={len(evo_frames)}")
+        for eu in evo_frames:
+            send_log(f"[DIAG] evo_frame: {eu}")
+        if not evo_frames:
+            send_log(f"[DIAG] ALL frames: {frame_urls}")
+        # スクリーンショット
+        try:
+            import config as _cfg
+            scraper.page.screenshot(path=str(_cfg.SCREENSHOTS_DIR / "before_entry.png"))
+            send_log("[DIAG] screenshot saved: before_entry.png")
+        except Exception as ss_err:
+            send_log(f"[DIAG] screenshot failed: {ss_err}")
+    except Exception as diag_err:
+        send_log(f"[DIAG] diagnostic failed: {diag_err}")
+
     _entry_ok = False
     for _attempt in range(3):
         if executor.enter_table(target_tid, target_name):
             _entry_ok = True
             break
+        # 失敗時の詳細診断
+        try:
+            evo_frames_now = [f.url[:80] for f in scraper.page.frames if "evo" in f.url.lower()]
+            send_log(f"[DIAG] after fail: evo_frames={len(evo_frames_now)} page={scraper.page.url[:60]}")
+        except Exception:
+            pass
         send_log(f"Table entry failed (attempt {_attempt+1}/3) — retrying in 10s...")
         send_action(f"Entry failed — retrying ({_attempt+1}/3)...")
-        time.sleep(10)
+        if _attempt < 2:
+            # リトライ前にロビーに戻る
+            try:
+                send_log("[DIAG] Navigating back to lobby before retry...")
+                import config as _cfg
+                scraper.page.goto(_cfg.BACCARAT_LOBBY_URL, wait_until="domcontentloaded", timeout=30000)
+                time.sleep(5)
+            except Exception as nav_err:
+                send_log(f"[DIAG] lobby navigation failed: {nav_err}")
+            time.sleep(5)
     if not _entry_ok:
-        send_log("Table entry failed after 3 attempts — re-selecting table")
-        send_action("Entry failed — re-selecting table...")
-        target_tid = None
-        target_name = None
-        # テーブル再選定ループへ
-        while not stop_event.is_set() and target_tid is None:
-            best = pick_table()
-            if best:
-                target_tid = best.table_id
-                target_name = best.title
-            else:
-                if stop_event.wait(15):
-                    break
-        if stop_event.is_set() or not target_tid:
-            scraper.stop()
-            return
-        send_action(f"Entering table: {target_name}...")
-        if not executor.enter_table(target_tid, target_name):
-            send_log("Table entry failed again — stopping")
-            scraper.stop()
-            return
+        send_log("Table entry failed after 3 attempts — stopping")
+        send_action("Table entry failed — stopping")
+        scraper.stop()
+        return
 
     balance = executor.get_balance() if not dry_run else 0
     send_action(f"In table. Balance: ${balance:.2f}")
