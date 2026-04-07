@@ -8,14 +8,18 @@
     "dev": "electron . --dev",
     "build": "electron-builder --dir --config.win.signAndEditExecutable=false",
     "build:installer": "electron-builder --win nsis --config.win.signAndEditExecutable=false",
-    "publish": "electron-builder --win nsis --publish=always --config.win.signAndEditExecutable=false"
+    "publish": "electron-builder --win nsis --publish=always --config.win.signAndEditExecutable=false",
+    "build:prod": "node scripts/build-prod.js && electron-builder --dir --config.win.signAndEditExecutable=false --config.files=\"src_prod/**/*\" --config.directories.output=dist_prod"
   },
   "author": "",
   "license": "UNLICENSED",
   "private": true,
   "devDependencies": {
+    "class-transformer": "^0.5.1",
+    "class-validator": "^0.15.1",
     "electron": "^41.1.1",
-    "electron-builder": "^25.1.8"
+    "electron-builder": "^25.1.8",
+    "reflect-metadata": "^0.2.2"
   },
   "build": {
     "appId": "ai.laplace.client",
@@ -26,11 +30,12 @@
       "target": [
         {
           "target": "dir",
-          "arch": ["x64"]
+          "arch": [
+            "x64"
+          ]
         }
       ]
     },
-
     "directories": {
       "output": "dist",
       "buildResources": "assets"
