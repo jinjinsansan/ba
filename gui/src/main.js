@@ -112,7 +112,7 @@ async function checkLicenseApi(email) {
   return new Promise((resolve) => {
     const body = JSON.stringify({ email, api_key: apiKey });
     const req = https.request(
-      { hostname: 'bafather.uk', path: '/api/auth/license', method: 'POST',
+      { hostname: 'www.bafather.uk', path: '/api/auth/license', method: 'POST',
         headers: { 'Content-Type': 'application/json', 'Content-Length': Buffer.byteLength(body) } },
       (res) => {
         let data = '';
