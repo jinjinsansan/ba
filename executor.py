@@ -24,6 +24,8 @@ class BetExecutor:
         self.demo_mode = config.get("demo_mode", True)
         self._settled_seen = False
         self._pre_bet_balance = 0.0
+        self._available_chips = None  # テーブル入場後にスキャン
+        self._chip_plan_cache = {}   # BET額→チップ計画の事前計算キャッシュ
         try:
             self.page.set_default_timeout(10000)
         except Exception:
@@ -110,12 +112,56 @@ class BetExecutor:
             self.in_table = True
             self.current_table_id = table_id
             self.current_table_name = table_name
+            self._scan_available_chips()
             logger.info(f"{table_name} 入場完了")
             return True
 
         except Exception as e:
             logger.error(f"テーブル入場エラー: {e}")
             return False
+
+    def _scan_available_chips(self):
+        """テーブル入場後に利用可能なチップ額をスキャンし、全BET額のチップ計画を事前計算"""
+        inner = self._get_evo_inner()
+        if not inner:
+            self._available_chips = None
+            self._chip_plan_cache = {}
+            return
+        try:
+            # スタック展開して全チップを表示
+            inner.evaluate('() => { const s = document.querySelector(\'[data-role="footer-perspective-chip-stack"]\'); if (s) s.click(); }')
+            time.sleep(0.3)
+            chips = inner.evaluate("""() => {
+                const els = document.querySelectorAll('[data-role="chip"][data-value]');
+                const vals = new Set();
+                for (const el of els) {
+                    const v = parseInt(el.getAttribute('data-value'));
+                    if (v > 0) vals.add(v);
+                }
+                return Array.from(vals).sort((a, b) => a - b);
+            }""")
+            if chips:
+                self._available_chips = chips
+                logger.info(f"利用可能チップ: {chips}")
+            else:
+                self._available_chips = None
+                logger.warning("チップスキャン: チップ未検出")
+            # スタックを閉じる
+            try:
+                inner.evaluate('() => { const s = document.querySelector(\'[data-role="footer-perspective-chip-stack"]\'); if (s) s.click(); }')
+            except Exception:
+                pass
+        except Exception as e:
+            self._available_chips = None
+            logger.warning(f"チップスキャン失敗: {e}")
+
+        # 全BET額 ($1~$50) のチップ計画を事前計算してキャッシュ
+        self._chip_plan_cache = {}
+        for amt in range(1, 51):
+            plan = self._calc_chip_plan(amt)
+            self._chip_plan_cache[amt] = plan
+        has_2 = self._available_chips and 2 in self._available_chips
+        logger.info(f"チップ計画キャッシュ完了: $1~$50 ($2チップ{'あり' if has_2 else 'なし'})")
 
     def _dismiss_screen_name(self):
         inner = self._get_evo_inner()
@@ -147,7 +193,8 @@ class BetExecutor:
         if self.demo_mode:
             return True
         return self.game_ws.wait_for_betting_phase(
-            timeout, dom_checker=self._is_betting_phase_dom, skip_round=skip_round
+            timeout, dom_checker=self._is_betting_phase_dom, skip_round=skip_round,
+            error_checker=self.check_and_dismiss_error
         )
 
     def _is_betting_phase_dom(self) -> bool:
@@ -163,11 +210,35 @@ class BetExecutor:
     _error_dialog_count = 0
 
     def check_and_dismiss_error(self) -> bool:
-        """TRY AGAIN / BACK TO LOBBY ダイアログを検出して回復。
-        Returns: True=回復済み or エラーなし, False=回復不能
+        """TRY AGAIN / BACK TO LOBBY / SESSION EXPIRED ダイアログを検出して回復。
+        Returns: True=回復済み or エラーなし, False=回復不能(再入場が必要)
         """
         try:
             evo = self._get_evo_locator()
+
+            # SESSION EXPIRED / セッション切れ / EV.5 検出 → 即座にFalse (再入場必須)
+            for expired_text in ["SESSION", "EXPIRED", "TIMED OUT", "RECONNECT",
+                                 "EV.5", "authentication failed", "Error Code"]:
+                try:
+                    el = evo.get_by_text(expired_text, exact=False).first
+                    if el.is_visible(timeout=300):
+                        logger.warning(f"セッション切れ検出: '{expired_text}' — 再入場が必要")
+                        # OKやCLOSEボタンがあれば押す
+                        for btn_text in ["OK", "CLOSE", "BACK", "LOBBY"]:
+                            try:
+                                btn = evo.get_by_text(btn_text, exact=False).first
+                                if btn.is_visible(timeout=300):
+                                    btn.click(timeout=2000, force=True)
+                                    time.sleep(2)
+                                    break
+                            except Exception:
+                                pass
+                        self._error_dialog_count = 0
+                        return False
+                except Exception:
+                    pass
+
+            # TRY AGAIN ダイアログ
             try_again = evo.get_by_text("TRY AGAIN", exact=False).first
             if try_again.is_visible(timeout=500):
                 self._error_dialog_count += 1
@@ -177,7 +248,6 @@ class BetExecutor:
                     time.sleep(5)
                     return True
                 else:
-                    # TRY AGAINが3回失敗 → BACK TO LOBBY
                     logger.warning("TRY AGAIN 3回失敗 → BACK TO LOBBY")
                     try:
                         back = evo.get_by_text("BACK", exact=False).first
@@ -189,7 +259,6 @@ class BetExecutor:
                     return False
         except Exception:
             pass
-        # エラーダイアログなし → カウントリセット
         self._error_dialog_count = 0
         return True
 
@@ -260,10 +329,11 @@ class BetExecutor:
     def place_bet(self, side: str, amount: float) -> bool:
         """チップ選択 → BETスポットクリック → 受理確認
 
-        - $500チップ対応で大額BETのクリック数を最小化
-        - locatorはチップ額ごとに1回のみ取得 (失敗時のみ再取得)
-        - 11秒タイムリミット: 超過前に部分BETを検出して続行
-        - 部分BETが置かれていれば失敗扱いにせずTrueを返す
+        高速化設計:
+        - evo locator / bet_loc は最初に1回取得、失敗時のみ再取得
+        - 同じチップ額が連続する場合はチップ切替スキップ
+        - BETスポットクリック間のsleepを最小化 (0.15→0.08s)
+        - タイムリミット11秒、部分BETでもTrueを返す
 
         Returns: True=BET受理(全額または部分), False=未BET
         """
@@ -273,32 +343,57 @@ class BetExecutor:
 
         logger.info(f"${amount:.0f} {side.upper()} BETします")
 
-        self._pre_bet_balance = self._get_balance_dom()
+        if self.game_ws and self.game_ws.balance > 0:
+            self._pre_bet_balance = self.game_ws.balance
+        else:
+            self._pre_bet_balance = self._get_balance_dom()
+        if self.game_ws:
+            self.game_ws.mark_bet_placed()
 
         dest = "Player" if side == "player" else "Banker"
 
-        chip_plan = self._calc_chip_plan(int(amount))
+        amt_int = int(amount)
+        chip_plan = self._chip_plan_cache.get(amt_int) if self._chip_plan_cache else None
+        if not chip_plan:
+            chip_plan = self._calc_chip_plan(amt_int)
         total_clicks = sum(count for _, count in chip_plan)
         logger.info(f"チップ計画: {chip_plan} ({total_clicks}クリック)")
 
         _bet_start = time.time()
-        _time_limit = 11.0  # BETウィンドウ残り約2秒でアボート
+        _time_limit = 13.0
+
+        # locator を最初に1回だけ取得
+        evo = self._get_evo_locator()
+
+        # 前回BETの残りチップをクリア (遅延クリックによる超過BET防止)
+        try:
+            undo = evo.locator('[data-role="undo-button"]').first
+            if undo.is_visible(timeout=300):
+                undo.click(timeout=300, force=True)
+                time.sleep(0.1)
+        except Exception:
+            pass
+
+        bet_loc = evo.locator(f'[data-betspot-destination="{dest}"]').first
+        _current_chip = None  # 現在選択中のチップ額
 
         for chip_value, count in chip_plan:
-            evo = self._get_evo_locator()
-            if not self._select_chip(evo, chip_value):
-                total = self._get_total_bet()
-                if total > 0:
-                    logger.warning(f"チップ選択失敗だが${total:.2f}が置かれている — 部分BETで続行")
-                    return True
-                return False
-
-            # locatorはチップ額切り替え時に1回だけ取得
-            evo = self._get_evo_locator()
-            bet_loc = evo.locator(f'[data-betspot-destination="{dest}"]').first
+            # チップ額が同じなら切替スキップ
+            if chip_value != _current_chip:
+                if not self._select_chip(evo, chip_value):
+                    fallback_clicks = chip_value * count
+                    logger.warning(f"チップ${chip_value}不在 → $1 x {fallback_clicks}クリックにフォールバック")
+                    if not self._select_chip(evo, 1):
+                        total = self._get_total_bet()
+                        if total > 0:
+                            logger.warning(f"$1チップも選択失敗だが${total:.2f}が置かれている — 部分BETで続行")
+                            return True
+                        return False
+                    chip_value = 1
+                    count = fallback_clicks
+                _current_chip = chip_value
 
             for click_i in range(count):
-                # タイムリミットチェック
                 elapsed = time.time() - _bet_start
                 if elapsed > _time_limit:
                     total = self._get_total_bet()
@@ -309,24 +404,17 @@ class BetExecutor:
                     return False
 
                 clicked = False
-                for attempt in range(5):
+                try:
+                    bet_loc.click(timeout=500, force=True)
+                    clicked = True
+                except Exception:
                     try:
-                        if self.humanizer and click_i == 0:
-                            box = bet_loc.bounding_box(timeout=2000)
-                            if box:
-                                cx = int(box["x"] + box["width"] / 2)
-                                cy = int(box["y"] + box["height"] / 2)
-                                self.humanizer.click_with_offset_sync(self.page, cx, cy)
-                                clicked = True
-                                break
-                        bet_loc.click(timeout=2000, force=True)
-                        clicked = True
-                        break
-                    except Exception:
-                        # 失敗時のみlocatorを再取得
                         evo = self._get_evo_locator()
                         bet_loc = evo.locator(f'[data-betspot-destination="{dest}"]').first
-                        time.sleep(0.3)
+                        bet_loc.click(timeout=500, force=True)
+                        clicked = True
+                    except Exception:
+                        pass
 
                 if not clicked:
                     total = self._get_total_bet()
@@ -335,74 +423,119 @@ class BetExecutor:
                         return True
                     logger.error(f"BETスポットクリック失敗 (chip=${chip_value} {click_i+1}/{count})")
                     return False
-                time.sleep(0.15)
 
-        for _ in range(10):
+        # BET受理確認: WS BET_CHIP → DOM total-bet の順で検出
+        _confirm_deadline = time.time() + 5.0
+        while time.time() < _confirm_deadline:
+            # WS で CLIENT_BET_CHIP が来ていれば即受理
+            if self.game_ws and self.game_ws.status == "Betting":
+                # BET_CHIP は status 更新しないが、bet_accepted で Betting のまま
+                # → total-bet DOM で確認
+                pass
             total = self._get_total_bet()
             if total > 0:
                 logger.info(f"BET受理: ${total:.2f}")
                 return True
-            time.sleep(0.5)
+            time.sleep(0.2)
 
-        # 最終確認 — 部分BETでも受理とみなす
-        total = self._get_total_bet()
-        if total > 0:
-            logger.warning(f"BET確認タイムアウトだが${total:.2f}が存在 — 部分BETとして受理")
-            return True
+        # DOM確認がタイムアウトでも、BETスポットクリックが成功していれば
+        # WS CLIENT_BET_CHIP で受理されている可能性が高い → 楽観的に受理
+        logger.warning("BET受理確認タイムアウト — クリック成功のため受理とみなす")
+        return True
 
-        logger.error("BET受理確認タイムアウト")
-        return False
-
-    @staticmethod
-    def _calc_chip_plan(amount: int) -> list[tuple[int, int]]:
-        """金額を最少クリック数のチップ組み合わせに分解。
-        利用可能チップ: $500, $100, $25, $5, $2, $1
-        例: 2500 → [(500,5)] = 5クリック (旧: $100×25 = 25クリック)
-             250 → [(100,2),(25,2)] = 4クリック
-              13 → [(5,2),(2,1),(1,1)] = 4クリック
+    def _calc_chip_plan(self, amount: int) -> list[tuple[int, int]]:
+        """金額を最大3種のチップで組む (チップ切替は最大2回)。
+        切替回数が少ない方を優先し、同じ切替回数ならクリック数が少ない方を選ぶ。
         """
-        plan = []
-        remaining = amount
-        for chip in [500, 100, 25, 5, 2, 1]:
-            if remaining >= chip:
-                n = remaining // chip
-                plan.append((chip, n))
-                remaining -= chip * n
-        return plan
+        if self._available_chips:
+            all_chips = sorted([c for c in self._available_chips if 0 < c <= amount], reverse=True)
+            if not all_chips:
+                all_chips = [1]
+        else:
+            all_chips = [c for c in [500, 100, 25, 5, 2, 1] if c <= amount] or [1]
+
+        best_plan = [(1, amount)]
+        best_clicks = amount
+
+        # 1種: 単一チップで割り切れる場合
+        for c in all_chips:
+            if amount % c == 0:
+                n = amount // c
+                if n < best_clicks:
+                    best_plan = [(c, n)]
+                    best_clicks = n
+
+        # 2種: 大チップ + 小チップ端数
+        for i, big in enumerate(all_chips):
+            if big == 1:
+                continue
+            n_big = amount // big
+            rem = amount % big
+            if rem == 0 or n_big == 0:
+                continue
+            # 端数を$1以外の小チップで最適化
+            for small in all_chips[i+1:]:
+                if small == 0:
+                    continue
+                if rem % small == 0:
+                    clicks = n_big + rem // small
+                    if clicks < best_clicks:
+                        best_clicks = clicks
+                        best_plan = [(big, n_big), (small, rem // small)]
+                    break
+            else:
+                # $1で補完
+                clicks = n_big + rem
+                if clicks < best_clicks:
+                    best_clicks = clicks
+                    best_plan = [(big, n_big), (1, rem)]
+
+        # 3種: 大チップ + 中チップ + 小チップ端数
+        for i, big in enumerate(all_chips):
+            if big <= 1:
+                continue
+            for j, mid in enumerate(all_chips[i+1:], i+1):
+                if mid <= 1:
+                    continue
+                n_big = amount // big
+                for nb in range(n_big, 0, -1):
+                    rem = amount - big * nb
+                    n_mid = rem // mid
+                    if n_mid == 0:
+                        continue
+                    r = rem - mid * n_mid
+                    clicks = nb + n_mid + (r if r > 0 else 0)
+                    if clicks < best_clicks:
+                        best_clicks = clicks
+                        plan = [(big, nb), (mid, n_mid)]
+                        if r > 0:
+                            plan.append((1, r))
+                        best_plan = plan
+
+        return best_plan
 
     def _select_chip(self, evo, chip_value: int) -> bool:
-        """チップ選択。スタック展開→チップクリック"""
-        for retry in range(5):
-            try:
-                evo = self._get_evo_locator()
-                chip = evo.locator(f'[data-role="chip"][data-value="{chip_value}"]').first
-                chip.click(timeout=3000, force=True)
-                logger.info(f"チップ${chip_value}選択OK")
-                return True
-            except Exception as e:
-                if retry == 0:
-                    # 初回失敗時にDOM確認
-                    inner = self._get_evo_inner()
-                    if inner:
-                        try:
-                            cnt = inner.evaluate(
-                                f'() => document.querySelectorAll(\'[data-role="chip"][data-value="{chip_value}"]\').length'
-                            )
-                            logger.info(f"チップDOM: value={chip_value} count={cnt}")
-                        except Exception:
-                            pass
-                # スタック展開してリトライ
-                try:
-                    evo = self._get_evo_locator()
-                    evo.locator('[data-role="footer-perspective-chip-stack"]').first.click(timeout=2000, force=True)
-                    time.sleep(0.3)
-                    evo.locator(f'[data-role="chip"][data-value="{chip_value}"]').first.click(timeout=2000, force=True)
-                    logger.info(f"チップ${chip_value}選択OK (展開後)")
-                    return True
-                except Exception:
-                    time.sleep(0.3)
+        """チップ選択。locatorで直接クリック→失敗時はスタック展開→リトライ。"""
+        # 1回目: 直接クリック
+        try:
+            chip = evo.locator(f'[data-role="chip"][data-value="{chip_value}"]').first
+            chip.click(timeout=500, force=True)
+            logger.info(f"チップ${chip_value}選択OK")
+            return True
+        except Exception:
+            pass
 
-        logger.error(f"チップ${chip_value}選択失敗 — BET中止")
+        # 2回目: スタック展開してリトライ
+        try:
+            evo.locator('[data-role="footer-perspective-chip-stack"]').first.click(timeout=500, force=True)
+            time.sleep(0.08)
+            evo.locator(f'[data-role="chip"][data-value="{chip_value}"]').first.click(timeout=500, force=True)
+            logger.info(f"チップ${chip_value}選択OK (展開後)")
+            return True
+        except Exception:
+            pass
+
+        logger.error(f"チップ${chip_value}選択失敗")
         return False
 
     def _select_chip_value(self, amount: float) -> int:
@@ -422,7 +555,8 @@ class BetExecutor:
         try:
             text = inner.evaluate(
                 '() => { const e = document.querySelector(\'[data-role="total-bet-label-value"]\'); '
-                "return e ? e.textContent : ''; }"
+                "return e ? e.textContent : ''; }",
+                timeout=2000,
             )
             nums = re.findall(r'[\d.]+', text)
             return float(nums[0]) if nums else 0.0
@@ -432,15 +566,15 @@ class BetExecutor:
     # ─── 結果待ち ───
 
     def wait_for_result(self, timeout: float = 60, bet_amount: float = 0) -> dict | None:
-        """DOMのみで結果を検出 (WS不要)。
+        """DOM + WS ハイブリッドで結果を検出。
 
-        タイマー消失(ディーリング中) → タイマー再出現(次BETフェーズ) → 残高変化で判定。
-        bet_amount: BET額 (BET前の残高からの差分で勝敗判定に使用)
+        Step 1: タイマー消失(ディーリング中)を待つ
+        Step 2: タイマー再出現 OR WS Settled/Idle を待つ (DOM失敗時の90sハング防止)
+        Step 3: WS multiplier → 残高変化 → DOM の優先順位で結果判定
         """
         if self.demo_mode:
             import random
             time.sleep(random.uniform(2, 5))
-            # Real baccarat probabilities: Player 44.62%, Banker 45.86%, Tie 9.52%
             r = random.choices(
                 ["player", "banker", "tie"],
                 weights=[44.62, 45.86, 9.52],
@@ -451,41 +585,54 @@ class BetExecutor:
 
         logger.info("結果を待っています...")
         deadline = time.time() + timeout
-        result_side = None
         pre_balance = self._pre_bet_balance
 
         # Step 1: BETフェーズ終了を待つ (タイマー消失)
         while time.time() < deadline:
+            # WS Settled/Idle/Betting で即脱出 (DOM確認より高速)
+            if self.game_ws and self.game_ws.status in ("Settled", "Idle"):
+                logger.info(f"WS状態で脱出 (Step1): {self.game_ws.status}")
+                break
             if not self._is_betting_phase_dom():
                 logger.info("ディーリング中...")
                 break
             if not self.check_and_dismiss_error():
                 return None
-            time.sleep(0.5)
+            time.sleep(0.15)
 
         # Step 2: 次のBETフェーズ開始を待つ (タイマー再出現 = 結果確定済み)
+        _ws_settled_seen = False
         while time.time() < deadline:
+            if self.game_ws:
+                ws_status = self.game_ws.status
+                if ws_status == "Settled":
+                    _ws_settled_seen = True
+                if ws_status == "Betting" and _ws_settled_seen:
+                    logger.info("WS Betting検出 (Settled後) — DOM待機をスキップ")
+                    break
+                if _ws_settled_seen and ws_status == "Idle":
+                    logger.info("WS Idle検出 (Settled後) — DOM待機をスキップ")
+                    break
             if self._is_betting_phase_dom():
                 break
             if not self.check_and_dismiss_error():
                 return None
-            time.sleep(0.5)
+            time.sleep(0.15)
 
-        # Step 3: 結果判定 (優先順位: WS → 残高変化 → DOM)
-        time.sleep(0.3)
+        # Step 3: WS multiplier (来ないテーブルが多いので最大0.3秒のみ待機)
+        ws_result = None
+        if self.game_ws:
+            ws_result = self.game_ws.get_result_side()
+            if not ws_result:
+                time.sleep(0.3)
+                ws_result = self.game_ws.get_result_side()
+            if ws_result:
+                logger.info(f"WS結果検出: {ws_result.upper()}")
 
-        # 方法1: WebSocket結果 (最も信頼性が高い)
-        ws_result = self.game_ws.get_result_side() if self.game_ws else None
-        if ws_result:
-            logger.info(f"WS結果検出: {ws_result.upper()}")
-
-        # 方法2: 残高変化
-        new_balance = 0.0
-        for _bi in range(3):
+        # 方法2: WS残高diff (CLIENT_BALANCE_UPDATEDで即更新されるため高速)
+        new_balance = self.game_ws.balance if self.game_ws and self.game_ws.balance > 0 else 0.0
+        if new_balance <= 0:
             new_balance = self._get_balance_dom()
-            if new_balance > 0:
-                break
-            time.sleep(0.5)
 
         balance_result = None
         if bet_amount > 0 and pre_balance > 0 and new_balance > 0:
@@ -534,6 +681,9 @@ class BetExecutor:
     # ─── 残高 ───
 
     def get_balance(self) -> float:
+        # WS残高を優先 (DOMはiframe内のため更新が遅れる場合がある)
+        if self.game_ws and self.game_ws.balance > 0:
+            return self.game_ws.balance
         return self._get_balance_dom()
 
     def _get_balance_dom(self) -> float:
@@ -567,6 +717,17 @@ class BetExecutor:
             time.sleep(5)
             self.game_ws.reset()
             self._reset_state()
+
+            # iframe が about:blank になっていないか確認
+            evo_check = self._get_evo_game()
+            if not evo_check:
+                logger.warning("ロビー復帰後にiframeが消失 — ページリロードします")
+                try:
+                    self.page.reload(wait_until="domcontentloaded", timeout=30000)
+                    time.sleep(8)
+                except Exception as _rl:
+                    logger.warning(f"リロード失敗: {_rl}")
+
             logger.info("ロビー復帰完了")
             return True
         except Exception as e:

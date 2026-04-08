@@ -286,6 +286,8 @@ def _run_bet_session_inner(config: dict, stop_event: threading.Event, skip_event
     dry_run = config.get("dry_run", False)
     resume = config.get("resume", False)
     table_filter = config.get("table_filter", {})
+    logger.info(f"Table filter: {table_filter}")
+    send_log(f"Table filter: {table_filter}")
 
     # Allow overriding dry_run via environment (safe for CI / first-run testing)
     if os.getenv("LAPLACE_FORCE_DRYRUN", "").strip() in ("1", "true", "True", "yes"):
@@ -542,6 +544,7 @@ def _run_bet_session_inner(config: dict, stop_event: threading.Event, skip_event
     _FREEZE_TIMEOUT = 90      # WS無活動90秒でフリーズ判定
     _SESSION_CHECK_INTERVAL = 300  # 5分おきにStakeログイン確認
     _last_session_check = time.time()
+    _deferred_exit_reason = None   # BETウィンドウ保護: exit checkは前ラウンドで実行済み
 
     while not stop_event.is_set() and round_count < MAX_ROUNDS:
         # ── フリーズ検出ウォッチドッグ ──
@@ -606,6 +609,12 @@ def _run_bet_session_inner(config: dict, stop_event: threading.Event, skip_event
                 session_start = time.time()
                 # 休憩後は再選定
                 send_action("Break finished — re-selecting table...")
+                if not scraper.get_all_table_configs():
+                    send_log("Lobby WS lost after break — reconnecting...")
+                    try:
+                        scraper.setup_ws_intercept()
+                    except Exception:
+                        pass
                 target_tid = None
                 while not stop_event.is_set() and target_tid is None:
                     best = pick_table()
@@ -614,6 +623,11 @@ def _run_bet_session_inner(config: dict, stop_event: threading.Event, skip_event
                         target_name = best.title
                         send_action(f"Picked: {target_name}")
                     else:
+                        if not scraper.get_all_table_configs():
+                            try:
+                                scraper.setup_ws_intercept()
+                            except Exception:
+                                pass
                         if stop_event.wait(15):
                             break
                 if stop_event.is_set():
@@ -631,14 +645,24 @@ def _run_bet_session_inner(config: dict, stop_event: threading.Event, skip_event
             user_skip = True
             skip_event.clear()
 
-        # Condition check (only when not in the middle of a set)
-        if len(session.tracker.current_turns) == 0:
-            exit_reason = "User requested skip" if user_skip else selector.should_exit_table(target_tid, selector_config=table_filter)
+        # Deferred exit check (non-blocking: uses result from previous iteration)
+        # should_exit_table API call moved to END of loop to avoid blocking BET window
+        if len(session.tracker.current_turns) == 0 and (_deferred_exit_reason or user_skip):
+            exit_reason = "User requested skip" if user_skip else _deferred_exit_reason
+            _deferred_exit_reason = None
             if exit_reason:
                 send_action(f"Table conditions broke: {exit_reason} — exiting...")
                 send_log(f"Leaving {target_name}: {exit_reason}")
                 executor.exit_table()
                 time.sleep(3)
+
+                # ロビーWS再接続 (テーブル退出後にconfigsが空になる対策)
+                if not scraper.get_all_table_configs():
+                    send_log("Lobby WS lost — reconnecting...")
+                    try:
+                        scraper.setup_ws_intercept()
+                    except Exception as _ws_err:
+                        send_log(f"Lobby WS reconnect failed: {_ws_err}")
 
                 # 再選定
                 target_tid = None
@@ -651,6 +675,13 @@ def _run_bet_session_inner(config: dict, stop_event: threading.Event, skip_event
                         target_name = best.title
                         send_action(f"Picked: {target_name} ({best.players}p, {best.hands}h)")
                     else:
+                        # configsが空のままならlobby WS再接続を試行
+                        if not scraper.get_all_table_configs():
+                            send_log("Still no configs — lobby WS reconnect retry...")
+                            try:
+                                scraper.setup_ws_intercept()
+                            except Exception:
+                                pass
                         send_action("No suitable table — waiting 15s...")
                         if stop_event.wait(15):
                             break
@@ -692,19 +723,52 @@ def _run_bet_session_inner(config: dict, stop_event: threading.Event, skip_event
                 continue
             else:
                 entry_fail_count += 1
-                if entry_fail_count >= 3:
-                    send_action("3 entry failures — re-selecting table...")
-                    best = pick_table()
-                    if best:
-                        target_tid = best.table_id
-                        target_name = best.title
-                        with scraper._lock:
-                            scraper._target_table_ids.add(target_tid)
-                            scraper._target_table_names[target_tid] = target_name
-                        entry_fail_count = 0
-                    else:
-                        send_action("No alternative table — stopping")
+                if entry_fail_count >= 2:
+                    # EV.5 / SESSION EXPIRED — Stake再ログインを試行
+                    send_action("Entry failed repeatedly — attempting Stake re-login...")
+                    send_log("[session] Re-login attempt after entry failures")
+                    try:
+                        scraper._login_from_lobby()
+                        time.sleep(5)
+                        scraper.setup_ws_intercept()
+                    except Exception as _rl_err:
+                        send_log(f"[session] Re-login failed: {_rl_err}")
+                        # ロビーに戻ってconfigsを復旧
+                        try:
+                            scraper.setup_ws_intercept()
+                        except Exception:
+                            pass
+                    # 再選定
+                    send_action("Re-selecting table after re-login...")
+                    target_tid = None
+                    target_name = None
+                    _reselect_tries = 0
+                    while not stop_event.is_set() and target_tid is None and _reselect_tries < 5:
+                        _reselect_tries += 1
+                        best = pick_table()
+                        if best:
+                            target_tid = best.table_id
+                            target_name = best.title
+                            with scraper._lock:
+                                scraper._target_table_ids.add(target_tid)
+                                scraper._target_table_names[target_tid] = target_name
+                        else:
+                            if not scraper.get_all_table_configs():
+                                try:
+                                    scraper.setup_ws_intercept()
+                                except Exception:
+                                    pass
+                            if stop_event.wait(15):
+                                break
+                    entry_fail_count = 0
+                    if target_tid and not stop_event.is_set():
+                        send_action(f"Entering {target_name}...")
+                        if executor.enter_table(target_tid, target_name):
+                            continue
+                    if stop_event.is_set():
                         break
+                    send_action("Recovery failed — stopping")
+                    break
                 else:
                     time.sleep(10)
                     continue
@@ -787,6 +851,15 @@ def _run_bet_session_inner(config: dict, stop_event: threading.Event, skip_event
         # Periodic status
         bal = executor.get_balance() if not dry_run else 0
         send_status(session, bal)
+
+        # Deferred exit check: runs during dealing phase (after result, before next BET window)
+        # This avoids blocking the BET window with a VPS API call
+        if len(session.tracker.current_turns) == 0 and target_tid:
+            try:
+                _deferred_exit_reason = selector.should_exit_table(target_tid, selector_config=table_filter)
+            except Exception as _ec:
+                logger.warning(f"Deferred exit check failed: {_ec}")
+                _deferred_exit_reason = None
 
     # === Shutdown ===
     send_action("Stopping...")

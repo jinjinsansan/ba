@@ -1,6 +1,6 @@
 {
   "name": "laplace-gui",
-  "version": "1.0.0",
+  "version": "1.0.5",
   "description": "LAPLACE — Baccarat Strategy Client (GUI)",
   "main": "src/main.js",
   "scripts": {

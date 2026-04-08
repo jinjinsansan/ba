@@ -97,6 +97,7 @@ $('#btnInstallUpdate').addEventListener('click', () => window.valhalla.openUpdat
 
 // --- Start / Stop ---
 let sessionTotal = 0;
+let _startedAt = 0;  // START押下時刻 (stopped誤検知防止用)
 
 $('#btnStart').addEventListener('click', async () => {
   const config = { ...loadSettings(), table_filter: loadTableFilter() };
@@ -113,6 +114,7 @@ $('#btnStart').addEventListener('click', async () => {
     updateSessionDisplay();
     resetFeed();
   }
+  _startedAt = Date.now();
   setRunning(true);
   addLog('Bot starting...', 'info');
   try {
@@ -759,6 +761,11 @@ window.valhalla.onAgentMessage((msg) => {
       break;
 
     case 'stopped':
+      // START直後(3秒以内)の stopped は旧プロセスの遅延シグナル→無視
+      if (_startedAt && Date.now() - _startedAt < 3000) {
+        console.log('[UI] Ignoring stale stopped signal from old process');
+        break;
+      }
       setRunning(false);
       setAction('Stopped');
       addLog('Bot stopped.');

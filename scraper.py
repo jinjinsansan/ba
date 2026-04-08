@@ -131,6 +131,15 @@ class BaccaratScraper:
         # バカラロビーに移動（テーブルに入らない）
         self._navigate_to_lobby()
 
+        # ロビー遷移後にEvolutionが再ログインを要求する場合がある
+        # "This game is not available in demo mode" → ログインモーダルが再表示される
+        if not self._is_logged_in():
+            logger.warning("ロビー遷移後にログアウト検出 — 再ログイン試行")
+            self._login_from_lobby()
+
+        # EvolutionロビーWS接続を待機（未接続ならリロードして再試行）
+        self.setup_ws_intercept()
+
     def _restore_cookies(self):
         """保存済みCookieを復元"""
         cookie_file = config.AUTH_STATE_DIR / "stake_cookies.json"
@@ -152,16 +161,28 @@ class BaccaratScraper:
         # Stake is a SPA — wait for the page to fully render before
         # checking login status.  The domcontentloaded event fires long
         # before React hydrates, so we poll for known UI elements.
-        for _wait in range(20):  # up to ~20s
+        # Priority: detect logged-IN state first (balance/wallet), then fall back to login-link.
+        _logged_in_early = False
+        for _wait in range(30):  # up to ~30s
             time.sleep(1)
             try:
-                has_ui = self.page.evaluate("""() => {
-                    return !!(document.querySelector('[data-testid="login-link"]')
-                           || document.querySelector('[data-testid="balance"]')
+                # Check logged-in state first (balance/wallet visible)
+                is_in = self.page.evaluate("""() => {
+                    return !!(document.querySelector('[data-testid="balance"]')
                            || document.querySelector('[class*="wallet"]')
                            || (document.body.innerText && /wallet/i.test(document.body.innerText)));
                 }""")
-                if has_ui:
+                if is_in:
+                    _logged_in_early = True
+                    logger.info("SPA検出: ログイン済み (balance/wallet)")
+                    break
+                # If not logged in, check if login-link appeared (= definitely logged out)
+                has_login_link = self.page.evaluate("""() => {
+                    return !!document.querySelector('[data-testid="login-link"]');
+                }""")
+                if has_login_link and _wait >= 10:
+                    # Wait at least 10s before concluding logged out (Cookie may still be loading)
+                    logger.info("SPA検出: ログアウト状態 (login-link)")
                     break
             except Exception:
                 pass
@@ -169,7 +190,7 @@ class BaccaratScraper:
         self.page.screenshot(path=str(config.SCREENSHOTS_DIR / "after_goto.png"))
         logger.info(f"ページタイトル: {self.page.title()}")
 
-        if self._is_logged_in():
+        if _logged_in_early or self._is_logged_in():
             logger.info("すでにログイン済み")
             self._save_cookies()
             return
@@ -183,25 +204,49 @@ class BaccaratScraper:
             self._wait_for_manual_login(timeout=300)
             return
 
-        # ログインフォームを開く (JSクリック — Playwright click()はStakeボタンでタイムアウトするため)
+        # ログインフォームを開く
         logger.info("ログインフォームを開く...")
-        try:
-            self.page.evaluate("""() => {
-                const btn = document.querySelector('[data-testid="login-link"]');
-                if (btn) { btn.click(); return true; }
-                const els = Array.from(document.querySelectorAll('button, a'));
-                for (const el of els) {
-                    if (/sign.?in|log.?in/i.test(el.textContent)) { el.click(); return true; }
-                }
-                return false;
-            }""")
-            time.sleep(3)
-        except Exception as e:
-            logger.warning(f"ログインリンク検索: {e}")
+        _form_opened = False
+        for _open_try in range(3):
+            try:
+                self.page.evaluate("""() => {
+                    const btn = document.querySelector('[data-testid="login-link"]');
+                    if (btn) { btn.click(); return true; }
+                    const els = Array.from(document.querySelectorAll('button, a'));
+                    for (const el of els) {
+                        if (/sign.?in|log.?in/i.test(el.textContent)) { el.click(); return true; }
+                    }
+                    return false;
+                }""")
+            except Exception as e:
+                logger.warning(f"ログインリンククリック失敗: {e}")
 
-        # メールアドレス入力
-        # 認証情報を入力 (全てJS + keyboard — Playwright click/fillはStake.comでタイムアウトする)
-        logger.info("認証情報を入力中...")
+            # モーダルが開くまで待機 (Email inputが出現するまで)
+            for _modal_wait in range(10):
+                time.sleep(1)
+                try:
+                    has_input = self.page.evaluate("""() => {
+                        const inputs = document.querySelectorAll('input:not([type="hidden"]):not([type="radio"])');
+                        for (const inp of inputs) {
+                            if (inp.offsetParent !== null) return true;
+                        }
+                        return false;
+                    }""")
+                    if has_input:
+                        _form_opened = True
+                        logger.info(f"ログインフォーム表示確認 ({_modal_wait+1}秒)")
+                        break
+                except Exception:
+                    pass
+            if _form_opened:
+                break
+            logger.warning(f"ログインフォーム未表示 (試行{_open_try+1}/3)")
+            time.sleep(2)
+
+        if not _form_opened:
+            logger.error("ログインフォームを開けませんでした — 手動ログインに切り替え")
+            self._wait_for_manual_login(timeout=300)
+            return
 
         # Google One Tapポップアップ除去
         self.page.evaluate("""() => {
@@ -212,21 +257,23 @@ class BaccaratScraper:
 
         self.page.screenshot(path=str(config.SCREENSHOTS_DIR / "login_01_before_input.png"))
 
-        # Email入力
+        # Email入力 (複数セレクタでフォールバック)
+        logger.info("認証情報を入力中...")
         found_email = self.page.evaluate("""() => {
-            const el = document.querySelector('input[name="emailOrName"], input[name="email"], input[type="email"]');
-            if (el) { el.focus(); el.click(); return el.name || el.type; }
+            // 方法1: name属性
+            let el = document.querySelector('input[name="emailOrName"], input[name="email"], input[type="email"]');
+            if (el && el.offsetParent !== null) { el.focus(); el.click(); return 'name:' + (el.name || el.type); }
+            // 方法2: 可視inputの最初のもの (モーダル内)
+            const inputs = Array.from(document.querySelectorAll('input:not([type="hidden"]):not([type="radio"]):not([type="checkbox"])'));
+            const visible = inputs.filter(i => i.offsetParent !== null);
+            if (visible.length > 0) { visible[0].focus(); visible[0].click(); return 'visible:' + (visible[0].name || visible[0].type || visible[0].placeholder); }
             return null;
         }""")
         logger.info(f"Email入力フィールド: {found_email}")
         if not found_email:
-            logger.warning("Emailフィールドが見つかりません — DOM確認")
-            inputs = self.page.evaluate("""() => {
-                return Array.from(document.querySelectorAll('input:not([type="hidden"])')).map(
-                    el => ({name: el.name, type: el.type, placeholder: el.placeholder, visible: el.offsetParent !== null})
-                ).slice(0, 10);
-            }""")
-            logger.info(f"ページ上のinput要素: {inputs}")
+            logger.error("Emailフィールドが見つかりません — 手動ログインに切り替え")
+            self._wait_for_manual_login(timeout=300)
+            return
         time.sleep(0.3)
         self.page.keyboard.type(config.STAKE_USERNAME, delay=30)
         time.sleep(0.5)
@@ -239,15 +286,15 @@ class BaccaratScraper:
 
         self.page.screenshot(path=str(config.SCREENSHOTS_DIR / "login_02_after_input.png"))
 
-        # ログインボタン送信 (JSクリック)
+        # ログインボタン送信
         submitted = self.page.evaluate("""() => {
+            // 方法1: type="submit"
             const btn = document.querySelector('button[type="submit"], [data-testid="button-login"]');
             if (btn) { btn.click(); return 'submit:' + btn.textContent.trim(); }
+            // 方法2: Sign Inテキスト
             const els = Array.from(document.querySelectorAll('button'));
             for (const el of els) {
-                if (/sign.?in|log.?in/i.test(el.textContent) && el.type !== 'button') {
-                    el.click(); return 'matched:' + el.textContent.trim();
-                }
+                if (/sign.?in|log.?in/i.test(el.textContent)) { el.click(); return 'matched:' + el.textContent.trim(); }
             }
             return null;
         }""")
@@ -383,15 +430,133 @@ class BaccaratScraper:
         except Exception:
             return False
 
+    def _login_from_lobby(self):
+        """ロビー遷移後にログインモーダルが表示された場合の再ログイン。
+        モーダルが既に開いている前提で、Email/Password入力→Submit。
+        """
+        has_credentials = bool(config.STAKE_USERNAME and config.STAKE_PASSWORD)
+        if not has_credentials:
+            logger.info("クレデンシャル未設定 — 手動ログイン待ち")
+            self._wait_for_manual_login(timeout=300)
+            return
+
+        # ログインモーダルが表示されるまで待機
+        # "Login" / "Sign In" ボタンを探してクリック
+        logger.info("ロビー上のログインボタンを検索...")
+        try:
+            self.page.evaluate("""() => {
+                const btns = Array.from(document.querySelectorAll('button, a'));
+                for (const b of btns) {
+                    if (/^login$/i.test(b.textContent.trim()) || /^sign.?in$/i.test(b.textContent.trim())) {
+                        b.click(); return true;
+                    }
+                }
+                return false;
+            }""")
+            time.sleep(3)
+        except Exception:
+            pass
+
+        # モーダル内のEmail inputを待機
+        _form_ready = False
+        for _w in range(10):
+            time.sleep(1)
+            try:
+                has = self.page.evaluate("""() => {
+                    const inputs = document.querySelectorAll('input:not([type="hidden"]):not([type="radio"]):not([type="checkbox"])');
+                    for (const inp of inputs) { if (inp.offsetParent !== null) return true; }
+                    return false;
+                }""")
+                if has:
+                    _form_ready = True
+                    break
+            except Exception:
+                pass
+
+        if not _form_ready:
+            logger.warning("ログインフォーム未表示 — 手動ログインに切り替え")
+            self._wait_for_manual_login(timeout=300)
+            return
+
+        # Email入力
+        logger.info("ロビー再ログイン: 認証情報入力中...")
+        self.page.evaluate("""() => {
+            const inputs = Array.from(document.querySelectorAll('input:not([type="hidden"]):not([type="radio"]):not([type="checkbox"])'));
+            const visible = inputs.filter(i => i.offsetParent !== null);
+            if (visible.length > 0) { visible[0].focus(); visible[0].click(); visible[0].value = ''; }
+        }""")
+        time.sleep(0.3)
+        self.page.keyboard.type(config.STAKE_USERNAME, delay=30)
+        time.sleep(0.3)
+        self.page.keyboard.press("Tab")
+        time.sleep(0.3)
+        self.page.keyboard.type(config.STAKE_PASSWORD, delay=30)
+        time.sleep(0.5)
+
+        # Submit
+        self.page.evaluate("""() => {
+            const btn = document.querySelector('button[type="submit"]');
+            if (btn) { btn.click(); return true; }
+            const els = Array.from(document.querySelectorAll('button'));
+            for (const el of els) {
+                if (/sign.?in/i.test(el.textContent)) { el.click(); return true; }
+            }
+            return false;
+        }""")
+        time.sleep(5)
+
+        # 2FA確認
+        if not self._is_logged_in():
+            self._handle_email_code()
+
+        if self._is_logged_in():
+            logger.info("ロビー再ログイン成功")
+            self._save_cookies()
+            # ロビーをリロードしてEvolution iframeを再接続
+            time.sleep(2)
+            self.page.reload(wait_until="domcontentloaded", timeout=30000)
+            time.sleep(8)
+        else:
+            logger.warning("ロビー再ログイン失敗 — 手動ログインに切り替え")
+            self._wait_for_manual_login(timeout=300)
+
     def _navigate_to_lobby(self):
-        """バカラロビーに移動（テーブルに入らない）"""
+        """バカラロビーに移動（テーブルに入らない）
+
+        SPA内ナビゲーション (window.location) を試行し、失敗時のみ page.goto() にフォールバック。
+        page.goto() はフルリロードを引き起こし、セッションCookieが無効化される場合がある。
+        """
         logger.info("バカラロビーに移動中...")
-        self.page.goto(
-            config.BACCARAT_LOBBY_URL,
-            wait_until="domcontentloaded",
-            timeout=90000,
-        )
-        time.sleep(8)
+        lobby_url = config.BACCARAT_LOBBY_URL
+
+        # 方法1: SPA内ナビゲーション (セッション維持)
+        try:
+            current_url = self.page.url or ""
+            if "stake.com" in current_url:
+                # 同一オリジンならSPA遷移
+                self.page.evaluate(f'() => {{ window.location.href = "{lobby_url}"; }}')
+                logger.info("SPA内ナビゲーション実行")
+                # ページ遷移完了を待機
+                for _nav_wait in range(30):
+                    time.sleep(1)
+                    try:
+                        url = self.page.url or ""
+                        if "baccarat" in url.lower() or "evolution" in url.lower():
+                            logger.info(f"ロビー到着確認 ({_nav_wait+1}秒)")
+                            break
+                    except Exception:
+                        pass
+                time.sleep(5)
+            else:
+                raise ValueError("Not on stake.com, falling back to goto")
+        except Exception as e:
+            logger.warning(f"SPA遷移失敗 ({e}) — page.goto()にフォールバック")
+            self.page.goto(
+                lobby_url,
+                wait_until="domcontentloaded",
+                timeout=90000,
+            )
+            time.sleep(8)
 
         # Cookieバナーがあれば閉じる
         try:
@@ -563,16 +728,11 @@ class BaccaratScraper:
         self._target_table_ids.clear()
         self._target_table_names.clear()
 
-        EXCLUDE = ("salon", "prive", "first person", "rng",
-                   "lightning", "prosperity", "golden wealth",
-                   "peek", "control squeeze", "no commission",
-                   "elite vip")
-
         for tid, cfg in self._evo_table_configs.items():
             title = cfg.get("title", "")
             title_lower = title.lower()
 
-            if any(ex in title_lower for ex in EXCLUDE):
+            if any(ex in title_lower for ex in self._TABLE_EXCLUDE):
                 continue
 
             if match_all or all(w in title_lower for w in target_name.split()):
@@ -816,10 +976,19 @@ class BaccaratScraper:
             self._ws_results.clear()
         return results
 
+    # テーブル選定から除外するキーワード (get_all_table_configs / _resolve_target_table 共通)
+    _TABLE_EXCLUDE = ("salon", "prive", "first person", "rng",
+                      "lightning", "prosperity", "golden wealth",
+                      "peek", "control squeeze", "no commission",
+                      "elite vip", "super speed")
+
     def get_all_table_configs(self) -> dict[str, dict]:
-        """全バカラテーブルのconfig (選定用)"""
+        """全バカラテーブルのconfig (選定用)。除外テーブルはフィルタ済み。"""
         with self._lock:
-            return dict(self._evo_table_configs)
+            return {
+                tid: cfg for tid, cfg in self._evo_table_configs.items()
+                if not any(ex in cfg.get("title", "").lower() for ex in self._TABLE_EXCLUDE)
+            }
 
     def get_players_count(self, table_id: str | None = None):
         """参加者数取得。table_id指定なら1件、なしなら全件dict"""

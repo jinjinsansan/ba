@@ -25,6 +25,15 @@ const { spawn } = require('child_process');
 const https = require('https');
 const { shell } = require('electron');
 
+// EPIPE/broken pipe防止: 子プロセスのパイプが切れてもクラッシュしない
+process.on('uncaughtException', (err) => {
+  if (err.code === 'EPIPE' || err.code === 'ERR_STREAM_DESTROYED') {
+    console.error('[Main] Suppressed EPIPE:', err.message);
+    return;
+  }
+  console.error('[Main] Uncaught exception:', err);
+});
+
 let mainWindow = null;
 let pythonProcess = null;
 let sshTunnelProcess = null;
@@ -165,10 +174,15 @@ function startSshTunnel() {
 
   sshTunnelProcess = spawn('ssh', args, { stdio: ['ignore', 'pipe', 'pipe'] });
 
+  sshTunnelProcess.on('error', (err) => {
+    console.error('[SSH Tunnel] spawn error:', err.message);
+  });
+
   sshTunnelProcess.stderr.on('data', (data) => {
     const text = data.toString('utf-8').trim();
     if (text) console.error('[SSH Tunnel]', text);
   });
+  sshTunnelProcess.stderr.on('error', () => {});
 
   sshTunnelProcess.on('exit', (code) => {
     console.log('[Main] SSH tunnel exited:', code);
@@ -236,9 +250,10 @@ function createWindow() {
 
 function startPython(config) {
   if (pythonProcess) {
-    // 既存プロセスが終了するまで待ってから再起動
+    // 既存プロセスの close で stopped を送信させないよう先に null にする
     const old = pythonProcess;
     pythonProcess = null;
+    old.removeAllListeners('close');
     old.kill();
     old.once('close', () => _doStartPython(config));
     return;
@@ -303,10 +318,17 @@ function _doStartPython(config) {
     sendToRenderer('agent-log', text);
   });
 
+  // close handler — 自分自身が現在の pythonProcess の場合のみ stopped を送信
+  // (再起動時に旧プロセスの close が遅延発火して UI を stopped に戻すのを防ぐ)
+  const thisProcess = pythonProcess;
   pythonProcess.on('close', (code) => {
     console.log('[Main] Python exited:', code);
-    sendToRenderer('agent-message', { type: 'stopped', code });
-    pythonProcess = null;
+    if (pythonProcess === thisProcess || pythonProcess === null) {
+      sendToRenderer('agent-message', { type: 'stopped', code });
+      pythonProcess = null;
+    } else {
+      console.log('[Main] Ignoring close from old process (new process already running)');
+    }
   });
 
   sendToAgent({ type: 'start', config });

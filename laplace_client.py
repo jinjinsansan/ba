@@ -110,21 +110,33 @@ class LaplaceClient:
     def _url(self, path: str) -> str:
         return f"{self.base_url}{path}"
 
-    def _request(self, method: str, path: str, **kwargs) -> dict:
+    def _request(self, method: str, path: str, _retries: int = 1, **kwargs) -> dict:
         url = self._url(path)
-        try:
-            resp = self._session.request(method, url, timeout=self.timeout, **kwargs)
-        except requests.RequestException as e:
-            raise LaplaceApiError(f"{method} {path}: {e}") from e
-        if not resp.ok:
+        last_err = None
+        for attempt in range(_retries + 1):
             try:
-                body = resp.json()
-            except Exception:
-                body = resp.text
-            raise LaplaceApiError(f"{method} {path} -> {resp.status_code}: {body}")
-        if resp.status_code == 204 or not resp.content:
-            return {}
-        return resp.json()
+                resp = self._session.request(method, url, timeout=self.timeout, **kwargs)
+            except requests.RequestException as e:
+                last_err = e
+                if attempt < _retries:
+                    logger.warning(f"API retry {attempt+1}/{_retries}: {method} {path}: {e}")
+                    time.sleep(0.5)
+                    continue
+                raise LaplaceApiError(f"{method} {path}: {e}") from e
+            if not resp.ok:
+                try:
+                    body = resp.json()
+                except Exception:
+                    body = resp.text
+                if resp.status_code >= 500 and attempt < _retries:
+                    logger.warning(f"API retry {attempt+1}/{_retries}: {method} {path} -> {resp.status_code}")
+                    time.sleep(0.5)
+                    continue
+                raise LaplaceApiError(f"{method} {path} -> {resp.status_code}: {body}")
+            if resp.status_code == 204 or not resp.content:
+                return {}
+            return resp.json()
+        raise LaplaceApiError(f"{method} {path}: exhausted retries — {last_err}")
 
     # --- Endpoints ---
 
@@ -168,7 +180,13 @@ class LaplaceClient:
         return self._request("PATCH", f"/api/sessions/{user_id}", json=body)
 
     def decide(self, user_id: str) -> dict:
-        return self._request("POST", f"/api/sessions/{user_id}/decide")
+        # BETウィンドウ内で完了させるため短いタイムアウト (5秒)
+        saved = self.timeout
+        self.timeout = min(self.timeout, 5.0)
+        try:
+            return self._request("POST", f"/api/sessions/{user_id}/decide")
+        finally:
+            self.timeout = saved
 
     def submit_result(self, user_id: str, result: str) -> dict:
         return self._request(
@@ -470,15 +488,8 @@ class RemoteLaplaceSession:
                 logger.warning(f"部分BET検出: 計画${bet_amount:.0f} → 実際${actual_total:.2f}")
                 bet_amount = actual_total
             elif actual_total == 0:
-                logger.warning("place_bet=Trueだがactual_total=0 — BET未置 → 観戦モード")
-                result_info = self.executor.wait_for_result(timeout=90, bet_amount=0)
-                if result_info and result_info.get("result") not in (None, "unknown"):
-                    try:
-                        self.client.submit_result(self.user_id, result_info["result"])
-                    except Exception:
-                        pass
-                return {"action": "bet", "result": None, "won": None, "bet_amount": 0,
-                        "completed_set": None, "should_reset": self.should_reset()}
+                # DOM反映遅延の可能性 — place_bet()がTrueを返した以上BETは通っている
+                logger.info(f"DOM total=0だがplace_bet=True — BET${bet_amount:.0f}で続行")
 
         # wait for result
         result_info = self.executor.wait_for_result(timeout=90, bet_amount=bet_amount)
@@ -687,6 +698,9 @@ class RemoteTableSelector:
             logger.info("[selector-remote] no configs yet — scraper still warming up")
             return None
 
+        if selector_config:
+            logger.debug(f"[selector-remote] selector_config={selector_config}")
+
         try:
             resp = self.client.select_table(
                 user_id=self.user_id,
@@ -718,6 +732,25 @@ class RemoteTableSelector:
             last_5=resp.get("last_5", []),
             score=resp.get("score", 0.0),
         )
+
+        # クライアント側フィルタ: VPS APIが selector_config を無視した場合の安全策
+        if selector_config:
+            min_h = selector_config.get("min_hands", 0)
+            max_h = selector_config.get("max_hands", 999)
+            min_p = selector_config.get("players_primary", 0)
+            if result.hands < min_h or result.hands > max_h:
+                logger.info(
+                    f"[selector-remote] REJECT: {result.title} h={result.hands} "
+                    f"(filter: {min_h}-{max_h})"
+                )
+                return None
+            if result.players < min_p:
+                logger.info(
+                    f"[selector-remote] REJECT: {result.title} p={result.players} "
+                    f"(filter: min_p={min_p})"
+                )
+                return None
+
         logger.info(
             f"[selector-remote] BEST: {result.title} "
             f"p={result.players} h={result.hands} "

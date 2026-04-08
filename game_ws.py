@@ -29,6 +29,8 @@ class GameWSMonitor:
         self._balance = 0.0
         self._last_confirmed = {}      # {"Player": 1, "PlayerFee": 0.2}
         self._last_result_multiplier = None  # {"betSpot": "Player", "multiplier": 2}
+        self._multiplier_received_at = 0.0   # multiplier受信時刻 (stale検出用)
+        self._bet_placed_at = 0.0            # BET実行時刻 (stale検出用)
         self._settled_balance = None   # Settled時の残高
         self._status_changed = threading.Event()
         self._connected = False
@@ -60,9 +62,19 @@ class GameWSMonitor:
             self._status = "unknown"
             self._last_confirmed = {}
             self._last_result_multiplier = None
+            self._multiplier_received_at = 0.0
+            self._bet_placed_at = 0.0
             self._settled_balance = None
             self._connected = False
         self._status_changed.clear()
+
+    def mark_bet_placed(self):
+        """BET実行時に呼び出し。stale multiplier検出用のタイムスタンプを記録"""
+        with self._lock:
+            self._bet_placed_at = time.time()
+            self._last_result_multiplier = None
+            self._last_confirmed = {}
+        logger.debug("BET実行記録 — multiplier/confirmed リセット")
 
     def on_ws_message(self, raw: str):
         """WSメッセージ (framesent/framereceived) を処理"""
@@ -121,6 +133,7 @@ class GameWSMonitor:
 
             if new_status == "Settled":
                 self._settled_balance = self._balance
+                logger.info(f"Settled confirmed={confirmed} balance={self._balance}")
 
         if old != new_status:
             logger.debug(f"ラウンド状態: {old} → {new_status}")
@@ -138,6 +151,8 @@ class GameWSMonitor:
                 "betSpot": value.get("betSpot", ""),
                 "multiplier": value.get("multiplier", 0),
             }
+            self._multiplier_received_at = time.time()
+        logger.info(f"Multiplier受信: betSpot={value.get('betSpot')}, multiplier={value.get('multiplier')}")
 
     def _handle_bet_response(self, value: dict):
         state = value.get("state", {})
@@ -175,7 +190,7 @@ class GameWSMonitor:
                 self._status_changed.wait(timeout=min(remaining, 1.0))
         return self.status == target
 
-    def wait_for_betting_phase(self, timeout: float = 120, dom_checker=None, skip_round: bool = True) -> bool:
+    def wait_for_betting_phase(self, timeout: float = 120, dom_checker=None, skip_round: bool = True, error_checker=None) -> bool:
         """BETフェーズを待機 (DOMベース)。
 
         skip_round=True: 1ラウンド見送り後に次のBETフェーズを待つ (テーブル入場直後)
@@ -197,7 +212,10 @@ class GameWSMonitor:
                 if not dom_checker():
                     logger.info("ディーリング中 (タイマー消失)")
                     break
-                time.sleep(1.0)
+                if error_checker and not error_checker():
+                    logger.warning("BET待機中にエラーダイアログ検出")
+                    return False
+                time.sleep(0.5)
             else:
                 logger.warning("タイマー消失待ちタイムアウト")
                 return False
@@ -208,7 +226,10 @@ class GameWSMonitor:
             if dom_checker():
                 logger.info("BETフェーズ開始")
                 return True
-            time.sleep(1.0)
+            if error_checker and not error_checker():
+                logger.warning("BETフェーズ待機中にエラーダイアログ検出")
+                return False
+            time.sleep(0.5)
 
         logger.warning("BETフェーズ待機タイムアウト (シャッフル/ディーラー交代の可能性)")
         return False
@@ -240,9 +261,33 @@ class GameWSMonitor:
 
     def get_result_side(self) -> str | None:
         """直近の結果 (player/banker/tie) を返す。
-        multiplier の betSpot + confirmed の内容から判定"""
+
+        multiplier値のみで判定 (CLIENT_BACCARAT_TOTAL_MULTIPLIER_DISPLAYED)。
+        このメッセージが来ないテーブルではNoneを返し、executor側の
+        WS残高diff判定にフォールバックさせる。
+
+        multiplier判定 (常にPlayerに賭けている前提):
+          multiplier > 1.0  → Player勝ち ("player")
+          multiplier == 1.0 → タイ ("tie") — BET返却
+          multiplier == 0   → Banker勝ち ("banker") — BET没収
+
+        NOTE: confirmed dict は BET内容(何に賭けたか)であり、
+        ゲーム結果ではないため判定に使わない。
+        """
         with self._lock:
             mult = self._last_result_multiplier
-            if mult and mult.get("betSpot"):
-                return mult["betSpot"].lower()
-        return None
+            if not mult or not mult.get("betSpot"):
+                return None
+
+            # stale検出
+            if self._bet_placed_at > 0 and self._multiplier_received_at < self._bet_placed_at:
+                logger.debug(f"Stale multiplier検出 (bet={self._bet_placed_at:.1f} > mult={self._multiplier_received_at:.1f})")
+                return None
+
+            multiplier = float(mult.get("multiplier", 0))
+            if multiplier > 1.0:
+                return "player"
+            elif abs(multiplier - 1.0) < 0.01:
+                return "tie"
+            else:
+                return "banker"
