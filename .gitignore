@@ -2,6 +2,7 @@
 monitor/.env
 data/
 *.log
+*.log.*
 __pycache__/
 *.pyc
 auth_state/
@@ -54,3 +55,25 @@ debug_*.py
 
 # Claude Code cache
 .claude/
+
+# Build artifacts / release archives
+LAPLACE_dist_final/
+LAPLACE_dist_tmp/
+LAPLACE_dist_tmp2/
+LAPLACE_prod_tmp/
+LAPLACE_v*/
+LAPLACE_v*.zip
+
+# GUI build variants
+gui/dist_prod/
+gui/src_prod/
+gui/assets/
+
+# Browser profile
+browser_profile/
+
+# Misc
+=
+*.jpg
+*.bak
+www/
