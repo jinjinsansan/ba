@@ -741,12 +741,14 @@ def _run_bet_session_inner(config: dict, stop_event: threading.Event, skip_event
             except Exception as _se:
                 send_log(f"[session] re-login error: {_se}")
 
-        # Shoe change check
-        shoe_signals = scraper.get_new_shoe_signals()
-        if target_tid in shoe_signals and shoe_signals[target_tid]:
-            send_action("Shoe change detected")
-            send_log("Shoe change — partial turns discarded")
-            session.handle_shoe_change()
+        # Shoe change check — 同じテーブルに滞在中のみ有効
+        # 1-Dropモードでテーブルを変えた直後はshoe signalを無視する
+        if not _awaiting_2nd_drop:  # 2落ち確認中 = 入場直後 → スキップ
+            shoe_signals = scraper.get_new_shoe_signals()
+            if target_tid in shoe_signals and shoe_signals[target_tid]:
+                send_action("Shoe change detected")
+                send_log("Shoe change — partial turns discarded")
+                session.handle_shoe_change()
 
         # Session break (anti-bot) — 無効化
         # 1-dropモードではロビー監視+テーブル出入りが実質休憩になる。
@@ -1092,6 +1094,10 @@ def _run_bet_session_inner(config: dict, stop_event: threading.Event, skip_event
                 if executor.enter_table(target_tid, target_name):
                     _reenter_ok = True
                     _awaiting_2nd_drop = (_effective_mode_box[0] == "1drop")  # Banker負け再入場 → 2落ち確認必須
+                    # テーブル変更後のshoe signalをクリア（誤検出防止）
+                    with scraper._lock:
+                        scraper._new_shoe_signals[target_tid] = False
+                        scraper._shoe_epochs[target_tid] = int(time.time())
                     break
                 send_log(f"[1-drop] Entry retry {_retry+1}/3 failed")
                 time.sleep(5)
