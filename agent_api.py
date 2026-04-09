@@ -422,6 +422,7 @@ def _run_bet_session_inner(config: dict, stop_event: threading.Event, skip_event
             return "invalidated"  # ビーズロード取得不可 → 別テーブルへ
         send_log(f"[2nd-drop] pre_bead len={pre_len} tail={pre_bead[-5:] if pre_bead else ''}")
 
+        _observe_fail = 0  # ビーズロード更新失敗カウンタ
         while not stop_event.is_set():
             # 1ハンド見送り（BETせず結果を待つ）
             if not executor.wait_for_betting_phase(timeout=180, skip_round=True):
@@ -429,9 +430,11 @@ def _run_bet_session_inner(config: dict, stop_event: threading.Event, skip_event
 
             # ビーズロードDOMから結果を確認（最大10秒、0.5秒ポーリング）
             deadline = time.time() + 10
+            _got_update = False
             while time.time() < deadline and not stop_event.is_set():
                 new_bead = executor.read_bead_road()
                 if len(new_bead) > pre_len:
+                    _observe_fail = 0  # リセット
                     new_chars = new_bead[pre_len:]
                     send_log(f"[2nd-drop] new chars: {new_chars!r}")
                     for ch in new_chars:
@@ -445,11 +448,15 @@ def _run_bet_session_inner(config: dict, stop_event: threading.Event, skip_event
                             return "invalidated"
                         # T = タイ → pre_len更新して次のハンドを待つ
                     pre_len = len(new_bead)
+                    _got_update = True
                     break  # タイのみ → outer whileループで再観察
                 time.sleep(0.5)
-            else:
-                # タイムアウト（ビーズロード更新なし）→ 再度観察
-                send_log("[2nd-drop] Bead road not updated — re-observing")
+            if not _got_update:
+                _observe_fail += 1
+                send_log(f"[2nd-drop] Bead road not updated ({_observe_fail}/3) — re-observing")
+                if _observe_fail >= 3:
+                    send_log("[2nd-drop] Bead road stuck — switching table")
+                    return "invalidated"
 
         return "stopped"
 
