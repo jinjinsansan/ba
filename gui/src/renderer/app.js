@@ -98,6 +98,7 @@ $('#btnInstallUpdate').addEventListener('click', () => window.valhalla.openUpdat
 // --- Start / Stop ---
 let sessionTotal = 0;
 let _startedAt = 0;  // START押下時刻 (stopped誤検知防止用)
+let _pnlSynced = false;  // VPS累計PNL同期フラグ（resume時に1回だけ同期）
 
 $('#btnStart').addEventListener('click', async () => {
   const config = { ...loadSettings(), table_filter: loadTableFilter() };
@@ -111,8 +112,11 @@ $('#btnStart').addEventListener('click', async () => {
   }
   if (!config.resume) {
     sessionTotal = 0;
+    _pnlSynced = true;  // 新規開始 → 同期不要
     updateSessionDisplay();
     resetFeed();
+  } else {
+    _pnlSynced = false;  // resume → 最初のstatusでVPS累計を同期
   }
   _startedAt = Date.now();
   setRunning(true);
@@ -218,6 +222,7 @@ const DEFAULT_SETTINGS = {
   telegram_chat_id: '',
   user_email: '',
   dry_run: false,
+  bet_mode: '1drop',
 };
 
 const SITE_URL = 'https://bafather.uk';
@@ -372,6 +377,7 @@ $('#btnSettings').addEventListener('click', () => {
   $('#inputTelegramChat').value = s.telegram_chat_id || '';
   $('#inputUserEmail').value = s.user_email || '';
   $('#inputDryRun').checked = !!s.dry_run;
+  $('#inputBetMode').value = s.bet_mode || '1drop';
   // Load table filter into UI
   applyTableFilterToUI(loadTableFilter());
   // Reset to BOT tab
@@ -390,6 +396,7 @@ $('#btnSaveSettings').addEventListener('click', async () => {
     telegram_chat_id: $('#inputTelegramChat').value.trim(),
     user_email: $('#inputUserEmail').value.trim(),
     dry_run: $('#inputDryRun').checked,
+    bet_mode: $('#inputBetMode').value || '1drop',
   };
   localStorage.setItem('valhalla_settings', JSON.stringify(settings));
   $('#settingsModal').classList.add('hidden');
@@ -405,7 +412,12 @@ $('#btnSaveSettings').addEventListener('click', async () => {
           loss_cut: settings.loss_cut,
         },
       });
-      addLog('Live config update sent (profit target & loss cut).', 'info');
+      // Live BET mode switch
+      await window.valhalla.sendCommand({
+        type: 'change_mode',
+        mode: settings.bet_mode,
+      });
+      addLog(`Live config update sent (profit/loss + mode: ${settings.bet_mode}).`, 'info');
     } catch (e) {
       addLog(`Live update failed: ${e.message || e}`, 'lose');
     }
@@ -738,7 +750,13 @@ window.valhalla.onAgentMessage((msg) => {
       }
       // Developer panel
       updateDevPanel(msg);
-      // Session P&L is tracked client-side from round_profit; don't overwrite here
+      // Resume時: VPS累計損益でセッションPNLを同期（1回のみ）
+      if (!_pnlSynced && typeof msg.cumulative_money === 'number') {
+        sessionTotal = msg.cumulative_money;
+        _pnlSynced = true;
+        updateSessionDisplay();
+        addLog(`Session P&L synced from VPS: $${sessionTotal >= 0 ? '+' : ''}${sessionTotal.toFixed(2)}`, 'info');
+      }
       break;
     }
 
@@ -773,6 +791,11 @@ window.valhalla.onAgentMessage((msg) => {
 
     case 'log':
       addLog(msg.message || '');
+      break;
+
+    case 'mode_changed':
+      if ($('#inputBetMode')) $('#inputBetMode').value = msg.mode || '1drop';
+      addLog(`BET mode → ${msg.mode}`, 'info');
       break;
 
     default:

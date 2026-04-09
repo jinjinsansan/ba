@@ -104,6 +104,9 @@ logger = logging.getLogger("valhalla.agent")
 _active_session = None
 # Pending config updates received before session was created
 _pending_config_update = {}
+# BET mode: mutable box for cross-thread access (stdin_reader ↔ bet loop)
+_bet_mode_box = ["1drop"]       # ユーザー選択モード: "normal" | "1drop" | "mix"
+_effective_mode_box = ["1drop"] # 実行時モード（mixの場合 normal→1drop に自動切替）
 
 MAX_ROUNDS = 9999
 
@@ -247,8 +250,12 @@ def run_bet_session(config: dict, stop_event: threading.Event, skip_event: threa
 
 
 def _run_bet_session_inner(config: dict, stop_event: threading.Event, skip_event: threading.Event = None):
-    global _active_session, _pending_config_update
+    global _active_session, _pending_config_update, _bet_mode_box, _effective_mode_box
     """Main BET loop — runs in a thread."""
+    # BETモード初期化
+    _bet_mode_box[0] = config.get("bet_mode", "1drop")
+    _effective_mode_box[0] = "normal" if _bet_mode_box[0] == "mix" else _bet_mode_box[0]
+    send_log(f"BET mode: {_bet_mode_box[0]} (effective: {_effective_mode_box[0]})")
     import config as cfg
     # Headless is determined by env (VPS sets LAPLACE_HEADLESS=1) or config.ini; default False
     if os.getenv("LAPLACE_HEADLESS", "").strip() in ("1", "true", "True", "yes"):
@@ -327,6 +334,133 @@ def _run_bet_session_inner(config: dict, stop_event: threading.Event, skip_event
         if verification_mode:
             return selector.find_best_table(fixed_name=fixed_table_name, selector_config=table_filter)
         return selector.find_best_table(selector_config=table_filter)
+
+    def find_1_drop_table() -> tuple[str, str] | None:
+        """全テーブルをスキャンしてPlayerが出ている（1落ち）テーブルを探す。
+
+        1落ち = 最新の非タイ結果がPlayer（R）であること。
+        lobby WS の _evo_table_raw_histories をポーリングするだけで
+        Playwright APIは呼ばないため、WSリスナースレッドをブロックしない。
+        90秒ごとにEvo iframeに触れてSESSION EXPIREDを防ぐ。
+        直前に使ったテーブル（target_tid）は候補から除外してランダム選択。
+        見つかったら (table_id, table_name) を返す。STOPされた場合はNone。
+        """
+        import random as _random
+        _MIN_HISTORY = 5  # シューリセット直後の信頼性低いテーブルを除外
+
+        def _has_1drop(raw: list) -> bool:
+            """最新の非タイ結果がPlayer（R）かつ履歴が十分あるか"""
+            non_tie = [e for e in raw if e.get("c") in ("B", "R")]
+            return len(non_tie) >= _MIN_HISTORY and non_tie[-1].get("c") == "R"
+
+        send_action("Scanning all tables for Player 1-drop...")
+        send_log("[observe] Scanning lobby WS — looking for latest Player result on any table")
+        last_heartbeat = time.time()
+
+        while not stop_event.is_set():
+            # ── ハートビート（90秒ごと）Evolution iframeタッチでSESSION EXPIRED防止 ──
+            if time.time() - last_heartbeat > 90:
+                try:
+                    inner = executor._get_evo_inner()
+                    if inner:
+                        inner.evaluate("() => document.documentElement.scrollTop", timeout=3000)
+                except Exception:
+                    pass
+                if not scraper.get_all_table_configs():
+                    send_log("[observe] Lobby WS lost — reconnecting...")
+                    try:
+                        scraper.setup_ws_intercept()
+                    except Exception:
+                        pass
+                last_heartbeat = time.time()
+
+            # ── 全テーブルをスキャンして1落ちリストを作成 ──
+            configs = scraper.get_all_table_configs()
+            candidates = []
+            for tid, cfg in configs.items():
+                raw = scraper.get_raw_history(tid)
+                if _has_1drop(raw):
+                    candidates.append((tid, cfg.get("title", tid)))
+
+            if candidates:
+                # 直前に使ったテーブルを除外（テーブルバリエーション確保）
+                preferred = [(tid, tname) for tid, tname in candidates if tid != target_tid]
+                chosen_list = preferred if preferred else candidates
+                tid, tname = _random.choice(chosen_list)
+                send_action(f"Player 1落ち検出: {tname} ({len(candidates)}件中) → 入場します")
+                send_log(f"[observe] Player 1-drop found on {tname} ({tid}) — {len(candidates)} candidates")
+                return tid, tname
+
+            stop_event.wait(2)
+
+        return None  # STOPされた
+
+    def confirm_2nd_drop() -> str:
+        """テーブル内で1ハンド観察し、2落ち目もPlayerかどうかを確認する。
+
+        BETはしない。ロビーWSはテーブル入場後に切断されるため、
+        ビーズロードDOM（executor.read_bead_road）から結果を読む。
+        タイは無視して継続観察。
+        Returns:
+          "confirmed"   — Playerが出た（2落ち確認）→ BET開始
+          "invalidated" — Bankerが出た → 退室してロビー監視に戻る
+          "stopped"     — STOPイベント
+        """
+        send_action("In table — observing for 2nd Player (no BET)...")
+        send_log("[2nd-drop] Observing bead road DOM to confirm Player streak")
+
+        # 現在のビーズロード長を記録（最大3回リトライ）
+        pre_bead = ""
+        for _br in range(3):
+            pre_bead = executor.read_bead_road()
+            if pre_bead:
+                break
+            time.sleep(1)
+        pre_len = len(pre_bead)
+        if pre_len == 0:
+            send_log("[2nd-drop] Bead road empty — skipping this table")
+            return "invalidated"  # ビーズロード取得不可 → 別テーブルへ
+        send_log(f"[2nd-drop] pre_bead len={pre_len} tail={pre_bead[-5:] if pre_bead else ''}")
+
+        while not stop_event.is_set():
+            # 1ハンド見送り（BETせず結果を待つ）
+            if not executor.wait_for_betting_phase(timeout=180, skip_round=True):
+                return "stopped"
+
+            # ビーズロードDOMから結果を確認（最大10秒、0.5秒ポーリング）
+            deadline = time.time() + 10
+            while time.time() < deadline and not stop_event.is_set():
+                new_bead = executor.read_bead_road()
+                if len(new_bead) > pre_len:
+                    new_chars = new_bead[pre_len:]
+                    send_log(f"[2nd-drop] new chars: {new_chars!r}")
+                    for ch in new_chars:
+                        if ch == 'P':
+                            send_action("2nd Player confirmed → BET Player next hand!")
+                            send_log("[2nd-drop] Player streak confirmed — starting BET")
+                            return "confirmed"
+                        elif ch == 'B':
+                            send_action("Banker appeared — streak broken → returning to lobby")
+                            send_log("[2nd-drop] Banker appeared — exit table")
+                            return "invalidated"
+                        # T = タイ → pre_len更新して次のハンドを待つ
+                    pre_len = len(new_bead)
+                    break  # タイのみ → outer whileループで再観察
+                time.sleep(0.5)
+            else:
+                # タイムアウト（ビーズロード更新なし）→ 再度観察
+                send_log("[2nd-drop] Bead road not updated — re-observing")
+
+        return "stopped"
+
+    def observe_until_1_drop(tid: str, tname: str) -> bool:
+        """後方互換ラッパー: find_1_drop_table() に委譲し、結果でtarget_tid/nameを更新"""
+        result = find_1_drop_table()
+        if result is None:
+            return False
+        nonlocal target_tid, target_name
+        target_tid, target_name = result
+        return True
 
     # Startup broadcast (admin + user + public if verification)
     try:
@@ -478,6 +612,13 @@ def _run_bet_session_inner(config: dict, stop_event: threading.Event, skip_event
             scraper._shoe_epochs[target_tid] = int(time.time())
             scraper._new_shoe_signals[target_tid] = False
 
+    # === 1落ち待機（ロビー観察）=== — 1-dropモードのみ
+    if _effective_mode_box[0] == "1drop":
+        if not observe_until_1_drop(target_tid, target_name):
+            send_log("Stopped during lobby observation")
+            scraper.stop()
+            return
+
     # === Enter table (診断ログ付き) ===
     send_action(f"Entering table: {target_name}...")
 
@@ -545,6 +686,8 @@ def _run_bet_session_inner(config: dict, stop_event: threading.Event, skip_event
     _SESSION_CHECK_INTERVAL = 300  # 5分おきにStakeログイン確認
     _last_session_check = time.time()
     _deferred_exit_reason = None   # BETウィンドウ保護: exit checkは前ラウンドで実行済み
+    _awaiting_2nd_drop = (_effective_mode_box[0] == "1drop")  # 1-dropモード時のみ2落ち確認
+    _bet_fail_count = 0            # BET完全失敗カウンタ（3連続で退室）
 
     while not stop_event.is_set() and round_count < MAX_ROUNDS:
         # ── フリーズ検出ウォッチドッグ ──
@@ -559,6 +702,7 @@ def _run_bet_session_inner(config: dict, stop_event: threading.Event, skip_event
                 _t.sleep(3)
                 if executor.enter_table(target_tid, target_name):
                     send_action(f"Recovered — re-entered {target_name}")
+                    _awaiting_2nd_drop = (_effective_mode_box[0] == "1drop")  # フリーズ復帰後 → 2落ち確認必須
                 else:
                     send_action("Recovery failed — re-selecting table")
                     target_tid = None
@@ -581,6 +725,7 @@ def _run_bet_session_inner(config: dict, stop_event: threading.Event, skip_event
                     time.sleep(3)
                     if executor.enter_table(target_tid, target_name):
                         send_action(f"Session restored — re-entered {target_name}")
+                        _awaiting_2nd_drop = (_effective_mode_box[0] == "1drop")  # セッション復帰後 → 2落ち確認必須
                     else:
                         send_action("Re-entry failed after re-login — re-selecting table")
                         target_tid = None
@@ -596,48 +741,14 @@ def _run_bet_session_inner(config: dict, stop_event: threading.Event, skip_event
             send_log("Shoe change — partial turns discarded")
             session.handle_shoe_change()
 
-        # Session break (anti-bot)
+        # Session break (anti-bot) — 無効化
+        # 1-dropモードではロビー監視+テーブル出入りが実質休憩になる。
+        # 休憩中にEvolutionセッションが切れるためSESSION EXPIRED の主要原因だった。
+        # session_start のリセットのみ残す（セッション時間トラッキング用）
         if len(session.tracker.current_turns) == 0:
             minutes_elapsed = (time.time() - session_start) / 60
             if humanizer.should_take_break(minutes_elapsed):
-                break_sec = humanizer.get_break_duration()
-                send_action(f"Taking a break ({break_sec/60:.1f} min)...")
-                send_log(f"Anti-bot break: {break_sec/60:.1f} min")
-                executor.exit_table()
-                if stop_event.wait(break_sec):
-                    break
-                session_start = time.time()
-                # 休憩後は再選定
-                send_action("Break finished — re-selecting table...")
-                if not scraper.get_all_table_configs():
-                    send_log("Lobby WS lost after break — reconnecting...")
-                    try:
-                        scraper.setup_ws_intercept()
-                    except Exception:
-                        pass
-                target_tid = None
-                while not stop_event.is_set() and target_tid is None:
-                    best = pick_table()
-                    if best:
-                        target_tid = best.table_id
-                        target_name = best.title
-                        send_action(f"Picked: {target_name}")
-                    else:
-                        if not scraper.get_all_table_configs():
-                            try:
-                                scraper.setup_ws_intercept()
-                            except Exception:
-                                pass
-                        if stop_event.wait(15):
-                            break
-                if stop_event.is_set():
-                    break
-                with scraper._lock:
-                    scraper._target_table_ids.add(target_tid)
-                    scraper._target_table_names[target_tid] = target_name
-                if not executor.enter_table(target_tid, target_name):
-                    send_action("Re-entry after break failed")
-                    continue
+                session_start = time.time()  # タイマーリセットのみ
 
         # User-requested skip takes precedence (only between sets)
         user_skip = False
@@ -696,11 +807,62 @@ def _run_bet_session_inner(config: dict, stop_event: threading.Event, skip_event
                         scraper._shoe_epochs[target_tid] = int(time.time())
                         scraper._new_shoe_signals[target_tid] = False
 
+                if _effective_mode_box[0] == "1drop":
+                    if not observe_until_1_drop(target_tid, target_name):
+                        break
                 send_action(f"Entering {target_name}...")
                 if not executor.enter_table(target_tid, target_name):
                     send_action("Entry failed — retrying...")
                     time.sleep(5)
                     continue
+                _awaiting_2nd_drop = (_effective_mode_box[0] == "1drop")  # deferred exit後再入場 → 2落ち確認必須
+
+        # ── 2落ち確認フェーズ（入場直後のみ、BETしないで1ハンド観察）──
+        if _awaiting_2nd_drop:
+            cdr = confirm_2nd_drop()
+            if cdr == "stopped":
+                break
+            elif cdr == "invalidated":
+                # Bankerが来た → 退室してロビー監視へ
+                executor.exit_table()
+                # 退室後にランダム待機（10〜25秒）— 人間らしくロビーを眺める時間
+                import random as _rand2
+                _lobby_wait2 = _rand2.uniform(10, 25)
+                send_action(f"Browsing lobby... ({_lobby_wait2:.0f}s)")
+                if stop_event.wait(_lobby_wait2):
+                    break
+                if stop_event.is_set():
+                    break
+                if not scraper.get_all_table_configs():
+                    try:
+                        scraper.setup_ws_intercept()
+                    except Exception:
+                        pass
+                res_1drop = find_1_drop_table()
+                if not res_1drop:
+                    break
+                target_tid, target_name = res_1drop
+                with scraper._lock:
+                    scraper._target_table_ids.add(target_tid)
+                    scraper._target_table_names[target_tid] = target_name
+                    if target_tid not in scraper._shoe_epochs:
+                        scraper._shoe_epochs[target_tid] = int(time.time())
+                        scraper._new_shoe_signals[target_tid] = False
+                _reenter_ok = False
+                for _r in range(3):
+                    send_action(f"Entering {target_name} (attempt {_r+1}/3)...")
+                    if executor.enter_table(target_tid, target_name):
+                        _reenter_ok = True
+                        break
+                    time.sleep(5)
+                if not _reenter_ok:
+                    send_action("Entry failed — stopping")
+                    break
+                _awaiting_2nd_drop = (_effective_mode_box[0] == "1drop")
+                continue
+            else:  # "confirmed" — Playerが2落ち確認
+                _awaiting_2nd_drop = False
+                # 次のBETフェーズでrun_round()へ
 
         # BET phase — amount comes from session (remote: from VPS state; local: from tracker)
         bet_amount = session.get_bet_amount()
@@ -720,6 +882,7 @@ def _run_bet_session_inner(config: dict, stop_event: threading.Event, skip_event
             send_action(f"Re-entering {target_name}...")
             if executor.enter_table(target_tid, target_name):
                 entry_fail_count = 0
+                _awaiting_2nd_drop = (_effective_mode_box[0] == "1drop")
                 continue
             else:
                 entry_fail_count += 1
@@ -774,6 +937,35 @@ def _run_bet_session_inner(config: dict, stop_event: threading.Event, skip_event
                     continue
 
         round_count += 1
+
+        # ── BET完全失敗チェック: bet_amount=0 なら失敗カウント ──
+        if result.get("bet_amount", 0) == 0 and result.get("result"):
+            _bet_fail_count += 1
+            send_log(f"[bet-fail] BET failed ({_bet_fail_count}/3) on {target_name}")
+            if _bet_fail_count >= 3:
+                send_action(f"BET failed 3 times on {target_name} — switching table...")
+                send_log(f"[bet-fail] 3 consecutive failures — exit table")
+                executor.exit_table()
+                import random as _rand3
+                _lobby_wait3 = _rand3.uniform(10, 25)
+                send_action(f"Browsing lobby... ({_lobby_wait3:.0f}s)")
+                if stop_event.wait(_lobby_wait3):
+                    break
+                _bet_fail_count = 0
+                if not scraper.get_all_table_configs():
+                    try:
+                        scraper.setup_ws_intercept()
+                    except Exception:
+                        pass
+                if not observe_until_1_drop(target_tid, target_name):
+                    break
+                if not executor.enter_table(target_tid, target_name):
+                    send_action("Re-entry failed — stopping")
+                    break
+                _awaiting_2nd_drop = (_effective_mode_box[0] == "1drop")
+                continue
+        else:
+            _bet_fail_count = 0  # 成功したらリセット
 
         # Send round result to GUI
         if result.get("result"):
@@ -848,9 +1040,83 @@ def _run_bet_session_inner(config: dict, stop_event: threading.Event, skip_event
             session.reset_session("利確" if is_win else "損切り")
             send_shoe_history(session.tracker.sets, chip_base)
 
+        # ── Mix自動切替: セット確定後にOS>=20なら1-Dropモードへ ──
+        if _bet_mode_box[0] == "mix" and _effective_mode_box[0] == "normal":
+            os_val = getattr(session.tracker, 'prev_overshoot', 0)
+            if os_val >= 20:
+                _effective_mode_box[0] = "1drop"
+                send_action(f"OS={os_val} ≥ 20 — switching to 1-Drop mode")
+                send_log(f"[mix] Auto-switch to 1-drop (OS={os_val})")
+                send_msg({"type": "mode_changed", "mode": "1drop"})
+
         # Periodic status
         bal = executor.get_balance() if not dry_run else 0
         send_status(session, bal)
+
+        # ── 1落ちロジック: Player負け（Banker勝ち）→ テーブル退出 → ロビー観察 ──
+        # normalモードではBanker負けでも退室せず、そのままテーブルに留まる
+        if result.get("result") == "banker" and _effective_mode_box[0] == "1drop":
+            send_action("Player lost — returning to lobby for 1-drop re-observation...")
+            send_log("[1-drop] Banker won → exit table → observe lobby")
+            executor.exit_table()
+            # 退室後にランダム待機（10〜25秒）— 人間らしくロビーを眺める時間
+            import random as _rand
+            _lobby_wait = _rand.uniform(10, 25)
+            send_action(f"Browsing lobby... ({_lobby_wait:.0f}s)")
+            if stop_event.wait(_lobby_wait):
+                break
+            if stop_event.is_set():
+                break
+            # ロビーWS確認
+            if not scraper.get_all_table_configs():
+                send_log("[1-drop] Lobby WS lost — reconnecting...")
+                try:
+                    scraper.setup_ws_intercept()
+                except Exception:
+                    pass
+            # 1落ち待機
+            if not observe_until_1_drop(target_tid, target_name):
+                break  # STOPされた
+            # 再入場（3回リトライ）→ 失敗ならテーブル再選定
+            _reenter_ok = False
+            for _retry in range(3):
+                send_action(f"Re-entering {target_name} (attempt {_retry+1}/3)...")
+                if executor.enter_table(target_tid, target_name):
+                    _reenter_ok = True
+                    _awaiting_2nd_drop = (_effective_mode_box[0] == "1drop")  # Banker負け再入場 → 2落ち確認必須
+                    break
+                send_log(f"[1-drop] Entry retry {_retry+1}/3 failed")
+                time.sleep(5)
+            if not _reenter_ok:
+                send_action("Re-entry failed — re-selecting table...")
+                send_log("[1-drop] All entry retries failed — re-selecting")
+                target_tid = None
+                target_name = None
+                while not stop_event.is_set() and target_tid is None:
+                    best = pick_table()
+                    if best:
+                        target_tid = best.table_id
+                        target_name = best.title
+                        with scraper._lock:
+                            scraper._target_table_ids.add(target_tid)
+                            scraper._target_table_names[target_tid] = target_name
+                            if target_tid not in scraper._shoe_epochs:
+                                scraper._shoe_epochs[target_tid] = int(time.time())
+                                scraper._new_shoe_signals[target_tid] = False
+                        send_action(f"Picked: {target_name}")
+                    else:
+                        send_action("No suitable table — waiting 15s...")
+                        if stop_event.wait(15):
+                            break
+                if stop_event.is_set() or not target_tid:
+                    break
+                if not observe_until_1_drop(target_tid, target_name):
+                    break
+                if not executor.enter_table(target_tid, target_name):
+                    send_action("New table entry failed — stopping")
+                    break
+                _awaiting_2nd_drop = (_effective_mode_box[0] == "1drop")  # 新テーブル再入場 → 2落ち確認必須
+            continue
 
         # Deferred exit check: runs during dealing phase (after result, before next BET window)
         # This avoids blocking the BET window with a VPS API call
@@ -946,6 +1212,14 @@ def main():
                         # Session not yet initialized, buffer for later
                         _pending_config_update.update(cfg)
                         send_log(f"Config buffered (session starting): {cfg}")
+
+                elif msg_type == "change_mode":
+                    new_mode = msg.get("mode", "1drop")
+                    if new_mode in ("normal", "1drop", "mix"):
+                        _bet_mode_box[0] = new_mode
+                        _effective_mode_box[0] = "normal" if new_mode == "mix" else new_mode
+                        send_log(f"BET mode changed to: {new_mode} (effective: {_effective_mode_box[0]})")
+                        send_msg({"type": "mode_changed", "mode": new_mode})
 
                 elif msg_type == "get_status":
                     # Status is sent periodically from bet loop

@@ -249,6 +249,14 @@
               <input type="checkbox" id="inputDryRun"> Dry Run (no real bets)
             </label>
           </div>
+          <div class="form-group">
+            <label>BET Mode</label>
+            <select id="inputBetMode" style="width:100%;padding:8px;background:var(--bg-card);color:var(--text-main);border:1px solid var(--border);border-radius:6px;">
+              <option value="1drop">1-Drop (observe & enter)</option>
+              <option value="normal">Normal (stay in table)</option>
+              <option value="mix">Mix (Normal → 1-Drop at OS≥20)</option>
+            </select>
+          </div>
           <button class="btn btn-start" id="btnSaveSettings" style="width:100%;margin-top:12px;">SAVE</button>
           <div style="text-align:center; margin-top:16px;">
             <span id="devModeLink" style="font-size:10px; color:var(--text-dim); cursor:pointer; letter-spacing:1px;">

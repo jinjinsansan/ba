@@ -412,9 +412,10 @@ class RemoteLaplaceSession:
         if not self.executor.check_and_dismiss_error():
             return self._exit("error_dialog detected")
 
-        is_first = (self.total_bets == 0 and len(self.tracker.current_turns) == 0)
+        # skip_round=False: confirm_2nd_drop() (agent_api) が入場後の見送りを担当するため
+        # ここでは常に即座にBETフェーズを待つ
         if not self.executor.wait_for_betting_phase(
-            timeout=180 if is_first else 120, skip_round=is_first
+            timeout=120, skip_round=False
         ):
             if not self.executor.check_and_dismiss_error():
                 return self._exit("error_dialog_after_bet_phase_wait")

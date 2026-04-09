@@ -515,25 +515,31 @@ class BetExecutor:
         return best_plan
 
     def _select_chip(self, evo, chip_value: int) -> bool:
-        """チップ選択。locatorで直接クリック→失敗時はスタック展開→リトライ。"""
-        # 1回目: 直接クリック
-        try:
-            chip = evo.locator(f'[data-role="chip"][data-value="{chip_value}"]').first
-            chip.click(timeout=500, force=True)
-            logger.info(f"チップ${chip_value}選択OK")
-            return True
-        except Exception:
-            pass
+        """チップ選択。locatorで直接クリック→失敗時はスタック展開→リトライ。
+        テーブル出入り後のDOM描画遅延を考慮して最大3回リトライ。"""
+        _TIMEOUT = 1500  # テーブル出入り後のDOM描画遅延を考慮
+        for attempt in range(3):
+            # 直接クリック
+            try:
+                chip = evo.locator(f'[data-role="chip"][data-value="{chip_value}"]').first
+                chip.click(timeout=_TIMEOUT, force=True)
+                logger.info(f"チップ${chip_value}選択OK")
+                return True
+            except Exception:
+                pass
 
-        # 2回目: スタック展開してリトライ
-        try:
-            evo.locator('[data-role="footer-perspective-chip-stack"]').first.click(timeout=500, force=True)
-            time.sleep(0.08)
-            evo.locator(f'[data-role="chip"][data-value="{chip_value}"]').first.click(timeout=500, force=True)
-            logger.info(f"チップ${chip_value}選択OK (展開後)")
-            return True
-        except Exception:
-            pass
+            # スタック展開してリトライ
+            try:
+                evo.locator('[data-role="footer-perspective-chip-stack"]').first.click(timeout=_TIMEOUT, force=True)
+                time.sleep(0.1)
+                evo.locator(f'[data-role="chip"][data-value="{chip_value}"]').first.click(timeout=_TIMEOUT, force=True)
+                logger.info(f"チップ${chip_value}選択OK (展開後)")
+                return True
+            except Exception:
+                pass
+
+            if attempt < 2:
+                time.sleep(0.3)  # 短い待機後リトライ
 
         logger.error(f"チップ${chip_value}選択失敗")
         return False
