@@ -469,6 +469,95 @@ def _run_bet_session_inner(config: dict, stop_event: threading.Event, skip_event
         target_tid, target_name = result
         return True
 
+    BACCARAT_LOBBY_URL = "https://stake.com/casino/games/evolution-baccarat-lobby"
+
+    def full_recovery() -> tuple[str, str] | None:
+        """最終手段フルリカバリ: ページ完全リロード→ログイン確認→WS再接続→テーブル再選定
+
+        iframe壊死・WS接続不能・entry連続失敗など、通常のリカバリで復旧できない場合の最終手段。
+        正常に動いている既存ロジックには干渉しない。
+        Returns: (table_id, table_name) or None (STOP時)
+        """
+        nonlocal target_tid, target_name
+        send_action("Full recovery — reloading page...")
+        send_log("[recovery] Starting full page recovery")
+
+        # 1. テーブル状態をクリア
+        try:
+            executor.game_ws.reset()
+            executor._reset_state()
+        except Exception:
+            pass
+
+        # 2. ページを完全にリロード（lobby URLに直接遷移）
+        try:
+            send_log("[recovery] Navigating to lobby...")
+            scraper.page.goto(BACCARAT_LOBBY_URL, wait_until="domcontentloaded", timeout=30000)
+            time.sleep(5)
+        except Exception as e:
+            send_log(f"[recovery] page.goto failed: {e}")
+            # それでも続行を試みる
+
+        if stop_event.is_set():
+            return None
+
+        # 3. ログイン状態を確認、必要なら再ログイン
+        try:
+            if not scraper._is_logged_in():
+                send_log("[recovery] Not logged in — attempting re-login...")
+                send_action("Re-logging in to Stake...")
+                scraper._login_from_lobby()
+                time.sleep(3)
+                send_log("[recovery] Re-login completed")
+        except Exception as e:
+            send_log(f"[recovery] Re-login failed: {e}")
+            # それでもWS接続を試みる
+
+        if stop_event.is_set():
+            return None
+
+        # 4. WS傍受を再設定
+        try:
+            send_log("[recovery] Reconnecting lobby WS...")
+            scraper.setup_ws_intercept()
+            send_log("[recovery] Lobby WS reconnected")
+        except Exception as e:
+            send_log(f"[recovery] WS reconnect failed: {e}")
+
+        if stop_event.is_set():
+            return None
+
+        # 5. テーブル再選定
+        send_action("Recovery — selecting table...")
+        target_tid = None
+        target_name = None
+        for _rt in range(5):
+            if stop_event.is_set():
+                return None
+            best = pick_table()
+            if best:
+                target_tid = best.table_id
+                target_name = best.title
+                with scraper._lock:
+                    scraper._target_table_ids.add(target_tid)
+                    scraper._target_table_names[target_tid] = target_name
+                    scraper._new_shoe_signals[target_tid] = False
+                    scraper._shoe_epochs[target_tid] = int(time.time())
+                send_action(f"Recovery complete — picked {target_name}")
+                send_log(f"[recovery] Table selected: {target_name}")
+                return target_tid, target_name
+            else:
+                if not scraper.get_all_table_configs():
+                    try:
+                        scraper.setup_ws_intercept()
+                    except Exception:
+                        pass
+                if stop_event.wait(10):
+                    return None
+
+        send_log("[recovery] Full recovery failed — no table available")
+        return None
+
     # Startup broadcast (admin + user + public if verification)
     try:
         composite.on_startup(user_label, {
@@ -709,14 +798,20 @@ def _run_bet_session_inner(config: dict, stop_event: threading.Event, skip_event
                 _t.sleep(3)
                 if executor.enter_table(target_tid, target_name):
                     send_action(f"Recovered — re-entered {target_name}")
-                    _awaiting_2nd_drop = (_effective_mode_box[0] == "1drop")  # フリーズ復帰後 → 2落ち確認必須
+                    _awaiting_2nd_drop = (_effective_mode_box[0] == "1drop")
                 else:
-                    send_action("Recovery failed — re-selecting table")
-                    target_tid = None
-                    target_name = None
+                    # 通常リカバリ失敗 → フルリカバリ
+                    send_log("[watchdog] Normal recovery failed — escalating to full recovery")
+                    fr = full_recovery()
+                    if not fr:
+                        break
+                    target_tid, target_name = fr
             except Exception as _e:
-                send_log(f"[watchdog] reload error: {_e}")
-                target_tid = None
+                send_log(f"[watchdog] reload error: {_e} — escalating to full recovery")
+                fr = full_recovery()
+                if not fr:
+                    break
+                target_tid, target_name = fr
             continue
 
         # ── Stakeセッション確認（5分おき）──
@@ -726,17 +821,31 @@ def _run_bet_session_inner(config: dict, stop_event: threading.Event, skip_event
                 if not scraper._is_logged_in():
                     send_action("Stake session expired — re-logging in...")
                     send_log("[session] Stake logout detected — attempting re-login")
-                    scraper._login()
-                    send_log("[session] Re-login successful")
+                    try:
+                        scraper._login()
+                        send_log("[session] Re-login successful")
+                    except Exception as _le:
+                        send_log(f"[session] Re-login failed: {_le} — escalating to full recovery")
+                        fr = full_recovery()
+                        if not fr:
+                            break
+                        target_tid, target_name = fr
+                        if executor.enter_table(target_tid, target_name):
+                            _awaiting_2nd_drop = (_effective_mode_box[0] == "1drop")
+                        continue
                     executor.exit_table()
                     time.sleep(3)
                     if executor.enter_table(target_tid, target_name):
                         send_action(f"Session restored — re-entered {target_name}")
-                        _awaiting_2nd_drop = (_effective_mode_box[0] == "1drop")  # セッション復帰後 → 2落ち確認必須
+                        _awaiting_2nd_drop = (_effective_mode_box[0] == "1drop")
                     else:
-                        send_action("Re-entry failed after re-login — re-selecting table")
-                        target_tid = None
-                        target_name = None
+                        # 再入場失敗 → フルリカバリ
+                        fr = full_recovery()
+                        if not fr:
+                            break
+                        target_tid, target_name = fr
+                        if executor.enter_table(target_tid, target_name):
+                            _awaiting_2nd_drop = (_effective_mode_box[0] == "1drop")
                     continue
             except Exception as _se:
                 send_log(f"[session] re-login error: {_se}")
@@ -936,10 +1045,20 @@ def _run_bet_session_inner(config: dict, stop_event: threading.Event, skip_event
                     if target_tid and not stop_event.is_set():
                         send_action(f"Entering {target_name}...")
                         if executor.enter_table(target_tid, target_name):
+                            _awaiting_2nd_drop = (_effective_mode_box[0] == "1drop")
                             continue
                     if stop_event.is_set():
                         break
-                    send_action("Recovery failed — stopping")
+                    # 通常リカバリ全失敗 → フルリカバリ（最終手段）
+                    send_log("[recovery] All normal recovery failed — escalating to full recovery")
+                    fr = full_recovery()
+                    if not fr:
+                        break
+                    target_tid, target_name = fr
+                    if executor.enter_table(target_tid, target_name):
+                        _awaiting_2nd_drop = (_effective_mode_box[0] == "1drop")
+                        continue
+                    send_action("Full recovery failed — stopping")
                     break
                 else:
                     time.sleep(10)
@@ -969,8 +1088,14 @@ def _run_bet_session_inner(config: dict, stop_event: threading.Event, skip_event
                 if not observe_until_1_drop(target_tid, target_name):
                     break
                 if not executor.enter_table(target_tid, target_name):
-                    send_action("Re-entry failed — stopping")
-                    break
+                    # 通常リカバリ失敗 → フルリカバリ
+                    fr = full_recovery()
+                    if not fr:
+                        break
+                    target_tid, target_name = fr
+                    if not executor.enter_table(target_tid, target_name):
+                        send_action("Full recovery failed — stopping")
+                        break
                 _awaiting_2nd_drop = (_effective_mode_box[0] == "1drop")
                 continue
         else:
