@@ -1085,6 +1085,7 @@ def _run_bet_session_inner(config: dict, stop_event: threading.Event, skip_event
             if not observe_until_1_drop(target_tid, target_name):
                 break  # STOPされた
             # 再入場（3回リトライ）→ 失敗ならテーブル再選定
+            _deferred_exit_reason = None  # 前ラウンドの判定を持ち越さない
             _reenter_ok = False
             for _retry in range(3):
                 send_action(f"Re-entering {target_name} (attempt {_retry+1}/3)...")

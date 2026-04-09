@@ -713,26 +713,47 @@ class BetExecutor:
 
         try:
             logger.info("ロビーに戻ります")
-            evo = self._get_evo_locator()
+
+            # lobby-button クリック（タイムアウト付き）
+            _lobby_ok = False
             try:
+                evo = self._get_evo_locator()
                 evo.locator('[data-role="lobby-button"]').first.click(timeout=5000)
+                _lobby_ok = True
             except Exception:
-                game = self._get_evo_game()
-                if game:
-                    game.evaluate("() => { window.location.hash = 'category=baccarat_sicbo'; }")
+                pass
+
+            if not _lobby_ok:
+                try:
+                    game = self._get_evo_game()
+                    if game:
+                        game.evaluate("() => { window.location.hash = 'category=baccarat_sicbo'; }", timeout=5000)
+                except Exception:
+                    pass
+
             time.sleep(5)
             self.game_ws.reset()
             self._reset_state()
 
-            # iframe が about:blank になっていないか確認
-            evo_check = self._get_evo_game()
-            if not evo_check:
-                logger.warning("ロビー復帰後にiframeが消失 — ページリロードします")
-                try:
-                    self.page.reload(wait_until="domcontentloaded", timeout=30000)
-                    time.sleep(8)
-                except Exception as _rl:
-                    logger.warning(f"リロード失敗: {_rl}")
+            # iframe が about:blank になっていないか確認（タイムアウト保護付き）
+            try:
+                evo_check = self._get_evo_game()
+                if not evo_check:
+                    logger.warning("ロビー復帰後にiframeが消失 — ページリロードします")
+                    try:
+                        self.page.reload(wait_until="domcontentloaded", timeout=15000)
+                        time.sleep(5)
+                    except Exception as _rl:
+                        logger.warning(f"リロード失敗: {_rl}")
+                        # リロードも失敗 → page.goto でフルリカバリ
+                        try:
+                            self.page.goto("https://stake.com/casino/games/evolution-baccarat-lobby",
+                                           wait_until="domcontentloaded", timeout=20000)
+                            time.sleep(5)
+                        except Exception as _gt:
+                            logger.warning(f"page.goto失敗: {_gt}")
+            except Exception as _ec:
+                logger.warning(f"iframe確認エラー: {_ec}")
 
             logger.info("ロビー復帰完了")
             return True
