@@ -26,14 +26,14 @@ export async function POST(req: NextRequest) {
 
   // 管理者は無条件で通過
   if (profile.is_admin) {
-    const { data: billing } = await admin.from('billing').select('bot_config').eq('user_id', profile.id).single()
-    return NextResponse.json({ ok: true, bot_config: billing?.bot_config || {} })
+    const { data: billing } = await admin.from('billing').select('bot_config, gui_state').eq('user_id', profile.id).single()
+    return NextResponse.json({ ok: true, bot_config: billing?.bot_config || {}, gui_state: billing?.gui_state || {} })
   }
 
   // サブスクリプション確認
   const { data: billing, error: billingError } = await admin
     .from('billing')
-    .select('status, bot_config, expires_at')
+    .select('status, bot_config, gui_state, expires_at')
     .eq('user_id', profile.id)
     .single()
 
@@ -61,5 +61,6 @@ export async function POST(req: NextRequest) {
   return NextResponse.json({
     ok: true,
     bot_config: billing.bot_config || {},
+    gui_state: billing.gui_state || {},
   })
 }

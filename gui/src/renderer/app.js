@@ -117,6 +117,8 @@ $('#btnStart').addEventListener('click', async () => {
     resetFeed();
   } else {
     _pnlSynced = false;  // resume → 最初のstatusでVPS累計を同期
+    // Supabaseからgui_stateを復元
+    await restoreGuiStateFromServer();
   }
   _startedAt = Date.now();
   setRunning(true);
@@ -239,6 +241,80 @@ async function syncTableFilterToServer(email, filter) {
   } catch (e) {
     console.warn('[sync] bot-config sync failed:', e);
   }
+}
+
+// --- GUI State Persistence (Supabase) ---
+let _guiSyncTimer = null;
+let _guiSyncPending = false;
+
+function _getGuiState() {
+  return {
+    session_total: sessionTotal,
+    daily_pnl: loadDailyPnl(),
+    results: results.slice(-200),
+    bet_mode: (loadSettings().bet_mode || '1drop'),
+    updated_at: new Date().toISOString(),
+  };
+}
+
+async function syncGuiStateToServer() {
+  const email = loadSettings().user_email;
+  if (!email) return;
+  try {
+    await fetch(`${SITE_URL}/api/gui-state`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email, api_key: LAPLACE_API_KEY, gui_state: _getGuiState() }),
+    });
+  } catch (e) {
+    console.warn('[sync] gui-state sync failed:', e);
+  }
+}
+
+function scheduleGuiStateSync() {
+  _guiSyncPending = true;
+  if (_guiSyncTimer) return; // already scheduled
+  _guiSyncTimer = setTimeout(() => {
+    _guiSyncTimer = null;
+    if (_guiSyncPending) {
+      _guiSyncPending = false;
+      syncGuiStateToServer();
+    }
+  }, 5000); // debounce 5s
+}
+
+async function loadGuiStateFromServer() {
+  const email = loadSettings().user_email;
+  if (!email) return null;
+  try {
+    const res = await fetch(`${SITE_URL}/api/gui-state?email=${encodeURIComponent(email)}&api_key=${encodeURIComponent(LAPLACE_API_KEY)}`);
+    const data = await res.json();
+    return data.gui_state || null;
+  } catch (e) {
+    console.warn('[sync] gui-state load failed:', e);
+    return null;
+  }
+}
+
+async function restoreGuiStateFromServer() {
+  const state = await loadGuiStateFromServer();
+  if (!state) return false;
+  if (typeof state.session_total === 'number') {
+    sessionTotal = state.session_total;
+    updateSessionDisplay();
+  }
+  if (state.daily_pnl && typeof state.daily_pnl === 'object') {
+    saveDailyPnl(state.daily_pnl);
+    renderDailyPnl();
+  }
+  if (Array.isArray(state.results) && state.results.length > 0) {
+    results.length = 0;
+    for (const r of state.results) results.push(r);
+    renderFeed();
+    renderRecent();
+  }
+  addLog('GUI state restored from server.', 'info');
+  return true;
 }
 
 // --- Table Filter ---
@@ -711,6 +787,7 @@ window.valhalla.onAgentMessage((msg) => {
         sessionTotal += msg.round_profit;
         updateSessionDisplay();
         addRoundToDaily(msg.round_profit);
+        scheduleGuiStateSync(); // Supabaseに定期保存（5秒デバウンス）
       }
       break;
     }
@@ -787,6 +864,7 @@ window.valhalla.onAgentMessage((msg) => {
       setRunning(false);
       setAction('Stopped');
       addLog('Bot stopped.');
+      syncGuiStateToServer(); // 停止時に即時保存
       break;
 
     case 'log':
