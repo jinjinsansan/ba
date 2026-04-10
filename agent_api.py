@@ -571,15 +571,21 @@ def _run_bet_session_inner(config: dict, stop_event: threading.Event, skip_event
                 eval_result = evaluate_table(results)
                 reg = eval_result['regularity']
                 hands = eval_result['hands']
+                p_ratio = eval_result.get('p_ratio', 0.5)
+                p_count = eval_result.get('p_count', 0)
+                b_count = eval_result.get('b_count', 0)
 
                 if hands < MIN_HANDS_FOR_ENTRY:
                     table_reports.append(f"⏳ {rec_name}: {hands}ハンド（{MIN_HANDS_FOR_ENTRY}まで待機）")
                 elif reg < ENTRY_THRESHOLD:
-                    table_reports.append(f"⚠️ {rec_name}: {hands}ハンド reg={reg:.0f}（閾値{ENTRY_THRESHOLD}未満）")
+                    table_reports.append(f"⚠️ {rec_name}: {hands}h reg={reg:.0f} P{p_count}/B{b_count}（規則性<{ENTRY_THRESHOLD}）")
+                elif not eval_result.get('can_enter'):
+                    # P比率不足
+                    table_reports.append(f"⚠️ {rec_name}: {hands}h reg={reg:.0f} P{p_count}/B{b_count}（Banker dominant P{p_ratio:.0%}）")
                 else:
-                    table_reports.append(f"✅ {rec_name}: {hands}ハンド reg={reg:.0f} → 条件クリア!")
+                    table_reports.append(f"✅ {rec_name}: {hands}h reg={reg:.0f} P{p_count}/B{b_count}（P{p_ratio:.0%}）→ クリア!")
                     if best is None or reg > best[2]:
-                        best = (tid, rec_name, reg)
+                        best = (tid, rec_name, reg, p_count, b_count, p_ratio)
 
             # 15秒ごとに候補状況をログ出力
             if time.time() - last_status > 15:
@@ -588,9 +594,9 @@ def _run_bet_session_inner(config: dict, stop_event: threading.Event, skip_event
                 last_status = time.time()
 
             if best:
-                tid, tname, reg = best
-                send_action(f"🎯 Sync: {tname} に入場します (reg={reg:.0f})")
-                send_log(f"[Sync] ★ 入場決定: {tname} 規則性={reg:.0f}")
+                tid, tname, reg, p_count, b_count, p_ratio = best
+                send_action(f"🎯 Sync: {tname} に入場 (reg={reg:.0f} P{p_count}/B{b_count})")
+                send_log(f"[Sync] ★ 入場決定: {tname} 規則性={reg:.0f} P{p_count}/B{b_count} (P{p_ratio:.0%})")
                 return tid, tname
 
             # 待機メッセージ（30秒ごと）
@@ -1494,12 +1500,16 @@ def _run_bet_session_inner(config: dict, stop_event: threading.Event, skip_event
 
         # ── Syncモード(+sync_pause): 動的規則性監視（毎ハンドチェック）──
         # シュー切替は一瞬で起きるため即検出が必要
-        # 規則性崩壊・ハンド数不足いずれも即退避
+        # 規則性崩壊・ハンド数不足・Banker dominantいずれも即退避
         if _effective_mode_box[0] in ("sync", "sync_pause") and target_tid:
             monitor = check_sync_regularity(target_tid)
+            _pr = monitor.get('p_ratio', 0.5)
+            _pc = monitor.get('p_count', 0)
+            _bc = monitor.get('b_count', 0)
+            _reason = monitor.get('exit_reason', '')
             if monitor['should_exit']:
-                send_action(f"⚠️ Sync: 規則性崩壊/シュー切替 (reg={monitor['regularity']:.0f} hands={monitor['hands']}) — 退避")
-                send_log(f"[Sync-Monitor] ❌ 規則性={monitor['regularity']:.0f} ハンド={monitor['hands']} → 退避判定")
+                send_action(f"⚠️ Sync退避: {_reason} (reg={monitor['regularity']:.0f} hands={monitor['hands']} P{_pc}/B{_bc})")
+                send_log(f"[Sync-Monitor] ❌ 退避判定: {_reason} (reg={monitor['regularity']:.0f} hands={monitor['hands']} P{_pc}/B{_bc} P比率={_pr:.0%})")
                 executor.exit_table()
                 import random as _rand_sync
                 _wait = _rand_sync.uniform(5, 15)
@@ -1533,7 +1543,7 @@ def _run_bet_session_inner(config: dict, stop_event: threading.Event, skip_event
                 _awaiting_sync_confirm = True  # 新テーブルで再確認
                 continue
             else:
-                send_log(f"[Sync-Monitor] ✅ 規則性={monitor['regularity']:.0f} ハンド={monitor['hands']} → 継続")
+                send_log(f"[Sync-Monitor] ✅ reg={monitor['regularity']:.0f} hands={monitor['hands']} P{_pc}/B{_bc} (P{_pr:.0%}) → 継続")
 
         # ── 1落ちロジック: Player負け（Banker勝ち）→ テーブル退出 → ロビー観察 ──
         # normalモードではBanker負けでも退室せず、そのままテーブルに留まる

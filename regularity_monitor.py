@@ -18,6 +18,11 @@ EXIT_THRESHOLD = 65
 MIN_HANDS_FOR_ENTRY = 35  # シュー約50%経過、精度87.7%
 CHECK_INTERVAL = 5  # BET中に5ハンドごとに再計算
 
+# P/B バランス閾値 — Banker寄り過ぎるシューを除外
+# Player をBETする前提なので、P/(P+B) が一定以上必要
+MIN_P_RATIO_FOR_ENTRY = 0.42   # 入場時: P比率42%以上 (B58%以下)
+MIN_P_RATIO_FOR_STAY = 0.38    # 滞在時: P比率38%未満で退避 (B62%以上)
+
 
 def compute_streaks(results) -> list[dict]:
     """結果列からP/B連続を抽出(タイ除外)
@@ -138,28 +143,70 @@ def should_exit_table(results, threshold: float = EXIT_THRESHOLD) -> bool:
     return compute_regularity(results) < threshold
 
 
+def count_pb(results) -> tuple[int, int]:
+    """Player/Banker をカウント (Tie除外)"""
+    if isinstance(results, str):
+        results = list(results)
+    p = sum(1 for r in results if r == 'P')
+    b = sum(1 for r in results if r == 'B')
+    return p, b
+
+
 def evaluate_table(results) -> dict:
     """テーブル評価の統合関数
     Returns: {
         'regularity': float,
         'hands': int,
+        'p_ratio': float,
+        'p_count': int,
+        'b_count': int,
         'can_enter': bool,
         'should_exit': bool,
+        'exit_reason': str,
     }
 
-    should_exit の条件:
+    入場条件 (can_enter):
+      1. ハンド数 >= MIN_HANDS_FOR_ENTRY
+      2. 規則性 >= ENTRY_THRESHOLD
+      3. P比率 >= MIN_P_RATIO_FOR_ENTRY (Banker dominant shoe を除外)
+
+    退避条件 (should_exit):
       1. ハンド数 < MIN_HANDS_FOR_ENTRY → シュー切替直後、即退避
       2. 規則性 < EXIT_THRESHOLD → 規則性崩壊、即退避
+      3. P比率 < MIN_P_RATIO_FOR_STAY → Banker dominant化、即退避
     """
     hands = count_non_tie(results)
     reg = compute_regularity(results) if hands >= 5 else 0.0
-    # シュー切替後（ハンド少ない）または規則性崩壊で退避
-    should_exit = (hands < MIN_HANDS_FOR_ENTRY) or (reg < EXIT_THRESHOLD)
+    p, b = count_pb(results)
+    p_ratio = p / (p + b) if (p + b) > 0 else 0.5
+
+    can_enter = (
+        hands >= MIN_HANDS_FOR_ENTRY
+        and reg >= ENTRY_THRESHOLD
+        and p_ratio >= MIN_P_RATIO_FOR_ENTRY
+    )
+
+    exit_reason = ""
+    should_exit = False
+    if hands < MIN_HANDS_FOR_ENTRY:
+        should_exit = True
+        exit_reason = "シュー切替"
+    elif reg < EXIT_THRESHOLD:
+        should_exit = True
+        exit_reason = "規則性崩壊"
+    elif p_ratio < MIN_P_RATIO_FOR_STAY:
+        should_exit = True
+        exit_reason = f"Banker dominant (P={p_ratio:.0%})"
+
     return {
         'regularity': reg,
         'hands': hands,
-        'can_enter': hands >= MIN_HANDS_FOR_ENTRY and reg >= ENTRY_THRESHOLD,
+        'p_ratio': p_ratio,
+        'p_count': p,
+        'b_count': b,
+        'can_enter': can_enter,
         'should_exit': should_exit,
+        'exit_reason': exit_reason,
     }
 
 
