@@ -224,14 +224,8 @@ class GameWSMonitor:
         logger.info("BETフェーズを待機中...")
         while time.time() < deadline:
             if dom_checker():
-                # BETフェーズ終了間際でないか確認（2秒待ってタイマーがまだ表示されているか）
-                time.sleep(2)
-                if dom_checker():
-                    logger.info("BETフェーズ開始")
-                    return True
-                else:
-                    logger.info("BETフェーズ残り時間不足 — 次のフェーズを待機")
-                    continue
+                logger.info("BETフェーズ開始")
+                return True
             if error_checker and not error_checker():
                 logger.warning("BETフェーズ待機中にエラーダイアログ検出")
                 return False
