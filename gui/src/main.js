@@ -69,11 +69,23 @@ function resolveEnginePaths() {
       args: [],
     };
   }
+  // Dev mode: prefer repo-local venv python so dependencies (dotenv, playwright,
+  // camoufox 等) が確実に解決される。venv が無ければ system python にフォールバック。
+  const repoRoot = path.join(__dirname, '..', '..');
+  const venvPython = process.platform === 'win32'
+    ? path.join(repoRoot, 'venv', 'Scripts', 'python.exe')
+    : path.join(repoRoot, 'venv', 'bin', 'python');
+  let pythonExe = 'python';
+  try {
+    if (fs.existsSync(venvPython)) {
+      pythonExe = venvPython;
+    }
+  } catch (_) { /* ignore */ }
   return {
     mode: 'dev',
-    exe: 'python',
-    cwd: path.join(__dirname, '..', '..'),
-    args: ['-X', 'utf8', path.join(__dirname, '..', '..', 'agent_api.py')],
+    exe: pythonExe,
+    cwd: repoRoot,
+    args: ['-X', 'utf8', path.join(repoRoot, 'agent_api.py')],
   };
 }
 
