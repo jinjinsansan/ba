@@ -740,9 +740,16 @@ def _run_bet_session_inner(config: dict, stop_event: threading.Event, skip_event
 
     def observe_one_hand_no_bet() -> str | None:
         """sync_pause モード: BET せず1ハンド観戦して bead road から結果を読む。
-        Returns: 'P' | 'B' | None (失敗/STOP)
+        Returns: 'P' | 'B' | 'SESSION_EXPIRED' | None (失敗/STOP)
         Tieは無視（カウントしない、次の非Tie結果まで待つ）
         """
+        # SESSION EXPIRED を最初に即検知（無駄な待機を避ける）
+        try:
+            if not executor.check_and_dismiss_error():
+                return 'SESSION_EXPIRED'
+        except Exception:
+            pass
+
         try:
             pre_bead = executor.read_bead_road() or ""
         except Exception:
@@ -750,7 +757,14 @@ def _run_bet_session_inner(config: dict, stop_event: threading.Event, skip_event
         pre_len = len(pre_bead)
 
         # 1ハンド見送り (skip_round=True で現在のBET phaseをスキップ)
-        if not executor.wait_for_betting_phase(timeout=120, skip_round=True):
+        # timeout 短縮: 60秒で諦めて SESSION 検知を再試行できるように
+        if not executor.wait_for_betting_phase(timeout=60, skip_round=True):
+            # 失敗時にエラーダイアログ確認
+            try:
+                if not executor.check_and_dismiss_error():
+                    return 'SESSION_EXPIRED'
+            except Exception:
+                pass
             return None
 
         # bead road を最大15秒ポーリング
@@ -1294,6 +1308,16 @@ def _run_bet_session_inner(config: dict, stop_event: threading.Event, skip_event
             elif obs == 'B':
                 _consec_banker += 1
                 send_log(f"[sync_pause] 🐉 Banker継続 ({_consec_banker}連) → 観戦継続")
+            elif obs == 'SESSION_EXPIRED':
+                send_action("⚠️ Session expired during observe — full recovery")
+                send_log("[sync_pause] SESSION EXPIRED検出 → 即フルリカバリ")
+                _paused_for_dragon = False
+                _consec_banker = 0
+                fr = full_recovery()
+                if not fr:
+                    break
+                target_tid, target_name = fr
+                _awaiting_sync_confirm = True
             else:
                 send_log(f"[sync_pause] 観戦失敗 (obs={obs}) → 1秒待機")
                 if stop_event.wait(1):
