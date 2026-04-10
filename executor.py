@@ -376,6 +376,20 @@ class BetExecutor:
         # locator を最初に1回だけ取得
         evo = self._get_evo_locator()
 
+        # WS でBET phase を検出した直後はDOMチップが描画途中の場合がある。
+        # チップ選択がある場合のみ、最大400msだけチップが現れるのを待つ。
+        # 既に描画済みなら即座にbreakするので通常時のオーバーヘッドはほぼ無し。
+        try:
+            for _wait_chips in range(8):  # 8 * 50ms = 400ms
+                try:
+                    if evo.locator('[data-role="chip"]').first.is_visible(timeout=50):
+                        break
+                except Exception:
+                    pass
+                time.sleep(0.05)
+        except Exception:
+            pass
+
         # 前回BETの残りチップをクリア (遅延クリックによる超過BET防止)
         try:
             undo = evo.locator('[data-role="undo-button"]').first
@@ -526,11 +540,15 @@ class BetExecutor:
         return best_plan
 
     def _select_chip(self, evo, chip_value: int) -> bool:
-        """チップ選択。高速版（timeout=500ms）、失敗時のみスタック展開リトライ。"""
-        # 1回目: 直接クリック（高速）
+        """チップ選択。
+
+        WS検出で BET phase に入った直後は DOM チップが未描画の場合があるため、
+        timeout 1200ms + 3段階リトライで信頼性を確保する（クラウドPC等のスペック向け）。
+        """
+        # 1回目: 直接クリック
         try:
             chip = evo.locator(f'[data-role="chip"][data-value="{chip_value}"]').first
-            chip.click(timeout=500, force=True)
+            chip.click(timeout=1200, force=True)
             logger.info(f"チップ${chip_value}選択OK")
             return True
         except Exception:
@@ -538,10 +556,21 @@ class BetExecutor:
 
         # 2回目: スタック展開してリトライ
         try:
-            evo.locator('[data-role="footer-perspective-chip-stack"]').first.click(timeout=500, force=True)
-            time.sleep(0.08)
-            evo.locator(f'[data-role="chip"][data-value="{chip_value}"]').first.click(timeout=500, force=True)
+            evo.locator('[data-role="footer-perspective-chip-stack"]').first.click(timeout=1200, force=True)
+            time.sleep(0.15)
+            evo.locator(f'[data-role="chip"][data-value="{chip_value}"]').first.click(timeout=1200, force=True)
             logger.info(f"チップ${chip_value}選択OK (展開後)")
+            return True
+        except Exception:
+            pass
+
+        # 3回目: iframe を再取得してから直接クリック
+        # （iframe 再構築後のフォールバック）
+        try:
+            time.sleep(0.2)
+            fresh_evo = self._get_evo_locator()
+            fresh_evo.locator(f'[data-role="chip"][data-value="{chip_value}"]').first.click(timeout=1200, force=True)
+            logger.info(f"チップ${chip_value}選択OK (iframe再取得後)")
             return True
         except Exception:
             pass

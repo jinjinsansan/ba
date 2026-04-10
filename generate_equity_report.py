@@ -1,16 +1,15 @@
-"""Generate equity-curve / session ledger HTML report.
+"""Generate equity-curve / session ledger HTML reports.
 
-Starts with $10,000, +$50 per profit session, -$3000 per loss session.
-Walks all qualified tables chronologically across analytics.sqlite3.
+2バージョン生成:
+  - report/equity_ledger_all.html  : 全テーブルでランダム運用した場合
+  - report/equity_ledger_top.html  : 推奨Top4-5テーブルだけで運用した場合
+  - report/equity_ledger.html      : 旧（互換用に top と同じ）
 
 Usage: python generate_equity_report.py
-Output: report/equity_ledger.html
 """
 import sqlite3
-import json
 import os
 from collections import defaultdict
-from datetime import datetime
 
 DB_PATH = "analytics.sqlite3"
 START_CAPITAL = 10000
@@ -18,9 +17,15 @@ PROFIT_PER_WIN = 50
 LOSS_PER_LOSS = 3000
 
 MIN_HANDS_PER_SHOE = 50
-MIN_SHOES = 5  # ローカルDBに合わせて緩和（VPSは30）
-MAX_DD_THRESHOLD = 2500
-EXCLUDE_TABLES = {'Dynasty Speed Baccarat 5'}
+
+# 推奨Top（実運用Sync mode の SYNC_RECOMMENDED_TABLES と同じ並び）
+TOP_RECOMMENDED = [
+    "Japanese Speed Baccarat A",
+    "Korean Speed Baccarat H",
+    "Korean Speed Baccarat B",
+    "Korean Speed Baccarat A",
+    "Korean Speed Baccarat E",
+]
 
 SEQ = [1, 2, 3, 5, 7, 9, 11, 13, 16, 19, 22, 25, 28, 31, 35, 39, 43, 47, 51, 55,
        60, 65, 70, 75, 80, 85, 90, 95, 100, 106, 112, 118, 124, 130, 136, 142,
@@ -107,8 +112,6 @@ def simulate_table_sessions(table_name, shoes):
     """Run sim and return list of sessions with timestamps."""
     sessions = []
     sim = MaruBatsuSim()
-    cur_ts = shoes[0][1] if shoes else None
-
     for seq, started_at in shoes:
         for r in seq:
             if r not in ('P', 'B', 'T'):
@@ -124,73 +127,44 @@ def simulate_table_sessions(table_name, shoes):
                     'max_dd': sim.max_dd,
                 })
                 sim.reset()
-                cur_ts = started_at
     return sessions
 
 
-def main():
-    print(f"Loading {DB_PATH}...")
-    conn = sqlite3.connect(DB_PATH)
-    cur = conn.cursor()
-    cur.execute(
-        "SELECT table_name, result_sequence, started_at FROM shoes_analytics "
-        "WHERE hand_count >= ? ORDER BY started_at",
-        (MIN_HANDS_PER_SHOE,)
-    )
-    shoes_by_table = defaultdict(list)
-    total_hands = 0
-    for tn, seq, ts in cur.fetchall():
-        shoes_by_table[tn].append((seq, ts))
-        total_hands += sum(1 for c in seq if c in ('P', 'B', 'T'))
-    conn.close()
-
-    print(f"Total {total_hands} hands across {len(shoes_by_table)} tables")
-
-    # Step 1: identify qualified tables (same as auto_update_tables.py)
-    table_stats = {}
+def build_table_stats(shoes_by_table):
+    """Simulate every table and return per-table statistics."""
+    stats = {}
     for tn, shoes in shoes_by_table.items():
-        if len(shoes) < MIN_SHOES:
-            continue
-        if tn in EXCLUDE_TABLES:
-            continue
         sessions = simulate_table_sessions(tn, shoes)
         if not sessions:
             continue
         wins = sum(1 for s in sessions if s['outcome'] == 'profit')
         losses = sum(1 for s in sessions if s['outcome'] == 'loss')
-        if wins + losses == 0:
+        total = wins + losses
+        if total == 0:
             continue
-        win_rate = wins / (wins + losses) * 100
-        max_dd = max(s['max_dd'] for s in sessions)
-        table_stats[tn] = {
+        stats[tn] = {
             'sessions': sessions,
+            'shoes': len(shoes),
             'wins': wins,
             'losses': losses,
-            'win_rate': win_rate,
-            'max_dd': max_dd,
+            'win_rate': wins / total * 100,
+            'max_dd': max(s['max_dd'] for s in sessions),
+            'total_profit': sum(s['profit'] for s in sessions),
         }
+    return stats
 
-    # Qualified: 100% win, max_dd <= threshold
-    qualified = {
-        tn: st for tn, st in table_stats.items()
-        if st['win_rate'] >= 100 and st['max_dd'] <= MAX_DD_THRESHOLD
-    }
-    print(f"Qualified tables: {len(qualified)}")
-    for tn, st in qualified.items():
-        try:
-            print(f"  {tn}: {st['wins']}W / {st['losses']}L  DD={st['max_dd']}")
-        except UnicodeEncodeError:
-            print(f"  [name] {st['wins']}W / {st['losses']}L  DD={st['max_dd']}")
 
-    # Step 2: collect ALL sessions from qualified tables, sort chronologically
+def build_ledger(table_stats, table_filter=None):
+    """Collect chronological session list for given tables."""
     all_sessions = []
-    for tn, st in qualified.items():
+    selected_stats = {}
+    for tn, st in table_stats.items():
+        if table_filter is not None and tn not in table_filter:
+            continue
         all_sessions.extend(st['sessions'])
+        selected_stats[tn] = st
     all_sessions.sort(key=lambda s: s['started_at'])
 
-    print(f"Total sessions in ledger: {len(all_sessions)}")
-
-    # Step 3: build running balance
     balance = START_CAPITAL
     rows = []
     peak = balance
@@ -219,44 +193,21 @@ def main():
             'balance': balance,
             'hands': s['hands'],
         })
+    return {
+        'rows': rows,
+        'final_balance': balance,
+        'max_dd_dollars': max_dd_dollars,
+        'wins': wins_running,
+        'losses': losses_running,
+        'selected_stats': selected_stats,
+    }
 
-    # Step 4: write HTML
-    final_balance = balance
-    total_profit = final_balance - START_CAPITAL
-    roi = total_profit / START_CAPITAL * 100
 
-    # build qualified table summary html
-    qualified_html = ""
-    for tn, st in sorted(qualified.items(), key=lambda x: -len(x[1]['sessions'])):
-        qualified_html += (
-            f"<tr><td>{tn}</td><td>{st['wins']}</td><td>{st['losses']}</td>"
-            f"<td>{st['win_rate']:.1f}%</td><td>${st['max_dd']}</td></tr>"
-        )
-
-    # build session rows
-    rows_html = ""
-    for r in rows:
-        ts = r['started_at'][:16].replace('T', ' ') if r['started_at'] else '-'
-        outcome_class = 'profit' if r['outcome'] == 'profit' else 'loss'
-        outcome_label = 'WIN' if r['outcome'] == 'profit' else 'LOSS'
-        delta_sign = '+' if r['delta'] >= 0 else ''
-        rows_html += (
-            f"<tr class='{outcome_class}'>"
-            f"<td class='turn'>{r['turn']}</td>"
-            f"<td class='ts'>{ts}</td>"
-            f"<td class='tn'>{r['table']}</td>"
-            f"<td class='oc'>{outcome_label}</td>"
-            f"<td class='dl'>{delta_sign}${r['delta']:,}</td>"
-            f"<td class='bl'>${r['balance']:,}</td>"
-            f"<td class='hd'>{r['hands']}</td>"
-            f"</tr>"
-        )
-
-    html = f"""<!DOCTYPE html>
+HTML_TEMPLATE = """<!DOCTYPE html>
 <html lang="ja">
 <head>
 <meta charset="UTF-8">
-<title>LAPLACE 通算セッション台帳 — $10,000スタート</title>
+<title>{title}</title>
 <style>
 * {{ box-sizing: border-box; }}
 body {{
@@ -270,6 +221,14 @@ body {{
 .container {{ max-width: 1200px; margin: 0 auto; }}
 h1 {{ color: #ffd700; font-size: 28px; border-bottom: 2px solid #ffd700; padding-bottom: 8px; }}
 h2 {{ color: #6dd5ed; margin-top: 32px; }}
+.banner {{
+  background: {banner_bg};
+  border-left: 5px solid {banner_border};
+  padding: 14px 18px;
+  margin: 16px 0;
+  font-size: 14px;
+  border-radius: 4px;
+}}
 .summary {{
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
@@ -315,66 +274,81 @@ td.ts {{ font-family: monospace; color: #8a96a8; font-size: 11px; }}
 td.hd {{ text-align: right; color: #8a96a8; }}
 .ledger-wrapper {{ max-height: 70vh; overflow-y: auto; border: 1px solid #2a3441; }}
 .note {{ color: #8a96a8; font-size: 13px; margin: 8px 0; }}
-.win-stat {{ color: #4ade80; }}
-.loss-stat {{ color: #f87171; }}
+.nav {{ margin: 16px 0 24px 0; }}
+.nav a {{
+  display: inline-block;
+  margin-right: 12px;
+  padding: 8px 16px;
+  background: #1a2332;
+  color: #6dd5ed;
+  text-decoration: none;
+  border-radius: 4px;
+  border: 1px solid #2a3441;
+  font-size: 13px;
+}}
+.nav a.current {{ background: #6dd5ed; color: #0f1419; font-weight: bold; }}
+.nav a:hover {{ border-color: #6dd5ed; }}
 </style>
 </head>
 <body>
 <div class="container">
-<h1>LAPLACE 通算セッション台帳</h1>
-<p class="note">
-  $10,000元本スタート → 1セッション利確$50 / 損切り-$3,000 を全{len(all_sessions)}セッションに通貫させたシミュレーション。<br>
-  対象: 推奨条件（最低{MIN_SHOES}シュー・勝率100%・最大DD ≤ ${MAX_DD_THRESHOLD}）を満たす{len(qualified)}テーブル。<br>
-  データ: analytics.sqlite3 全{total_hands:,}ハンド（{sum(len(s) for s in shoes_by_table.values())}シュー）から抽出。
-</p>
+<h1>{title}</h1>
+
+<div class="nav">
+<a href="index.html">← レポートTOP</a>
+<a href="equity_ledger_all.html"{nav_all_class}>A. 全テーブル運用</a>
+<a href="equity_ledger_top.html"{nav_top_class}>B. 推奨Top運用</a>
+</div>
+
+<div class="banner">{banner_text}</div>
 
 <div class="summary">
   <div class="card">
     <div class="label">スタート資金</div>
-    <div class="value">${START_CAPITAL:,}</div>
+    <div class="value">${start:,}</div>
   </div>
-  <div class="card win">
+  <div class="card {final_class}">
     <div class="label">最終資金</div>
-    <div class="value">${final_balance:,}</div>
+    <div class="value">${final:,}</div>
   </div>
-  <div class="card win">
-    <div class="label">通算利益</div>
-    <div class="value">+${total_profit:,}</div>
+  <div class="card {profit_class}">
+    <div class="label">通算損益</div>
+    <div class="value">{profit_sign}${total_profit:,}</div>
   </div>
-  <div class="card win">
+  <div class="card {profit_class}">
     <div class="label">ROI</div>
-    <div class="value">+{roi:.1f}%</div>
+    <div class="value">{profit_sign}{roi:.1f}%</div>
   </div>
   <div class="card">
     <div class="label">セッション数</div>
-    <div class="value">{len(all_sessions)}</div>
+    <div class="value">{n_sessions}</div>
   </div>
   <div class="card win">
     <div class="label">勝ちセッション</div>
-    <div class="value">{wins_running}</div>
+    <div class="value">{wins}</div>
   </div>
   <div class="card loss">
     <div class="label">負けセッション</div>
-    <div class="value">{losses_running}</div>
+    <div class="value">{losses}</div>
   </div>
   <div class="card">
     <div class="label">勝率</div>
-    <div class="value">{(wins_running/(wins_running+losses_running)*100 if (wins_running+losses_running) else 0):.1f}%</div>
+    <div class="value">{win_rate:.1f}%</div>
   </div>
   <div class="card loss">
     <div class="label">最大DD ($)</div>
-    <div class="value">${max_dd_dollars:,}</div>
+    <div class="value">${max_dd:,}</div>
   </div>
 </div>
 
-<h2>対象テーブル一覧</h2>
+<h2>対象テーブル一覧 ({n_tables}テーブル)</h2>
 <table>
-<thead><tr><th>テーブル名</th><th>勝ち</th><th>負け</th><th>勝率</th><th>最大DD</th></tr></thead>
-<tbody>{qualified_html}</tbody>
+<thead><tr><th>テーブル名</th><th>シュー</th><th>勝ち</th><th>負け</th><th>勝率</th><th>最大DD</th></tr></thead>
+<tbody>{table_summary_html}</tbody>
 </table>
 
 <h2>セッション台帳（時系列順）</h2>
-<p class="note">時系列順にソート。各セッションの結果と残高推移を追えます。</p>
+<p class="note">時系列順にソート。負けセッション（赤）の後に資金がどれだけ落ち込み、その後どう戻すかを確認できます。</p>
 <div class="ledger-wrapper">
 <table>
 <thead>
@@ -387,20 +361,181 @@ td.hd {{ text-align: right; color: #8a96a8; }}
 </div>
 
 <p class="note" style="margin-top:32px;">
-  生成元: <code>generate_equity_report.py</code> / 利確$50・損切り$3,000・MaruBatsuロジック適用
+  生成元: <code>generate_equity_report.py</code> / 利確${profit_per_win}・損切り$-{loss_per_loss}・MaruBatsuロジック適用
 </p>
 
 </div>
 </body>
 </html>
 """
-    out_path = os.path.join("report", "equity_ledger.html")
+
+
+def render_html(out_path, *, title, banner_text, banner_bg, banner_border,
+                ledger, total_hands_dataset, total_shoes_dataset,
+                is_all_view):
+    rows = ledger['rows']
+    final_balance = ledger['final_balance']
+    total_profit = final_balance - START_CAPITAL
+    roi = total_profit / START_CAPITAL * 100
+    wins = ledger['wins']
+    losses = ledger['losses']
+    n = wins + losses
+    win_rate = (wins / n * 100) if n else 0
+    max_dd = ledger['max_dd_dollars']
+    selected_stats = ledger['selected_stats']
+
+    final_class = 'win' if total_profit >= 0 else 'loss'
+    profit_class = final_class
+    profit_sign = '+' if total_profit >= 0 else ''
+
+    table_summary_html = ""
+    for tn, st in sorted(selected_stats.items(), key=lambda x: -x[1]['wins']):
+        wr_color = '#4ade80' if st['win_rate'] >= 95 else ('#fbbf24' if st['win_rate'] >= 80 else '#f87171')
+        table_summary_html += (
+            f"<tr><td>{tn}</td>"
+            f"<td>{st['shoes']}</td>"
+            f"<td style='color:#4ade80'>{st['wins']}</td>"
+            f"<td style='color:#f87171'>{st['losses']}</td>"
+            f"<td style='color:{wr_color};font-weight:bold'>{st['win_rate']:.1f}%</td>"
+            f"<td>${st['max_dd']}</td></tr>"
+        )
+
+    rows_html = ""
+    for r in rows:
+        ts = r['started_at'][:16].replace('T', ' ') if r['started_at'] else '-'
+        outcome_class = 'profit' if r['outcome'] == 'profit' else 'loss'
+        outcome_label = 'WIN' if r['outcome'] == 'profit' else 'LOSS'
+        delta_sign = '+' if r['delta'] >= 0 else ''
+        rows_html += (
+            f"<tr class='{outcome_class}'>"
+            f"<td class='turn'>{r['turn']}</td>"
+            f"<td class='ts'>{ts}</td>"
+            f"<td class='tn'>{r['table']}</td>"
+            f"<td class='oc'>{outcome_label}</td>"
+            f"<td class='dl'>{delta_sign}${r['delta']:,}</td>"
+            f"<td class='bl'>${r['balance']:,}</td>"
+            f"<td class='hd'>{r['hands']}</td>"
+            f"</tr>"
+        )
+
+    nav_all_class = " class='current'" if is_all_view else ""
+    nav_top_class = "" if is_all_view else " class='current'"
+
+    html = HTML_TEMPLATE.format(
+        title=title,
+        banner_text=banner_text,
+        banner_bg=banner_bg,
+        banner_border=banner_border,
+        nav_all_class=nav_all_class,
+        nav_top_class=nav_top_class,
+        start=START_CAPITAL,
+        final=final_balance,
+        final_class=final_class,
+        profit_class=profit_class,
+        profit_sign=profit_sign,
+        total_profit=abs(total_profit),
+        roi=abs(roi) if total_profit >= 0 else -abs(roi),
+        n_sessions=n,
+        wins=wins,
+        losses=losses,
+        win_rate=win_rate,
+        max_dd=max_dd,
+        n_tables=len(selected_stats),
+        table_summary_html=table_summary_html,
+        rows_html=rows_html,
+        profit_per_win=PROFIT_PER_WIN,
+        loss_per_loss=LOSS_PER_LOSS,
+    )
     os.makedirs("report", exist_ok=True)
     with open(out_path, "w", encoding="utf-8") as f:
         f.write(html)
-    print(f"\nWrote {out_path}")
-    print(f"Final balance: ${final_balance:,} (start ${START_CAPITAL:,}, ROI +{roi:.1f}%)")
-    print(f"Wins: {wins_running}  Losses: {losses_running}  Max DD: ${max_dd_dollars:,}")
+    print(f"Wrote {out_path}")
+    print(f"  Final ${final_balance:,} (P&L {profit_sign}${total_profit:+,}, {wins}W/{losses}L, MaxDD ${max_dd:,})")
+
+
+def main():
+    print(f"Loading {DB_PATH}...")
+    conn = sqlite3.connect(DB_PATH)
+    cur = conn.cursor()
+    cur.execute(
+        "SELECT table_name, result_sequence, started_at FROM shoes_analytics "
+        "WHERE hand_count >= ? ORDER BY started_at",
+        (MIN_HANDS_PER_SHOE,)
+    )
+    shoes_by_table = defaultdict(list)
+    total_hands = 0
+    for tn, seq, ts in cur.fetchall():
+        shoes_by_table[tn].append((seq, ts))
+        total_hands += sum(1 for c in seq if c in ('P', 'B', 'T'))
+    conn.close()
+
+    total_shoes = sum(len(v) for v in shoes_by_table.values())
+    print(f"Total {total_hands:,} hands across {len(shoes_by_table)} tables ({total_shoes} shoes)\n")
+
+    # 全テーブルの統計を構築
+    table_stats = build_table_stats(shoes_by_table)
+
+    # === A: 全テーブル ledger ===
+    ledger_all = build_ledger(table_stats, table_filter=None)
+
+    # === B: Top推奨だけ ledger ===
+    available_top = [t for t in TOP_RECOMMENDED if t in table_stats]
+    print(f"Top推奨で利用可能: {available_top}\n")
+    ledger_top = build_ledger(table_stats, table_filter=set(available_top))
+
+    # 共通のフッタ情報
+    dataset_note = (
+        f"データソース: analytics.sqlite3 全{total_hands:,}ハンド・{total_shoes}シュー "
+        f"（最低{MIN_HANDS_PER_SHOE}ハンド/シュー）"
+    )
+
+    # === ファイルA: 全テーブル ===
+    render_html(
+        os.path.join("report", "equity_ledger_all.html"),
+        title="A. 全テーブル運用 — $10,000スタート",
+        banner_text=(
+            "<strong>⚠️ 推奨フィルタなし。</strong>"
+            f"全{len(table_stats)}テーブルをランダムに運用した場合のシミュレーション。"
+            "勝てないテーブルや危険なテーブルも含むため、損失セッションが頻発します。"
+            "<br>これが何の選別もせず BET した時の本当の姿です。<br>"
+            f"{dataset_note}"
+        ),
+        banner_bg="#3a1a1a",
+        banner_border="#f87171",
+        ledger=ledger_all,
+        total_hands_dataset=total_hands,
+        total_shoes_dataset=total_shoes,
+        is_all_view=True,
+    )
+
+    # === ファイルB: 推奨Topのみ ===
+    render_html(
+        os.path.join("report", "equity_ledger_top.html"),
+        title="B. 推奨Top運用 — $10,000スタート",
+        banner_text=(
+            "<strong>✅ 推奨Top実運用シナリオ。</strong>"
+            f"Sync mode が実際にプレイする推奨テーブル（{', '.join(available_top)}）"
+            f"のみで運用した場合のシミュレーション。"
+            "<br>テーブルを選別することで損失リスクが大幅に下がる様子を確認できます。<br>"
+            f"{dataset_note}"
+        ),
+        banner_bg="#1a3a1a",
+        banner_border="#4ade80",
+        ledger=ledger_top,
+        total_hands_dataset=total_hands,
+        total_shoes_dataset=total_shoes,
+        is_all_view=False,
+    )
+
+    # === 互換用: 旧 equity_ledger.html を Top に向けたシンボリックHTML ===
+    redirect_html = """<!DOCTYPE html>
+<html><head><meta charset="UTF-8">
+<meta http-equiv="refresh" content="0; url=equity_ledger_top.html">
+</head><body>Redirecting to <a href="equity_ledger_top.html">Top運用版</a>...</body></html>
+"""
+    with open(os.path.join("report", "equity_ledger.html"), "w", encoding="utf-8") as f:
+        f.write(redirect_html)
+    print("\nWrote report/equity_ledger.html (redirect → top)")
 
 
 if __name__ == "__main__":

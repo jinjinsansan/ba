@@ -1,0 +1,164 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<title>B. 推奨Top運用 — $10,000スタート</title>
+<style>
+* { box-sizing: border-box; }
+body {
+  font-family: -apple-system, "Segoe UI", "Hiragino Sans", "Yu Gothic UI", sans-serif;
+  background: #0f1419;
+  color: #e0e6ed;
+  margin: 0;
+  padding: 24px;
+  line-height: 1.6;
+}
+.container { max-width: 1200px; margin: 0 auto; }
+h1 { color: #ffd700; font-size: 28px; border-bottom: 2px solid #ffd700; padding-bottom: 8px; }
+h2 { color: #6dd5ed; margin-top: 32px; }
+.banner {
+  background: #1a3a1a;
+  border-left: 5px solid #4ade80;
+  padding: 14px 18px;
+  margin: 16px 0;
+  font-size: 14px;
+  border-radius: 4px;
+}
+.summary {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 16px;
+  margin: 24px 0;
+}
+.card {
+  background: #1a2332;
+  border-left: 4px solid #6dd5ed;
+  padding: 16px;
+  border-radius: 4px;
+}
+.card .label { font-size: 12px; color: #8a96a8; text-transform: uppercase; }
+.card .value { font-size: 24px; font-weight: bold; color: #ffd700; }
+.card.win { border-left-color: #4ade80; }
+.card.win .value { color: #4ade80; }
+.card.loss { border-left-color: #f87171; }
+.card.loss .value { color: #f87171; }
+table {
+  width: 100%;
+  border-collapse: collapse;
+  background: #1a2332;
+  margin: 16px 0;
+  font-size: 13px;
+}
+th {
+  background: #0f1419;
+  color: #ffd700;
+  padding: 10px 8px;
+  text-align: left;
+  border-bottom: 2px solid #ffd700;
+  position: sticky;
+  top: 0;
+}
+td { padding: 6px 8px; border-bottom: 1px solid #2a3441; }
+tr.profit td.oc { color: #4ade80; font-weight: bold; }
+tr.loss td.oc { color: #f87171; font-weight: bold; }
+tr.loss td.dl { color: #f87171; }
+tr.profit td.dl { color: #4ade80; }
+td.bl { font-weight: bold; color: #ffd700; }
+td.turn { text-align: right; color: #8a96a8; }
+td.ts { font-family: monospace; color: #8a96a8; font-size: 11px; }
+td.hd { text-align: right; color: #8a96a8; }
+.ledger-wrapper { max-height: 70vh; overflow-y: auto; border: 1px solid #2a3441; }
+.note { color: #8a96a8; font-size: 13px; margin: 8px 0; }
+.nav { margin: 16px 0 24px 0; }
+.nav a {
+  display: inline-block;
+  margin-right: 12px;
+  padding: 8px 16px;
+  background: #1a2332;
+  color: #6dd5ed;
+  text-decoration: none;
+  border-radius: 4px;
+  border: 1px solid #2a3441;
+  font-size: 13px;
+}
+.nav a.current { background: #6dd5ed; color: #0f1419; font-weight: bold; }
+.nav a:hover { border-color: #6dd5ed; }
+</style>
+</head>
+<body>
+<div class="container">
+<h1>B. 推奨Top運用 — $10,000スタート</h1>
+
+<div class="nav">
+<a href="index.html">← レポートTOP</a>
+<a href="equity_ledger_all.html">A. 全テーブル運用</a>
+<a href="equity_ledger_top.html" class='current'>B. 推奨Top運用</a>
+</div>
+
+<div class="banner"><strong>✅ 推奨Top実運用シナリオ。</strong>Sync mode が実際にプレイする推奨テーブル（Japanese Speed Baccarat A, Korean Speed Baccarat B, Korean Speed Baccarat A, Korean Speed Baccarat E）のみで運用した場合のシミュレーション。<br>テーブルを選別することで損失リスクが大幅に下がる様子を確認できます。<br>データソース: analytics.sqlite3 全39,666ハンド・592シュー （最低50ハンド/シュー）</div>
+
+<div class="summary">
+  <div class="card">
+    <div class="label">スタート資金</div>
+    <div class="value">$10,000</div>
+  </div>
+  <div class="card win">
+    <div class="label">最終資金</div>
+    <div class="value">$10,350</div>
+  </div>
+  <div class="card win">
+    <div class="label">通算損益</div>
+    <div class="value">+$350</div>
+  </div>
+  <div class="card win">
+    <div class="label">ROI</div>
+    <div class="value">+3.5%</div>
+  </div>
+  <div class="card">
+    <div class="label">セッション数</div>
+    <div class="value">7</div>
+  </div>
+  <div class="card win">
+    <div class="label">勝ちセッション</div>
+    <div class="value">7</div>
+  </div>
+  <div class="card loss">
+    <div class="label">負けセッション</div>
+    <div class="value">0</div>
+  </div>
+  <div class="card">
+    <div class="label">勝率</div>
+    <div class="value">100.0%</div>
+  </div>
+  <div class="card loss">
+    <div class="label">最大DD ($)</div>
+    <div class="value">$0</div>
+  </div>
+</div>
+
+<h2>対象テーブル一覧 (4テーブル)</h2>
+<table>
+<thead><tr><th>テーブル名</th><th>シュー</th><th>勝ち</th><th>負け</th><th>勝率</th><th>最大DD</th></tr></thead>
+<tbody><tr><td>Japanese Speed Baccarat A</td><td>9</td><td style='color:#4ade80'>2</td><td style='color:#f87171'>0</td><td style='color:#4ade80;font-weight:bold'>100.0%</td><td>$147</td></tr><tr><td>Korean Speed Baccarat A</td><td>10</td><td style='color:#4ade80'>2</td><td style='color:#f87171'>0</td><td style='color:#4ade80;font-weight:bold'>100.0%</td><td>$83</td></tr><tr><td>Korean Speed Baccarat E</td><td>8</td><td style='color:#4ade80'>2</td><td style='color:#f87171'>0</td><td style='color:#4ade80;font-weight:bold'>100.0%</td><td>$37</td></tr><tr><td>Korean Speed Baccarat B</td><td>9</td><td style='color:#4ade80'>1</td><td style='color:#f87171'>0</td><td style='color:#4ade80;font-weight:bold'>100.0%</td><td>$285</td></tr></tbody>
+</table>
+
+<h2>セッション台帳（時系列順）</h2>
+<p class="note">時系列順にソート。負けセッション（赤）の後に資金がどれだけ落ち込み、その後どう戻すかを確認できます。</p>
+<div class="ledger-wrapper">
+<table>
+<thead>
+<tr>
+  <th>#</th><th>日時</th><th>テーブル</th><th>結果</th><th>増減</th><th>残高</th><th>消費ハンド</th>
+</tr>
+</thead>
+<tbody><tr class='profit'><td class='turn'>1</td><td class='ts'>2026-04-05 16:32</td><td class='tn'>Japanese Speed Baccarat A</td><td class='oc'>WIN</td><td class='dl'>+$50</td><td class='bl'>$10,050</td><td class='hd'>112</td></tr><tr class='profit'><td class='turn'>2</td><td class='ts'>2026-04-05 16:35</td><td class='tn'>Korean Speed Baccarat A</td><td class='oc'>WIN</td><td class='dl'>+$50</td><td class='bl'>$10,100</td><td class='hd'>147</td></tr><tr class='profit'><td class='turn'>3</td><td class='ts'>2026-04-05 16:42</td><td class='tn'>Korean Speed Baccarat E</td><td class='oc'>WIN</td><td class='dl'>+$50</td><td class='bl'>$10,150</td><td class='hd'>182</td></tr><tr class='profit'><td class='turn'>4</td><td class='ts'>2026-04-05 18:15</td><td class='tn'>Korean Speed Baccarat A</td><td class='oc'>WIN</td><td class='dl'>+$50</td><td class='bl'>$10,200</td><td class='hd'>154</td></tr><tr class='profit'><td class='turn'>5</td><td class='ts'>2026-04-05 18:34</td><td class='tn'>Korean Speed Baccarat B</td><td class='oc'>WIN</td><td class='dl'>+$50</td><td class='bl'>$10,250</td><td class='hd'>315</td></tr><tr class='profit'><td class='turn'>6</td><td class='ts'>2026-04-05 18:51</td><td class='tn'>Japanese Speed Baccarat A</td><td class='oc'>WIN</td><td class='dl'>+$50</td><td class='bl'>$10,300</td><td class='hd'>224</td></tr><tr class='profit'><td class='turn'>7</td><td class='ts'>2026-04-05 19:01</td><td class='tn'>Korean Speed Baccarat E</td><td class='oc'>WIN</td><td class='dl'>+$50</td><td class='bl'>$10,350</td><td class='hd'>196</td></tr></tbody>
+</table>
+</div>
+
+<p class="note" style="margin-top:32px;">
+  生成元: <code>generate_equity_report.py</code> / 利確$50・損切り$-3000・MaruBatsuロジック適用
+</p>
+
+</div>
+</body>
+</html>

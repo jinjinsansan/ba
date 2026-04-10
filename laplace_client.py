@@ -472,8 +472,10 @@ class RemoteLaplaceSession:
                 bet_amount = actual_total
             else:
                 # BET完全失敗 — 観戦モードでターンを記録してシーケンス維持
+                # 90秒待機していた結果、次のBET phaseを2回取りこぼすことがあったため
+                # 35秒に短縮（1ハンドの実時間≒30秒なので余裕を見て35秒）
                 logger.warning("BET完全失敗 — 観戦モードで結果を記録してシーケンス維持")
-                result_info = self.executor.wait_for_result(timeout=90, bet_amount=0)
+                result_info = self.executor.wait_for_result(timeout=35, bet_amount=0)
                 if result_info and result_info.get("result") not in (None, "unknown"):
                     obs_result = result_info["result"]
                     try:
