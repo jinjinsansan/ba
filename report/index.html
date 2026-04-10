@@ -1,0 +1,126 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<title>LAPLACE レポート 2026-04-10</title>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500;700;900&display=swap');
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body {
+  font-family: 'Noto Sans JP', sans-serif;
+  background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
+  color: white;
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 40px 20px;
+}
+.container { max-width: 900px; width: 100%; }
+.header { text-align: center; margin-bottom: 50px; }
+.header h1 {
+  font-size: 56px;
+  font-weight: 900;
+  background: linear-gradient(135deg, #00c8ff 0%, #6bcf8f 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  margin-bottom: 15px;
+  letter-spacing: -2px;
+}
+.header p { font-size: 18px; color: #a0a0c0; }
+.cards { display: grid; grid-template-columns: repeat(3, 1fr); gap: 25px; }
+.card {
+  background: rgba(255,255,255,0.05);
+  backdrop-filter: blur(10px);
+  border: 1px solid rgba(255,255,255,0.1);
+  border-radius: 16px;
+  padding: 35px 25px;
+  text-align: center;
+  transition: all 0.3s;
+  text-decoration: none;
+  color: inherit;
+  display: block;
+}
+.card:hover {
+  transform: translateY(-5px);
+  background: rgba(255,255,255,0.1);
+  border-color: #00c8ff;
+  box-shadow: 0 10px 40px rgba(0,200,255,0.2);
+}
+.card .icon { font-size: 64px; margin-bottom: 20px; display: block; }
+.card h2 { font-size: 22px; color: #00c8ff; margin-bottom: 12px; }
+.card p { font-size: 14px; color: #a0a0c0; line-height: 1.6; }
+.card .pages {
+  display: inline-block;
+  margin-top: 15px;
+  padding: 6px 15px;
+  background: rgba(0,200,255,0.1);
+  border: 1px solid #00c8ff;
+  border-radius: 20px;
+  font-size: 12px;
+  color: #00c8ff;
+  letter-spacing: 1px;
+}
+.note {
+  margin-top: 50px;
+  text-align: center;
+  padding: 25px;
+  background: rgba(255,255,255,0.05);
+  border-radius: 12px;
+  color: #a0a0c0;
+  font-size: 14px;
+  line-height: 1.8;
+}
+.note strong { color: #6bcf8f; }
+@media (max-width: 700px) { .cards { grid-template-columns: 1fr; } }
+</style>
+</head>
+<body>
+<div class="container">
+
+<div class="header">
+<h1>🎯 LAPLACE Report</h1>
+<p>Evolution バカラ完全解析 | 2026年4月10日</p>
+</div>
+
+<div class="cards">
+
+<a href="laplace_executive.html" class="card">
+<span class="icon">⚡</span>
+<h2>Executive Summary</h2>
+<p>1枚で理解する要約。<br>3つの決定的発見と推奨戦略。</p>
+<span class="pages">1ページ</span>
+</a>
+
+<a href="laplace_report.html" class="card">
+<span class="icon">📊</span>
+<h2>詳細レポート</h2>
+<p>全ストーリーと統計データ。<br>12,350シューの検証結果。</p>
+<span class="pages">10ページ</span>
+</a>
+
+<a href="laplace_manual.html" class="card">
+<span class="icon">📘</span>
+<h2>運用マニュアル</h2>
+<p>Sync Mode の使い方。<br>起動手順とトラブル対応。</p>
+<span class="pages">3ページ</span>
+</a>
+
+<a href="equity_ledger.html" class="card">
+<span class="icon">💰</span>
+<h2>通算セッション台帳</h2>
+<p>$10,000 元本スタートで全セッションを通貫した残高推移シミュレーション。</p>
+<span class="pages">時系列</span>
+</a>
+
+</div>
+
+<div class="note">
+<strong>📄 PDF化方法:</strong> 各ページを開いて <code>Ctrl+P</code> → 「PDFに保存」を選択<br>
+<strong>印刷推奨設定:</strong> A4 / 余白: デフォルト / 背景グラフィックを有効
+</div>
+
+</div>
+</body>
+</html>

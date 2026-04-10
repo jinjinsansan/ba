@@ -647,13 +647,26 @@ def _run_bet_session_inner(config: dict, stop_event: threading.Event, skip_event
             return None
 
         # 3. ログイン状態を確認、必要なら再ログイン
+        # SPAのハイドレーション完了を待つため最大25秒ポーリング
+        # （5秒だけだとReactが描画前で誤検知し、不要な再ログインに入る）
         try:
-            if not scraper._is_logged_in():
+            logged_in = False
+            for _wait_attempt in range(25):
+                if stop_event.is_set():
+                    return None
+                if scraper._is_logged_in():
+                    logged_in = True
+                    break
+                time.sleep(1)
+
+            if not logged_in:
                 send_log("[recovery] Not logged in — attempting re-login...")
                 send_action("Re-logging in to Stake...")
                 scraper._login_from_lobby()
                 time.sleep(3)
                 send_log("[recovery] Re-login completed")
+            else:
+                send_log("[recovery] Login state confirmed")
         except Exception as e:
             send_log(f"[recovery] Re-login failed: {e}")
             # それでもWS接続を試みる
