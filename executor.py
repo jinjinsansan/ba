@@ -56,9 +56,20 @@ class BetExecutor:
         return frames[0] if frames else None
 
     def _get_evo_locator(self):
+        # 1) 実 Frame オブジェクト経由（最も信頼性が高い - iframe 再構築の影響を受けにくい）
+        try:
+            inner_frame = self._get_evo_inner()
+            if inner_frame is not None:
+                return inner_frame
+        except Exception:
+            pass
+        # 2) フォールバック: より具体的な src パターンで frame_locator
         outer = self.page.frame_locator('iframe[src*="evo-games.com"]').first
-        inner = outer.frame_locator('iframe').first
-        return inner
+        try:
+            inner = outer.frame_locator('iframe[src*="frontend"]').first
+            return inner
+        except Exception:
+            return outer.frame_locator('iframe').first
 
     # ─── テーブル入場 ───
 

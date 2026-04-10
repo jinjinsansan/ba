@@ -191,10 +191,17 @@ class GameWSMonitor:
         return self.status == target
 
     def wait_for_betting_phase(self, timeout: float = 120, dom_checker=None, skip_round: bool = True, error_checker=None) -> bool:
-        """BETフェーズを待機 (DOMベース)。
+        """BETフェーズを待機 (DOM + WS デュアルチェック)。
 
         skip_round=True: 1ラウンド見送り後に次のBETフェーズを待つ (テーブル入場直後)
         skip_round=False: 次のBETフェーズだけ待つ (1-2-3打法の連続BET時)
+
+        【WSフォールバック】
+        ネットワーク遅延で Evolution が低画質モードに切り替わると、
+        inner iframe が一時的に detach/再構築され、DOM ベースの timerCircleContainer
+        検出が機能不全になることがある（クラウドPC等で頻発）。
+        WS (CLIENT_BET_ACCEPTED status=Betting) は network レイヤで受信するため
+        iframe DOM とは独立に動作し、影響を受けない。これをフォールバックに使う。
 
         シャッフル/ディーラー交代で長時間待つこともあるため、
         タイムアウトは十分長くとる。
@@ -207,10 +214,18 @@ class GameWSMonitor:
 
         if skip_round:
             logger.info("1ラウンド見送り中...")
-            # Step 1: タイマーが消えるのを待つ (=BETフェーズ終了)
+            # Step 1: BETフェーズが終わるのを待つ
+            #  - DOM: タイマー消失
+            #  - WS: status が Betting 以外（Settled/Idle/Dealing 等）
+            # どちらかが満たされたら次へ進む
             while time.time() < deadline:
-                if not dom_checker():
-                    logger.info("ディーリング中 (タイマー消失)")
+                try:
+                    dom_active = dom_checker()
+                except Exception:
+                    dom_active = False
+                ws_status = self.status
+                if (not dom_active) or (ws_status and ws_status != "Betting"):
+                    logger.info(f"ディーリング中 (dom_active={dom_active}, ws={ws_status})")
                     break
                 if error_checker and not error_checker():
                     logger.warning("BET待機中にエラーダイアログ検出")
@@ -220,12 +235,23 @@ class GameWSMonitor:
                 logger.warning("タイマー消失待ちタイムアウト")
                 return False
 
-        # 次のBETフェーズ開始を待つ
+        # 次のBETフェーズ開始を待つ (DOM + WS どちらかで検出)
         logger.info("BETフェーズを待機中...")
+        _dom_error_logged = False
         while time.time() < deadline:
-            if dom_checker():
-                logger.info("BETフェーズ開始")
+            # WS フォールバック: status=Betting を即検出
+            if self.status == "Betting":
+                logger.info("BETフェーズ開始 (WS検出)")
                 return True
+            # DOM チェック (失敗してもWSがあるので例外は握り潰す)
+            try:
+                if dom_checker():
+                    logger.info("BETフェーズ開始 (DOM検出)")
+                    return True
+            except Exception as _e:
+                if not _dom_error_logged:
+                    logger.warning(f"DOM checker例外（WSフォールバック使用中）: {_e}")
+                    _dom_error_logged = True
             if error_checker and not error_checker():
                 logger.warning("BETフェーズ待機中にエラーダイアログ検出")
                 return False
