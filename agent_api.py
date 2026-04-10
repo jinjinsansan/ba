@@ -716,6 +716,41 @@ def _run_bet_session_inner(config: dict, stop_event: threading.Event, skip_event
         send_log("[recovery] Full recovery failed — no table available")
         return None
 
+    def observe_one_hand_no_bet() -> str | None:
+        """sync_pause モード: BET せず1ハンド観戦して bead road から結果を読む。
+        Returns: 'P' | 'B' | None (失敗/STOP)
+        Tieは無視（カウントしない、次の非Tie結果まで待つ）
+        """
+        try:
+            pre_bead = executor.read_bead_road() or ""
+        except Exception:
+            pre_bead = ""
+        pre_len = len(pre_bead)
+
+        # 1ハンド見送り (skip_round=True で現在のBET phaseをスキップ)
+        if not executor.wait_for_betting_phase(timeout=120, skip_round=True):
+            return None
+
+        # bead road を最大15秒ポーリング
+        deadline = time.time() + 15
+        while time.time() < deadline:
+            if stop_event.is_set():
+                return None
+            try:
+                new_bead = executor.read_bead_road() or ""
+            except Exception:
+                new_bead = ""
+            if len(new_bead) > pre_len:
+                new_chars = new_bead[pre_len:]
+                # 新しい非タイ結果を返す
+                for ch in new_chars:
+                    if ch in ('P', 'B'):
+                        return ch
+                # タイのみだったら更に待つ
+                pre_len = len(new_bead)
+            time.sleep(0.3)
+        return None
+
     # Startup broadcast (admin + user + public if verification)
     try:
         composite.on_startup(user_label, {
@@ -873,8 +908,8 @@ def _run_bet_session_inner(config: dict, stop_event: threading.Event, skip_event
             scraper.stop()
             return
 
-    # === Syncモード: 推奨テーブルから規則性が高いものを選定 ===
-    if _effective_mode_box[0] == "sync":
+    # === Syncモード(+sync_pause): 推奨テーブルから規則性が高いものを選定 ===
+    if _effective_mode_box[0] in ("sync", "sync_pause"):
         res_sync = find_sync_table()
         if not res_sync:
             send_log("Stopped during sync table selection")
@@ -955,9 +990,13 @@ def _run_bet_session_inner(config: dict, stop_event: threading.Event, skip_event
     _last_session_check = time.time()
     _deferred_exit_reason = None   # BETウィンドウ保護: exit checkは前ラウンドで実行済み
     _awaiting_2nd_drop = (_effective_mode_box[0] == "1drop")  # 1-dropモード時のみ2落ち確認
-    _awaiting_sync_confirm = (_effective_mode_box[0] == "sync")  # syncモード: 入場直後の再確認
+    _awaiting_sync_confirm = (_effective_mode_box[0] in ("sync", "sync_pause"))  # syncモード: 入場直後の再確認
     _bet_fail_count = 0            # BET完全失敗カウンタ（3連続で退室）
     _sync_monitor_counter = 0      # Syncモード: 動的規則性監視カウンタ
+    # ── sync_pause モード用: BB で観戦、Pで再開 ──
+    _consec_banker = 0             # 連続Banker回数
+    _paused_for_dragon = False     # ドラゴン中の観戦フラグ
+    PAUSE_THRESHOLD = 2            # N連続Bで観戦モード突入
 
     while not stop_event.is_set() and round_count < MAX_ROUNDS:
         # ── フリーズ検出ウォッチドッグ ──
@@ -1214,6 +1253,24 @@ def _run_bet_session_inner(config: dict, stop_event: threading.Event, skip_event
                 send_log(f"[Sync-Entry] ⚠️ エラー: {e}")
                 _awaiting_sync_confirm = False
 
+        # ── sync_pause: ドラゴン中は BET せず観戦 ──
+        if _effective_mode_box[0] == "sync_pause" and _paused_for_dragon:
+            send_action(f"🐉 Dragon pause ({_consec_banker} Bs) — observing for Player...")
+            obs = observe_one_hand_no_bet()
+            if obs == 'P':
+                _paused_for_dragon = False
+                _consec_banker = 0
+                send_log(f"[sync_pause] ✅ Player出現 → BET再開 (MaruBatsu状態保持)")
+                send_action("✅ Dragon ended — resuming BET")
+            elif obs == 'B':
+                _consec_banker += 1
+                send_log(f"[sync_pause] 🐉 Banker継続 ({_consec_banker}連) → 観戦継続")
+            else:
+                send_log(f"[sync_pause] 観戦失敗 (obs={obs}) → 1秒待機")
+                if stop_event.wait(1):
+                    break
+            continue
+
         # BET phase — amount comes from session (remote: from VPS state; local: from tracker)
         bet_amount = session.get_bet_amount()
         total_hands = session.total_wins + session.total_losses + session.total_ties + 1
@@ -1363,6 +1420,20 @@ def _run_bet_session_inner(config: dict, stop_event: threading.Event, skip_event
 
             send_result(res, won, ba, bal, len(turns), turns_disp, cp, cm, round_profit)
 
+            # ── sync_pause: 連B 検出と観戦突入判定 ──
+            if _effective_mode_box[0] == "sync_pause":
+                if res == "banker":
+                    _consec_banker += 1
+                    if _consec_banker >= PAUSE_THRESHOLD and not _paused_for_dragon:
+                        _paused_for_dragon = True
+                        send_action(f"🐉 Dragon pause ({_consec_banker} Bs) — pausing BET")
+                        send_log(f"[sync_pause] {_consec_banker}連B検出 → 観戦モード突入 (MaruBatsu状態保持)")
+                elif res == "player":
+                    if _consec_banker > 0:
+                        send_log(f"[sync_pause] Player出現 → 連B カウンタリセット")
+                    _consec_banker = 0
+                # tie の場合: 連Bカウントは維持
+
         # Set complete
         if result.get("completed_set"):
             s = result["completed_set"]
@@ -1421,10 +1492,10 @@ def _run_bet_session_inner(config: dict, stop_event: threading.Event, skip_event
         bal = executor.get_balance() if not dry_run else 0
         send_status(session, bal)
 
-        # ── Syncモード: 動的規則性監視（毎ハンドチェック）──
+        # ── Syncモード(+sync_pause): 動的規則性監視（毎ハンドチェック）──
         # シュー切替は一瞬で起きるため即検出が必要
         # 規則性崩壊・ハンド数不足いずれも即退避
-        if _effective_mode_box[0] == "sync" and target_tid:
+        if _effective_mode_box[0] in ("sync", "sync_pause") and target_tid:
             monitor = check_sync_regularity(target_tid)
             if monitor['should_exit']:
                 send_action(f"⚠️ Sync: 規則性崩壊/シュー切替 (reg={monitor['regularity']:.0f} hands={monitor['hands']}) — 退避")
@@ -1631,7 +1702,7 @@ def main():
 
                 elif msg_type == "change_mode":
                     new_mode = msg.get("mode", "1drop")
-                    if new_mode in ("normal", "1drop", "mix", "sync"):
+                    if new_mode in ("normal", "1drop", "mix", "sync", "sync_pause"):
                         _bet_mode_box[0] = new_mode
                         _effective_mode_box[0] = "normal" if new_mode == "mix" else new_mode
                         send_log(f"BET mode changed to: {new_mode} (effective: {_effective_mode_box[0]})")
