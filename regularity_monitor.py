@@ -146,14 +146,20 @@ def evaluate_table(results) -> dict:
         'can_enter': bool,
         'should_exit': bool,
     }
+
+    should_exit の条件:
+      1. ハンド数 < MIN_HANDS_FOR_ENTRY → シュー切替直後、即退避
+      2. 規則性 < EXIT_THRESHOLD → 規則性崩壊、即退避
     """
     hands = count_non_tie(results)
     reg = compute_regularity(results) if hands >= 5 else 0.0
+    # シュー切替後（ハンド少ない）または規則性崩壊で退避
+    should_exit = (hands < MIN_HANDS_FOR_ENTRY) or (reg < EXIT_THRESHOLD)
     return {
         'regularity': reg,
         'hands': hands,
         'can_enter': hands >= MIN_HANDS_FOR_ENTRY and reg >= ENTRY_THRESHOLD,
-        'should_exit': hands >= MIN_HANDS_FOR_ENTRY and reg < EXIT_THRESHOLD,
+        'should_exit': should_exit,
     }
 
 

@@ -1366,51 +1366,48 @@ def _run_bet_session_inner(config: dict, stop_event: threading.Event, skip_event
         bal = executor.get_balance() if not dry_run else 0
         send_status(session, bal)
 
-        # ── Syncモード: 動的規則性監視（5ハンドごと）──
-        # 規則性が崩壊したら退避して次の推奨テーブルへ
+        # ── Syncモード: 動的規則性監視（毎ハンドチェック）──
+        # シュー切替は一瞬で起きるため即検出が必要
+        # 規則性崩壊・ハンド数不足いずれも即退避
         if _effective_mode_box[0] == "sync" and target_tid:
-            _sync_monitor_counter += 1
-            if _sync_monitor_counter >= 5:
-                _sync_monitor_counter = 0
-                monitor = check_sync_regularity(target_tid)
-                if monitor['should_exit']:
-                    send_action(f"⚠️ Sync: 規則性崩壊 (reg={monitor['regularity']:.0f}) — 退避します")
-                    send_log(f"[Sync-Monitor] ❌ 規則性={monitor['regularity']:.0f} ハンド={monitor['hands']} → 退避判定")
-                    executor.exit_table()
-                    import random as _rand_sync
-                    _wait = _rand_sync.uniform(5, 15)
-                    send_log(f"[Sync] 🚶 ロビーで{_wait:.0f}秒待機...")
-                    if stop_event.wait(_wait):
+            monitor = check_sync_regularity(target_tid)
+            if monitor['should_exit']:
+                send_action(f"⚠️ Sync: 規則性崩壊/シュー切替 (reg={monitor['regularity']:.0f} hands={monitor['hands']}) — 退避")
+                send_log(f"[Sync-Monitor] ❌ 規則性={monitor['regularity']:.0f} ハンド={monitor['hands']} → 退避判定")
+                executor.exit_table()
+                import random as _rand_sync
+                _wait = _rand_sync.uniform(5, 15)
+                send_log(f"[Sync] 🚶 ロビーで{_wait:.0f}秒待機...")
+                if stop_event.wait(_wait):
+                    break
+                if not scraper.get_all_table_configs():
+                    try:
+                        scraper.setup_ws_intercept()
+                    except Exception:
+                        pass
+                send_action("🔍 次の推奨テーブルを探しています...")
+                res_sync = find_sync_table()
+                if not res_sync:
+                    break
+                target_tid, target_name = res_sync
+                with scraper._lock:
+                    scraper._target_table_ids.add(target_tid)
+                    scraper._target_table_names[target_tid] = target_name
+                    scraper._new_shoe_signals[target_tid] = False
+                    scraper._shoe_epochs[target_tid] = int(time.time())
+                send_action(f"🚪 {target_name} に入場中...")
+                if not executor.enter_table(target_tid, target_name):
+                    send_log("[Sync] ⚠️ 入場失敗 → フルリカバリ")
+                    fr = full_recovery()
+                    if not fr:
                         break
-                    if not scraper.get_all_table_configs():
-                        try:
-                            scraper.setup_ws_intercept()
-                        except Exception:
-                            pass
-                    send_action("🔍 次の推奨テーブルを探しています...")
-                    res_sync = find_sync_table()
-                    if not res_sync:
-                        break
-                    target_tid, target_name = res_sync
-                    with scraper._lock:
-                        scraper._target_table_ids.add(target_tid)
-                        scraper._target_table_names[target_tid] = target_name
-                        scraper._new_shoe_signals[target_tid] = False
-                        scraper._shoe_epochs[target_tid] = int(time.time())
-                    send_action(f"🚪 {target_name} に入場中...")
+                    target_tid, target_name = fr
                     if not executor.enter_table(target_tid, target_name):
-                        send_log("[Sync] ⚠️ 入場失敗 → フルリカバリ")
-                        fr = full_recovery()
-                        if not fr:
-                            break
-                        target_tid, target_name = fr
-                        if not executor.enter_table(target_tid, target_name):
-                            break
-                    _awaiting_sync_confirm = True  # 新テーブルで再確認
-                    continue
-                else:
-                    send_action(f"✅ Sync: 継続中 (reg={monitor['regularity']:.0f})")
-                    send_log(f"[Sync-Monitor] ✅ 規則性={monitor['regularity']:.0f} ハンド={monitor['hands']} → 継続")
+                        break
+                _awaiting_sync_confirm = True  # 新テーブルで再確認
+                continue
+            else:
+                send_log(f"[Sync-Monitor] ✅ 規則性={monitor['regularity']:.0f} ハンド={monitor['hands']} → 継続")
 
         # ── 1落ちロジック: Player負け（Banker勝ち）→ テーブル退出 → ロビー観察 ──
         # normalモードではBanker負けでも退室せず、そのままテーブルに留まる
