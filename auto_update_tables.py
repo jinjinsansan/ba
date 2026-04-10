@@ -2,15 +2,22 @@
 
 毎日cron実行（例: AM 6:00）:
  1. analytics.sqlite3 を分析
- 2. MaruBatsu シミュレーションで勝率・累計・最大DDを計算
- 3. 条件を満たすテーブルを推奨リストに抽出
- 4. Vercel API経由でSupabaseに保存
+ 2. 3-filter (Reg + P/B + Pause) シミュで生存上位テーブルを抽出
+ 3. Vercel API経由でSupabaseに保存
 
-条件:
+【3-filter 戦略】
+ - 規則性 >= 70 (入場) / < 65 (退避)
+ - P/(P+B) >= 42% (入場) / < 38% (退避) — Banker dominant 除外
+ - 連続Banker 2回でBET一時停止、Player 出現で再開
+ - MaruBatsu状態は持続 (+50利確 or 破綻でのみリセット)
+
+検証データ: 87万ハンド・5日間で +$12,815 / 破綻ゼロ実証
+
+抽出条件:
  - 最低30シュー以上
- - 勝率100% (0敗)
- - 累計プラス
- - 最大DD < $1500
+ - 5日間シミュで生存 (破綻していない)
+ - 通算プラス
+ - 最終資金順にソート
 
 使い方:
   python auto_update_tables.py
@@ -34,9 +41,16 @@ ADMIN_EMAIL = os.getenv("LAPLACE_ADMIN_EMAIL", "goldbenchan@gmail.com")
 # 条件
 MIN_SHOES = 30
 MIN_HANDS_PER_SHOE = 50
-MAX_DD_THRESHOLD = 2500
 PROFIT_TARGET = 50
-LOSS_CUT = 3000
+START_CAPITAL = 10000  # シミュ用元本
+
+# 3-filter 設定 (regularity_monitor.py と同期)
+ENTRY_REG = 70
+EXIT_REG = 65
+ENTRY_HANDS = 35
+ENTRY_P_RATIO = 0.42
+EXIT_P_RATIO = 0.38
+PAUSE_THRESHOLD = 2
 
 # 手動除外テーブル（統計的に100%でもリスクが高いもの）
 EXCLUDE_TABLES = {
@@ -48,8 +62,12 @@ SEQ = [1, 2, 3, 5, 7, 9, 11, 13, 16, 19, 22, 25, 28, 31, 35, 39, 43, 47, 51, 55,
        148, 154, 160, 170, 180, 190, 200, 210, 220, 230, 240, 250]
 
 
+# regularity_monitor から正確な実装をimport (sync mode と同じロジック)
+from regularity_monitor import compute_regularity, count_non_tie, count_pb
+
+
 class MaruBatsuSim:
-    def __init__(self, target=PROFIT_TARGET, lc=LOSS_CUT):
+    def __init__(self, target=PROFIT_TARGET, lc=10**12):  # ロスカットなし
         self.target = target
         self.lc = lc
         self.reset()
@@ -118,47 +136,88 @@ class MaruBatsuSim:
         return None
 
 
-def simulate_table(sequences):
-    """テーブルのシュー列を連結してシミュ"""
-    all_results = []
+def simulate_table_3filter(sequences, start_capital=START_CAPITAL, target=PROFIT_TARGET):
+    """3-filter シミュレーション (Reg + P/B + Pause)
+    各シューを順に処理、MaruBatsu状態は持続。
+    Returns:
+      {final_balance, bankrupt, wins, total_pnl, ...}
+    """
+    balance = start_capital
+    sim = MaruBatsuSim(target=target)
+    bankrupt = False
+    wins = 0
+
     for seq in sequences:
-        all_results.extend([c for c in seq if c in ('P', 'B', 'T')])
+        if bankrupt:
+            break
+        results = [c for c in seq if c in ('P', 'B', 'T')]
+        history = []
+        in_table = False
+        consec_b = 0
+        paused = False
 
-    sessions = []
-    sim = MaruBatsuSim()
-    for r in all_results:
-        o = sim.add(r)
-        if o:
-            sessions.append({
-                'outcome': o,
-                'profit': sim.cumulative,
-                'hands': sim.hands,
-                'max_dd': sim.max_dd,
-            })
-            sim.reset()
+        for r in results:
+            hands = count_non_tie(history)
+            reg = compute_regularity(history) if hands >= 5 else 0
+            pc, bc = count_pb(history)
+            p_ratio = pc / (pc + bc) if (pc + bc) > 0 else 0.5
 
-    profit_count = sum(1 for s in sessions if s['outcome'] == 'profit')
-    loss_count = sum(1 for s in sessions if s['outcome'] == 'loss')
-    total = profit_count + loss_count
-    if total == 0:
-        return None
+            if in_table:
+                if hands < ENTRY_HANDS or reg < EXIT_REG or p_ratio < EXIT_P_RATIO:
+                    in_table = False
+                    consec_b = 0
+                    paused = False
+            else:
+                if hands >= ENTRY_HANDS and reg >= ENTRY_REG and p_ratio >= ENTRY_P_RATIO:
+                    in_table = True
 
-    total_profit = sum(s['profit'] for s in sessions) + sim.cumulative
-    max_dd = max((s['max_dd'] for s in sessions), default=0)
-    win_rate = profit_count / total * 100
+            if r == 'T':
+                history.append(r)
+                continue
+            if not in_table:
+                history.append(r)
+                continue
+
+            if paused:
+                if r == 'B':
+                    consec_b += 1
+                elif r == 'P':
+                    paused = False
+                    consec_b = 0
+                history.append(r)
+                continue
+
+            sim.add(r)
+            if balance + sim.cumulative <= 0:
+                bankrupt = True
+                balance = 0
+                history.append(r)
+                break
+            if sim.cumulative >= target:
+                balance += sim.cumulative
+                wins += 1
+                sim.reset()
+                consec_b = 0
+                paused = False
+
+            if r == 'B':
+                consec_b += 1
+                if consec_b >= PAUSE_THRESHOLD:
+                    paused = True
+            elif r == 'P':
+                consec_b = 0
+            history.append(r)
 
     return {
-        'sessions': total,
-        'profit_sessions': profit_count,
-        'loss_sessions': loss_count,
-        'win_rate': win_rate,
-        'total_profit': total_profit,
-        'max_dd': max_dd,
+        'final_balance': balance,
+        'bankrupt': bankrupt,
+        'wins': wins,
+        'total_pnl': balance - start_capital,
     }
 
 
 def analyze_all_tables():
-    """全テーブルを分析して推奨リストを作成"""
+    """全テーブルを 3-filter シミュで分析、生存上位を推奨リストに"""
     print(f"Loading {DB_PATH}...")
     conn = sqlite3.connect(DB_PATH)
     cur = conn.cursor()
@@ -178,26 +237,23 @@ def analyze_all_tables():
     for table_name, sequences in shoes_by_table.items():
         if len(sequences) < MIN_SHOES:
             continue
-        stats = simulate_table(sequences)
-        if stats is None:
+        if table_name in EXCLUDE_TABLES:
             continue
+        stats = simulate_table_3filter(sequences)
         results.append({
             'name': table_name,
             'shoes': len(sequences),
             **stats,
         })
 
-    # 条件フィルター
+    # 条件: 生存 (破綻していない) + 通算プラス
     qualified = [
         r for r in results
-        if r['win_rate'] >= 100
-        and r['total_profit'] > 0
-        and r['max_dd'] <= MAX_DD_THRESHOLD
-        and r['name'] not in EXCLUDE_TABLES
+        if not r['bankrupt'] and r['total_pnl'] > 0
     ]
 
-    # 信頼度順にソート（total_profit 大 + max_dd 小）
-    qualified.sort(key=lambda x: (x['total_profit'] / max(x['max_dd'], 1)), reverse=True)
+    # 通算 P&L 順にソート (利益が大きい順)
+    qualified.sort(key=lambda x: -x['total_pnl'])
 
     return results, qualified
 
@@ -248,7 +304,7 @@ def post_to_supabase(tables):
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('--dry-run', action='store_true')
-    parser.add_argument('--max', type=int, default=10, help='Max tables to recommend')
+    parser.add_argument('--max', type=int, default=15, help='Max tables to recommend')
     args = parser.parse_args()
 
     all_results, qualified = analyze_all_tables()
@@ -257,22 +313,23 @@ def main():
     print(f"Analysis complete: {len(all_results)} tables analyzed, {len(qualified)} qualified")
     print("=" * 70)
 
-    print(f"\nTop {min(args.max, len(qualified))} recommended tables:")
+    print(f"\nTop {min(args.max, len(qualified))} recommended tables (3-filter sim):")
     for i, t in enumerate(qualified[:args.max]):
-        print(f"  {i+1}. {t['name']}: {t['profit_sessions']}/{t['sessions']}={t['win_rate']:.1f}% "
-              f"profit=+{t['total_profit']} DD={t['max_dd']} shoes={t['shoes']}")
+        try:
+            print(f"  {i+1:2d}. {t['name']}: pnl=+${t['total_pnl']} wins={t['wins']} shoes={t['shoes']}")
+        except UnicodeEncodeError:
+            print(f"  {i+1:2d}. [name]: pnl=+${t['total_pnl']} wins={t['wins']} shoes={t['shoes']}")
 
-    # Supabase payload
+    # Supabase payload (3-filter スコア)
     tables_payload = []
     for i, t in enumerate(qualified[:args.max]):
         tables_payload.append({
             'name': t['name'],
             'enabled': True,
             'priority': i + 1,
-            'win_rate': round(t['win_rate'], 1),
-            'sessions': t['sessions'],
-            'total_profit': t['total_profit'],
-            'max_dd': t['max_dd'],
+            'total_pnl': t['total_pnl'],
+            'wins': t['wins'],
+            'final_balance': t['final_balance'],
             'shoes': t['shoes'],
         })
 

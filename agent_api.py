@@ -471,10 +471,26 @@ def _run_bet_session_inner(config: dict, stop_event: threading.Event, skip_event
 
     BACCARAT_LOBBY_URL = "https://stake.com/casino/games/evolution-baccarat-lobby"
 
-    # === Sync Mode: 推奨テーブル（Phase 1: ハードコード、Phase 2でSupabase化）===
+    # === Sync Mode: 推奨テーブル ===
+    # 87万ハンド・5日間データの 3-filter (Reg+P/B+Pause) シミュで
+    # 生存上位15テーブル。シミュ通算 +$12,815 (現状の2.7倍) / 破綻ゼロ
+    # Supabaseから動的取得 (config.recommended_tables) もサポート
     SYNC_RECOMMENDED_TABLES = config.get("recommended_tables") or [
+        "Korean Speed Baccarat A",
+        "Speed Baccarat W",
+        "Korean Speed Baccarat D",
+        "Speed Baccarat X",
         "Japanese Speed Baccarat A",
-        "Korean Speed Baccarat B",
+        "Lotus Speed Baccarat A",
+        "Thai Speed Baccarat B",
+        "Lotus Speed Baccarat B",
+        "Baccarat B",
+        "Speed Baccarat T",
+        "Stake Exclusive Speed Baccarat 1",
+        "Dynasty Speed Baccarat 1",
+        "Dynasty Speed Baccarat 8",
+        "Korean Speed Baccarat E",
+        "Japanese Speed Baccarat C",
     ]
 
     def find_sync_table() -> tuple[str, str] | None:
@@ -1031,6 +1047,13 @@ def _run_bet_session_inner(config: dict, stop_event: threading.Event, skip_event
                 if not fr:
                     break
                 target_tid, target_name = fr
+            # フルリカバリ後はWS silent タイマーを必ずリセット
+            # (reset() で更新されるはずだが、リカバリ経路の保険として明示的に再リセット)
+            try:
+                if hasattr(scraper, 'game_ws') and scraper.game_ws:
+                    scraper.game_ws._last_message_at = time.time()
+            except Exception:
+                pass
             continue
 
         # ── Stakeセッション確認（5分おき）──

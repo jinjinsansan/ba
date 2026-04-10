@@ -66,6 +66,10 @@ class GameWSMonitor:
             self._bet_placed_at = 0.0
             self._settled_balance = None
             self._connected = False
+            # ウォッチドッグの WS silent タイマーをリセット
+            # （reset() はテーブル退出/再入場/フルリカバリで呼ばれるため、
+            #  この時点でWS silent タイマーがゼロから始まるべき）
+            self._last_message_at = time.time()
         self._status_changed.clear()
 
     def mark_bet_placed(self):
