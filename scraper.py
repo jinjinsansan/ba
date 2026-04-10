@@ -513,8 +513,12 @@ class BaccaratScraper:
             logger.info("ロビー再ログイン成功")
             self._save_cookies()
             # ロビーをリロードしてEvolution iframeを再接続
+            # クラウドPC等の低スペック環境向けに90秒に拡張（30秒だと不足）
             time.sleep(2)
-            self.page.reload(wait_until="domcontentloaded", timeout=30000)
+            try:
+                self.page.reload(wait_until="domcontentloaded", timeout=90000)
+            except Exception as e:
+                logger.warning(f"ロビーリロードタイムアウト — 続行: {e}")
             time.sleep(8)
         else:
             logger.warning("ロビー再ログイン失敗 — 手動ログインに切り替え")
