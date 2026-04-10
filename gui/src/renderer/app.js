@@ -99,6 +99,7 @@ $('#btnInstallUpdate').addEventListener('click', () => window.valhalla.openUpdat
 let sessionTotal = 0;
 let _startedAt = 0;  // START押下時刻 (stopped誤検知防止用)
 let _pnlSynced = false;  // VPS累計PNL同期フラグ（resume時に1回だけ同期）
+let _lastCumulativeMoney = 0;  // 前回の cumulative_money (daily 差分計算用)
 
 $('#btnStart').addEventListener('click', async () => {
   // Syncモード用: 起動時にサーバーから最新の推奨テーブルを取得
@@ -118,6 +119,7 @@ $('#btnStart').addEventListener('click', async () => {
   }
   if (!config.resume) {
     sessionTotal = 0;
+    _lastCumulativeMoney = 0;  // 新規開始 → リセット
     _pnlSynced = true;  // 新規開始 → 同期不要
     updateSessionDisplay();
     resetFeed();
@@ -125,6 +127,8 @@ $('#btnStart').addEventListener('click', async () => {
     _pnlSynced = false;  // resume → 最初のstatusでVPS累計を同期
     // Supabaseからgui_stateを復元
     await restoreGuiStateFromServer();
+    // resume時は復元された sessionTotal を _lastCumulativeMoney と同期
+    _lastCumulativeMoney = sessionTotal;
   }
   _startedAt = Date.now();
   setRunning(true);
@@ -162,6 +166,7 @@ function restoreSessionState() {
     if (!raw) return false;
     const state = JSON.parse(raw);
     sessionTotal = state.sessionTotal || 0;
+    _lastCumulativeMoney = sessionTotal;  // Phase A1+: 復元時も同期
     results.length = 0;
     if (Array.isArray(state.results)) {
       for (const r of state.results) results.push(r);
@@ -212,6 +217,7 @@ function showContinueDialog() {
     $('#btnResetAll').onclick = () => {
       localStorage.removeItem('valhalla_session_state');
       sessionTotal = 0;
+      _lastCumulativeMoney = 0;  // Phase A1+: 同期
       updateSessionDisplay();
       resetFeed();
       cleanup();
@@ -360,6 +366,7 @@ async function restoreGuiStateFromServer() {
   if (!state) return false;
   if (typeof state.session_total === 'number') {
     sessionTotal = state.session_total;
+    _lastCumulativeMoney = state.session_total;  // Phase A1+: 復元時も同期
     updateSessionDisplay();
   }
   if (state.daily_pnl && typeof state.daily_pnl === 'object') {
@@ -841,17 +848,20 @@ window.valhalla.onAgentMessage((msg) => {
       if (msg.balance) {
         $('#balance').textContent = `$${msg.balance.toFixed(2)}`;
       }
-      // === Phase A1: VPS の cumulative_money を sessionTotal の唯一の真実とする ===
-      // ローカル累積 (sessionTotal += round_profit) ではメッセージ取りこぼしで
-      // ズレが生じるため、毎回 VPS の値で上書きする。
+      // === Phase A1+: VPS cumulative_money の差分から daily を計算 ===
+      // 旧 round_profit (1ハンドごとのBET額) は MaruBatsu のセット完了タイミングと
+      // 不一致になるため使用しない。cumulative_money の delta を daily に加算する
+      // ことで sessionTotal と daily が数学的に保証された一致になる。
       if (typeof msg.cumulative_money === 'number') {
-        sessionTotal = msg.cumulative_money;
+        const newCm = msg.cumulative_money;
+        const delta = newCm - _lastCumulativeMoney;
+        _lastCumulativeMoney = newCm;
+        sessionTotal = newCm;
         updateSessionDisplay();
-      }
-      // daily P&L は round_profit delta で加算 (Phase A3 で Supabase 化予定)
-      if (typeof msg.round_profit === 'number') {
-        addRoundToDaily(msg.round_profit);
-        scheduleGuiStateSync(); // Supabaseに定期保存（5秒デバウンス）
+        if (Math.abs(delta) >= 0.01) {
+          addRoundToDaily(delta);
+        }
+        scheduleGuiStateSync();  // Supabaseに定期保存（5秒デバウンス）
       }
       break;
     }
@@ -892,11 +902,12 @@ window.valhalla.onAgentMessage((msg) => {
       // Developer panel
       updateDevPanel(msg);
       // === Phase A1: VPS cumulative_money を毎回同期 (旧: _pnlSynced で1回のみ) ===
-      // status メッセージは定期送信されるため、ここで毎回上書きすることで
-      // round_result メッセージを取りこぼしてもズレが補正される
+      // status メッセージは round 結果ではなく単なる sync なので daily に加算しない
+      // sessionTotal と _lastCumulativeMoney 両方を同期 (次の round_result の delta 計算のため)
       if (typeof msg.cumulative_money === 'number') {
         const oldTotal = sessionTotal;
         sessionTotal = msg.cumulative_money;
+        _lastCumulativeMoney = msg.cumulative_money;
         if (!_pnlSynced) {
           _pnlSynced = true;
           addLog(`Session P&L synced from VPS: $${sessionTotal >= 0 ? '+' : ''}${sessionTotal.toFixed(2)}`, 'info');
@@ -917,7 +928,9 @@ window.valhalla.onAgentMessage((msg) => {
       flashScreen(isProfit ? 'profit' : 'losscut');
       addLog(`=== ${title} ===  ${sign}$${Math.abs(amt).toFixed(0)}`, isProfit ? 'win' : 'lose');
       // Reset session total (daily total stays)
+      // Phase A1+: _lastCumulativeMoney もリセット (次の round_result の delta 計算のため)
       sessionTotal = 0;
+      _lastCumulativeMoney = 0;
       updateSessionDisplay();
       break;
     }
@@ -962,6 +975,7 @@ window.valhalla.onAgentLog((text) => {
 localStorage.removeItem('valhalla_daily_pnl');
 localStorage.removeItem('valhalla_session_state');
 sessionTotal = 0;
+_lastCumulativeMoney = 0;
 results.length = 0;
 setRunning(false);
 updateSessionDisplay();

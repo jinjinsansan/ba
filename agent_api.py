@@ -1059,7 +1059,48 @@ def _run_bet_session_inner(config: dict, stop_event: threading.Event, skip_event
     _observe_fail_count = 0        # 観戦失敗連続カウンタ
     OBSERVE_FAIL_LIMIT = 3         # N回連続失敗で観戦解除→退避判定に任せる
 
+    # ── iframe 劣化対策: 予防的フルリカバリ + ヘルスチェック ──
+    # Evolution iframe は長時間プレイで徐々に劣化し、最終的に完全消失する
+    # 対策: 30分経過 / 利確時 / 5分ごとのヘルスチェック で予防
+    _last_recovery_time = time.time()
+    PROACTIVE_RECOVERY_INTERVAL = 30 * 60  # 30分
+    _last_iframe_health_check = time.time()
+    IFRAME_HEALTH_CHECK_INTERVAL = 5 * 60  # 5分
+
+    def proactive_full_recovery(reason: str) -> bool:
+        """予防的フルリカバリ（BET中ではない時に呼出）
+        Returns: True=成功, False=失敗 (main loop break)
+        """
+        nonlocal target_tid, target_name, _last_recovery_time, _last_iframe_health_check
+        send_action(f"🔄 予防リカバリ: {reason}")
+        send_log(f"[proactive-recovery] 発動: {reason}")
+        fr = full_recovery()
+        if not fr:
+            return False
+        target_tid, target_name = fr
+        _last_recovery_time = time.time()
+        _last_iframe_health_check = time.time()
+        return True
+
     while not stop_event.is_set() and round_count < MAX_ROUNDS:
+        # ── B. iframe ヘルスチェック (5分おき、BET中以外) ──
+        # Evolution iframe が消失していないか定期確認
+        # paused=True または set 完了直後など、BET中じゃない時に実行
+        if (time.time() - _last_iframe_health_check > IFRAME_HEALTH_CHECK_INTERVAL
+            and target_tid
+            and (_paused_for_dragon or len(session.tracker.current_turns) == 0)):
+            _last_iframe_health_check = time.time()
+            try:
+                evo_frames = executor._get_evo_frames()
+                if not evo_frames:
+                    send_log("[health] Evolution iframe 消失検知 → 予防リカバリ")
+                    if not proactive_full_recovery("iframe消失"):
+                        break
+                    _awaiting_sync_confirm = (_effective_mode_box[0] in ("sync", "sync_pause"))
+                    continue
+            except Exception as _hce:
+                send_log(f"[health] iframe チェック例外: {_hce}")
+
         # ── フリーズ検出ウォッチドッグ ──
         ws_idle = scraper.game_ws.seconds_since_last_message() if hasattr(scraper, 'game_ws') and scraper.game_ws else 0
         if ws_idle > _FREEZE_TIMEOUT and target_tid:
@@ -1569,6 +1610,16 @@ def _run_bet_session_inner(config: dict, stop_event: threading.Event, skip_event
             except Exception as e:
                 logger.warning(f"Public notify failed: {e}")
 
+            # ── A. 30分タイマー: set 完了 + 30分経過で予防リカバリ ──
+            # iframe 劣化対策。set 完了直後 = BET ウィンドウ外なので安全
+            if time.time() - _last_recovery_time > PROACTIVE_RECOVERY_INTERVAL:
+                elapsed_min = (time.time() - _last_recovery_time) / 60
+                send_log(f"[proactive-recovery] 30分経過 ({elapsed_min:.0f}分) → set 完了直後にリカバリ")
+                if not proactive_full_recovery(f"30分経過 ({elapsed_min:.0f}分)"):
+                    break
+                _awaiting_sync_confirm = (_effective_mode_box[0] in ("sync", "sync_pause"))
+                continue
+
         # Profit/loss reset
         if result.get("should_reset"):
             cp = session.effective_profit()
@@ -1595,6 +1646,15 @@ def _run_bet_session_inner(config: dict, stop_event: threading.Event, skip_event
                 logger.warning(f"Reset notify failed: {e}")
             session.reset_session("利確" if is_win else "損切り")
             send_shoe_history(session.tracker.sets, chip_base)
+
+            # ── D'. 利確/損切り後の予防リカバリ ──
+            # 完全な区切りなので最も安全なリフレッシュタイミング
+            # iframe 劣化を完全リセット + 新しい推奨テーブルで再開
+            send_log(f"[proactive-recovery] {reason_en} → リカバリ")
+            if not proactive_full_recovery(reason_en):
+                break
+            _awaiting_sync_confirm = (_effective_mode_box[0] in ("sync", "sync_pause"))
+            continue
 
         # ── Mix自動切替: セット確定後にOS>=20なら1-Dropモードへ ──
         if _bet_mode_box[0] == "mix" and _effective_mode_box[0] == "normal":
