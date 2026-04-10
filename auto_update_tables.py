@@ -34,9 +34,14 @@ ADMIN_EMAIL = os.getenv("LAPLACE_ADMIN_EMAIL", "goldbenchan@gmail.com")
 # 条件
 MIN_SHOES = 30
 MIN_HANDS_PER_SHOE = 50
-MAX_DD_THRESHOLD = 2500  # 緩和: 1500 → 2500 (より多くのテーブルを推奨)
+MAX_DD_THRESHOLD = 2500
 PROFIT_TARGET = 50
 LOSS_CUT = 3000
+
+# 手動除外テーブル（統計的に100%でもリスクが高いもの）
+EXCLUDE_TABLES = {
+    'Dynasty Speed Baccarat 5',  # Dynasty系は傾向不安定
+}
 
 SEQ = [1, 2, 3, 5, 7, 9, 11, 13, 16, 19, 22, 25, 28, 31, 35, 39, 43, 47, 51, 55,
        60, 65, 70, 75, 80, 85, 90, 95, 100, 106, 112, 118, 124, 130, 136, 142,
@@ -188,6 +193,7 @@ def analyze_all_tables():
         if r['win_rate'] >= 100
         and r['total_profit'] > 0
         and r['max_dd'] <= MAX_DD_THRESHOLD
+        and r['name'] not in EXCLUDE_TABLES
     ]
 
     # 信頼度順にソート（total_profit 大 + max_dd 小）
