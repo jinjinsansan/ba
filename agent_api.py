@@ -493,6 +493,24 @@ def _run_bet_session_inner(config: dict, stop_event: threading.Event, skip_event
         "Japanese Speed Baccarat C",
     ]
 
+    # 退避クールダウン: テーブル名 → 退避時刻 (epoch)
+    # ロビーWS の bead road は古いシューを保持していることがあるため、
+    # 退避直後の同じテーブルを即再選定すると再び Banker dominant にハマる
+    _exited_tables_cooldown: dict[str, float] = {}
+    EXIT_COOLDOWN_SEC = 300  # 5分間は同じテーブルを除外
+
+    def mark_table_exited(table_name: str):
+        _exited_tables_cooldown[table_name] = time.time()
+
+    def is_table_in_cooldown(table_name: str) -> bool:
+        ts = _exited_tables_cooldown.get(table_name)
+        if ts is None:
+            return False
+        if time.time() - ts > EXIT_COOLDOWN_SEC:
+            del _exited_tables_cooldown[table_name]
+            return False
+        return True
+
     def find_sync_table() -> tuple[str, str] | None:
         """推奨テーブルから規則性の高いものを選択（入場前の静的判断）
 
@@ -581,6 +599,11 @@ def _run_bet_session_inner(config: dict, stop_event: threading.Event, skip_event
                 tid = name_to_tid.get(rec_name)
                 if not tid:
                     table_reports.append(f"❌ {rec_name}: ロビーに存在しません")
+                    continue
+                # クールダウン中のテーブルはスキップ
+                if is_table_in_cooldown(rec_name):
+                    remain = int(EXIT_COOLDOWN_SEC - (time.time() - _exited_tables_cooldown[rec_name]))
+                    table_reports.append(f"⏰ {rec_name}: クールダウン中 (残{remain}s)")
                     continue
                 raw = scraper.get_raw_history(tid)
                 results = raw_history_to_results(raw)
@@ -1033,6 +1056,8 @@ def _run_bet_session_inner(config: dict, stop_event: threading.Event, skip_event
     _consec_banker = 0             # 連続Banker回数
     _paused_for_dragon = False     # ドラゴン中の観戦フラグ
     PAUSE_THRESHOLD = 2            # N連続Bで観戦モード突入
+    _observe_fail_count = 0        # 観戦失敗連続カウンタ
+    OBSERVE_FAIL_LIMIT = 3         # N回連続失敗で観戦解除→退避判定に任せる
 
     while not stop_event.is_set() and round_count < MAX_ROUNDS:
         # ── フリーズ検出ウォッチドッグ ──
@@ -1254,6 +1279,7 @@ def _run_bet_session_inner(config: dict, stop_event: threading.Event, skip_event
                     if hands < MIN_HANDS_FOR_ENTRY or reg < ENTRY_THRESHOLD:
                         send_action(f"⚠️ Sync: 条件未達 (hands={hands} reg={reg:.0f}) — 退避")
                         send_log(f"[Sync-Entry] ❌ 入場後確認失敗: {hands}ハンド reg={reg:.0f} < 閾値 → 退避")
+                        mark_table_exited(target_name)
                         executor.exit_table()
                         import random as _rand_se
                         _w = _rand_se.uniform(5, 10)
@@ -1303,25 +1329,63 @@ def _run_bet_session_inner(config: dict, stop_event: threading.Event, skip_event
             if obs == 'P':
                 _paused_for_dragon = False
                 _consec_banker = 0
+                _observe_fail_count = 0
                 send_log(f"[sync_pause] ✅ Player出現 → BET再開 (MaruBatsu状態保持)")
                 send_action("✅ Dragon ended — resuming BET")
             elif obs == 'B':
                 _consec_banker += 1
+                _observe_fail_count = 0
                 send_log(f"[sync_pause] 🐉 Banker継続 ({_consec_banker}連) → 観戦継続")
             elif obs == 'SESSION_EXPIRED':
                 send_action("⚠️ Session expired during observe — full recovery")
                 send_log("[sync_pause] SESSION EXPIRED検出 → 即フルリカバリ")
                 _paused_for_dragon = False
                 _consec_banker = 0
+                _observe_fail_count = 0
                 fr = full_recovery()
                 if not fr:
                     break
                 target_tid, target_name = fr
                 _awaiting_sync_confirm = True
             else:
-                send_log(f"[sync_pause] 観戦失敗 (obs={obs}) → 1秒待機")
-                if stop_event.wait(1):
-                    break
+                # 観戦失敗 (obs=None) — 連続失敗でテーブル退避
+                _observe_fail_count += 1
+                send_log(f"[sync_pause] 観戦失敗 ({_observe_fail_count}/{OBSERVE_FAIL_LIMIT}) → 1秒待機")
+                if _observe_fail_count >= OBSERVE_FAIL_LIMIT:
+                    send_action(f"⚠️ 観戦失敗 {_observe_fail_count}回連続 — テーブル退避")
+                    send_log(f"[sync_pause] 観戦失敗 {OBSERVE_FAIL_LIMIT}回連続 → 観戦解除 + テーブル退避")
+                    _paused_for_dragon = False
+                    _consec_banker = 0
+                    _observe_fail_count = 0
+                    mark_table_exited(target_name)
+                    executor.exit_table()
+                    if stop_event.wait(5):
+                        break
+                    if not scraper.get_all_table_configs():
+                        try:
+                            scraper.setup_ws_intercept()
+                        except Exception:
+                            pass
+                    res_sync = find_sync_table()
+                    if not res_sync:
+                        break
+                    target_tid, target_name = res_sync
+                    with scraper._lock:
+                        scraper._target_table_ids.add(target_tid)
+                        scraper._target_table_names[target_tid] = target_name
+                        scraper._new_shoe_signals[target_tid] = False
+                        scraper._shoe_epochs[target_tid] = int(time.time())
+                    if not executor.enter_table(target_tid, target_name):
+                        fr = full_recovery()
+                        if not fr:
+                            break
+                        target_tid, target_name = fr
+                        if not executor.enter_table(target_tid, target_name):
+                            break
+                    _awaiting_sync_confirm = True
+                else:
+                    if stop_event.wait(1):
+                        break
             continue
 
         # BET phase — amount comes from session (remote: from VPS state; local: from tracker)
@@ -1557,6 +1621,7 @@ def _run_bet_session_inner(config: dict, stop_event: threading.Event, skip_event
             if monitor['should_exit']:
                 send_action(f"⚠️ Sync退避: {_reason} (reg={monitor['regularity']:.0f} hands={monitor['hands']} P{_pc}/B{_bc})")
                 send_log(f"[Sync-Monitor] ❌ 退避判定: {_reason} (reg={monitor['regularity']:.0f} hands={monitor['hands']} P{_pc}/B{_bc} P比率={_pr:.0%})")
+                mark_table_exited(target_name)
                 executor.exit_table()
                 import random as _rand_sync
                 _wait = _rand_sync.uniform(5, 15)
