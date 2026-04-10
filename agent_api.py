@@ -517,17 +517,23 @@ def _run_bet_session_inner(config: dict, stop_event: threading.Event, skip_event
         条件:
           1. 推奨リストにあるテーブル
           2. ハンド数 >= 35（シュー約50%経過）
-          3. 規則性スコア >= 70
-        優先順位: リストの順
-        待機中の対策:
+          3. 規則性スコア >= dynamic_threshold (70→65→60、時間経過で緩和)
+
+        待機時間対策:
           - 60秒ごとにダイアログチェック+ iframeハートビート
-          - 5分ごとにStakeログイン確認 → 切れていたら再ログイン
+          - 60秒経過: casino_detour で別ゲームに寄り道 (iframe劣化対策)
+          - 60秒経過: 閾値 70→65 に緩和
+          - 120秒経過: 閾値 65→60 に緩和
+          - 180秒経過: 強制ピック (最高規則性のテーブル)
+          - 5分ごとにStakeログイン確認
         """
         from regularity_monitor import evaluate_table, raw_history_to_results, ENTRY_THRESHOLD, MIN_HANDS_FOR_ENTRY
 
         send_action("🔍 Syncモード: 推奨テーブルを監視中...")
         send_log(f"[Sync] 推奨テーブル: {', '.join(SYNC_RECOMMENDED_TABLES)}")
-        send_log(f"[Sync] 入場条件: ハンド数≥{MIN_HANDS_FOR_ENTRY}, 規則性≥{ENTRY_THRESHOLD}")
+        send_log(f"[Sync] 入場条件: ハンド数≥{MIN_HANDS_FOR_ENTRY}, 規則性≥{ENTRY_THRESHOLD} (時間経過で緩和)")
+        wait_start = time.time()  # find_sync_table 開始時刻 (緩和判定用)
+        last_detour = time.time()  # 最後のcasino detour時刻
         last_heartbeat = time.time()
         last_login_check = time.time()
         last_status = time.time()
@@ -589,11 +595,29 @@ def _run_bet_session_inner(config: dict, stop_event: threading.Event, skip_event
                 except Exception as _ce:
                     send_log(f"[Sync] ログインチェックエラー: {_ce}")
 
+            # === 動的閾値: 時間経過で緩和 ===
+            elapsed_wait = time.time() - wait_start
+            if elapsed_wait < 60:
+                dynamic_threshold = ENTRY_THRESHOLD  # 70
+            elif elapsed_wait < 120:
+                dynamic_threshold = max(ENTRY_THRESHOLD - 5, 65)  # 65
+            else:
+                dynamic_threshold = max(ENTRY_THRESHOLD - 10, 60)  # 60
+            force_pick = elapsed_wait >= 180  # 3分経過で強制ピック
+
+            # === Casino detour: 60秒ごとに別ゲームへ寄り道 ===
+            if time.time() - last_detour > 60 and elapsed_wait > 60:
+                send_log(f"[Sync] ⏱️ 60秒経過 → casino detour で iframe維持")
+                if casino_detour(reason="ロビー待機中"):
+                    last_detour = time.time()
+                    last_heartbeat = time.time()  # detour成功でheartbeat更新
+
             configs = scraper.get_all_table_configs()
             name_to_tid = {cfg.get("title", ""): tid for tid, cfg in configs.items()}
 
             # 推奨テーブルを順に評価
             best = None
+            force_best = None  # 強制ピック用 (閾値未達でも最高reg)
             table_reports = []
             for rec_name in SYNC_RECOMMENDED_TABLES:
                 tid = name_to_tid.get(rec_name)
@@ -614,15 +638,19 @@ def _run_bet_session_inner(config: dict, stop_event: threading.Event, skip_event
                 p_count = eval_result.get('p_count', 0)
                 b_count = eval_result.get('b_count', 0)
 
+                # 強制ピック候補 (規則性のみ、ハンド数最低35とP比率0.4以上)
+                if hands >= MIN_HANDS_FOR_ENTRY and p_ratio >= 0.40:
+                    if force_best is None or reg > force_best[2]:
+                        force_best = (tid, rec_name, reg, p_count, b_count, p_ratio)
+
                 if hands < MIN_HANDS_FOR_ENTRY:
                     table_reports.append(f"⏳ {rec_name}: {hands}ハンド（{MIN_HANDS_FOR_ENTRY}まで待機）")
-                elif reg < ENTRY_THRESHOLD:
-                    table_reports.append(f"⚠️ {rec_name}: {hands}h reg={reg:.0f} P{p_count}/B{b_count}（規則性<{ENTRY_THRESHOLD}）")
-                elif not eval_result.get('can_enter'):
-                    # P比率不足
+                elif reg < dynamic_threshold:
+                    table_reports.append(f"⚠️ {rec_name}: {hands}h reg={reg:.0f} P{p_count}/B{b_count}（規則性<{dynamic_threshold}）")
+                elif p_ratio < 0.42:  # P比率閾値 (緩和してない)
                     table_reports.append(f"⚠️ {rec_name}: {hands}h reg={reg:.0f} P{p_count}/B{b_count}（Banker dominant P{p_ratio:.0%}）")
                 else:
-                    table_reports.append(f"✅ {rec_name}: {hands}h reg={reg:.0f} P{p_count}/B{b_count}（P{p_ratio:.0%}）→ クリア!")
+                    table_reports.append(f"✅ {rec_name}: {hands}h reg={reg:.0f} P{p_count}/B{b_count}（P{p_ratio:.0%}）→ クリア! (閾値{dynamic_threshold})")
                     if best is None or reg > best[2]:
                         best = (tid, rec_name, reg, p_count, b_count, p_ratio)
 
@@ -635,12 +663,20 @@ def _run_bet_session_inner(config: dict, stop_event: threading.Event, skip_event
             if best:
                 tid, tname, reg, p_count, b_count, p_ratio = best
                 send_action(f"🎯 Sync: {tname} に入場 (reg={reg:.0f} P{p_count}/B{b_count})")
-                send_log(f"[Sync] ★ 入場決定: {tname} 規則性={reg:.0f} P{p_count}/B{b_count} (P{p_ratio:.0%})")
+                send_log(f"[Sync] ★ 入場決定: {tname} 規則性={reg:.0f} P{p_count}/B{b_count} (P{p_ratio:.0%}) [閾値{dynamic_threshold}]")
+                return tid, tname
+
+            # 強制ピック (3分経過): 通常条件を満たすテーブルがなくても最高規則性を選ぶ
+            if force_pick and force_best:
+                tid, tname, reg, p_count, b_count, p_ratio = force_best
+                send_action(f"⚡ 強制ピック (3分経過): {tname} reg={reg:.0f}")
+                send_log(f"[Sync] 🆘 強制ピック: {tname} 規則性={reg:.0f} P{p_count}/B{b_count} (P{p_ratio:.0%}) — 待機回避")
                 return tid, tname
 
             # 待機メッセージ（30秒ごと）
             if scan_count % 10 == 1:
-                send_action("⏱️ 全推奨テーブルが条件未達 — 待機中...")
+                _wait_sec = int(elapsed_wait)
+                send_action(f"⏱️ 待機中 ({_wait_sec}s) — 閾値{dynamic_threshold}")
 
             stop_event.wait(3)
 
@@ -1081,6 +1117,41 @@ def _run_bet_session_inner(config: dict, stop_event: threading.Event, skip_event
         _last_recovery_time = time.time()
         _last_iframe_health_check = time.time()
         return True
+
+    def casino_detour(reason: str = "iframe維持") -> bool:
+        """別カジノゲームに寄り道してブラウザをアクティブに保つ。
+        ロビー待機中の iframe 劣化対策。
+        Returns: True=detour成功（ロビー復帰済）
+        """
+        nonlocal _last_recovery_time, _last_iframe_health_check
+        import random as _rand_d
+        detour_targets = [
+            "https://stake.com/casino/games/evolution-european-roulette",
+            "https://stake.com/casino/games/evolution-lightning-roulette",
+            "https://stake.com/casino/games/evolution-immersive-roulette",
+            "https://stake.com/casino",
+        ]
+        target_url = _rand_d.choice(detour_targets)
+        send_action(f"🎰 Casino detour: {reason}")
+        send_log(f"[detour] 寄り道開始 → {target_url}")
+        try:
+            scraper.page.goto(target_url, wait_until="domcontentloaded", timeout=30000)
+            # 人間らしく10-15秒滞在
+            time.sleep(_rand_d.uniform(10, 15))
+            send_log("[detour] バカラロビーに復帰")
+            scraper.page.goto(BACCARAT_LOBBY_URL, wait_until="domcontentloaded", timeout=30000)
+            time.sleep(5)
+            try:
+                scraper.setup_ws_intercept()
+            except Exception as _wse:
+                send_log(f"[detour] WS再接続例外: {_wse}")
+            _last_iframe_health_check = time.time()
+            _last_recovery_time = time.time()
+            send_log("[detour] ✅ 完了")
+            return True
+        except Exception as e:
+            send_log(f"[detour] ❌ 失敗: {e}")
+            return False
 
     while not stop_event.is_set() and round_count < MAX_ROUNDS:
         # ── B. iframe ヘルスチェック (5分おき、BET中以外) ──
@@ -1578,14 +1649,19 @@ def _run_bet_session_inner(config: dict, stop_event: threading.Event, skip_event
 
             send_result(res, won, ba, bal, len(turns), turns_disp, cp, cm, round_profit)
 
-            # ── sync_pause: 連B 検出と観戦突入判定 ──
+            # ── sync_pause: 連B 検出 → 即テーブル退避 (観戦モード廃止) ──
+            # 旧設計: 観戦モードで P 出現を待つ → iframe 劣化リスク
+            # 新設計: 即退避 + cooldown → 別テーブルへ移動 (待機ゼロ)
+            # MaruBatsu 状態は VPS 側で持続するため別テーブルでも継続可能
+            _bb_exit_triggered = False  # 後段の処理で再入場フローへ進むためのフラグ
             if _effective_mode_box[0] == "sync_pause":
                 if res == "banker":
                     _consec_banker += 1
-                    if _consec_banker >= PAUSE_THRESHOLD and not _paused_for_dragon:
-                        _paused_for_dragon = True
-                        send_action(f"🐉 Dragon pause ({_consec_banker} Bs) — pausing BET")
-                        send_log(f"[sync_pause] {_consec_banker}連B検出 → 観戦モード突入 (MaruBatsu状態保持)")
+                    if _consec_banker >= PAUSE_THRESHOLD:
+                        _bb_exit_triggered = True
+                        send_action(f"🐉 {_consec_banker}連B検出 → 即退避 + 別テーブルへ")
+                        send_log(f"[sync_pause-exit] {_consec_banker}連B → 即退避 (観戦せず別テーブルへ)")
+                        _consec_banker = 0
                 elif res == "player":
                     if _consec_banker > 0:
                         send_log(f"[sync_pause] Player出現 → 連B カウンタリセット")
@@ -1610,14 +1686,39 @@ def _run_bet_session_inner(config: dict, stop_event: threading.Event, skip_event
             except Exception as e:
                 logger.warning(f"Public notify failed: {e}")
 
-            # ── A. 30分タイマー: set 完了 + 30分経過で予防リカバリ ──
+            # ── A. 30分タイマー: set 完了 + 30分経過で casino detour ──
             # iframe 劣化対策。set 完了直後 = BET ウィンドウ外なので安全
+            # 30分予防は casino_detour で軽量化 (full_recovery より速い)
             if time.time() - _last_recovery_time > PROACTIVE_RECOVERY_INTERVAL:
                 elapsed_min = (time.time() - _last_recovery_time) / 60
-                send_log(f"[proactive-recovery] 30分経過 ({elapsed_min:.0f}分) → set 完了直後にリカバリ")
-                if not proactive_full_recovery(f"30分経過 ({elapsed_min:.0f}分)"):
-                    break
-                _awaiting_sync_confirm = (_effective_mode_box[0] in ("sync", "sync_pause"))
+                send_log(f"[proactive-detour] 30分経過 ({elapsed_min:.0f}分) → casino detour")
+                # 一旦テーブルを抜けてから detour
+                executor.exit_table()
+                time.sleep(2)
+                if casino_detour(reason=f"30分経過 ({elapsed_min:.0f}分)"):
+                    # detour 後に同じテーブルへ再入場 (sync mode は新規探索)
+                    if _effective_mode_box[0] in ("sync", "sync_pause"):
+                        res_sync = find_sync_table()
+                        if not res_sync:
+                            break
+                        target_tid, target_name = res_sync
+                        with scraper._lock:
+                            scraper._target_table_ids.add(target_tid)
+                            scraper._target_table_names[target_tid] = target_name
+                            scraper._new_shoe_signals[target_tid] = False
+                            scraper._shoe_epochs[target_tid] = int(time.time())
+                        if not executor.enter_table(target_tid, target_name):
+                            fr = full_recovery()
+                            if not fr:
+                                break
+                            target_tid, target_name = fr
+                        _awaiting_sync_confirm = True
+                    else:
+                        if not executor.enter_table(target_tid, target_name):
+                            fr = full_recovery()
+                            if not fr:
+                                break
+                            target_tid, target_name = fr
                 continue
 
         # Profit/loss reset
@@ -1654,6 +1755,38 @@ def _run_bet_session_inner(config: dict, stop_event: threading.Event, skip_event
             if not proactive_full_recovery(reason_en):
                 break
             _awaiting_sync_confirm = (_effective_mode_box[0] in ("sync", "sync_pause"))
+            continue
+
+        # ── sync_pause: 連B 退避処理 (BB検出時) ──
+        # 既存の Set complete / session_reset の後に実行
+        # _bb_exit_triggered が True なら即退避 + 新テーブル
+        if _bb_exit_triggered:
+            mark_table_exited(target_name)
+            executor.exit_table()
+            if stop_event.wait(3):
+                break
+            if not scraper.get_all_table_configs():
+                try:
+                    scraper.setup_ws_intercept()
+                except Exception:
+                    pass
+            res_sync = find_sync_table()
+            if not res_sync:
+                break
+            target_tid, target_name = res_sync
+            with scraper._lock:
+                scraper._target_table_ids.add(target_tid)
+                scraper._target_table_names[target_tid] = target_name
+                scraper._new_shoe_signals[target_tid] = False
+                scraper._shoe_epochs[target_tid] = int(time.time())
+            if not executor.enter_table(target_tid, target_name):
+                fr = full_recovery()
+                if not fr:
+                    break
+                target_tid, target_name = fr
+                if not executor.enter_table(target_tid, target_name):
+                    break
+            _awaiting_sync_confirm = True
             continue
 
         # ── Mix自動切替: セット確定後にOS>=20なら1-Dropモードへ ──
