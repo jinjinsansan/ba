@@ -433,11 +433,15 @@ class BaccaratScraper:
     def _login_from_lobby(self):
         """ロビー遷移後にログインモーダルが表示された場合の再ログイン。
         モーダルが既に開いている前提で、Email/Password入力→Submit。
+
+        【失敗時の挙動】
+        - クレデンシャルあり + フォーム未表示 → RuntimeError 送出 (caller が full_recovery にエスカレーション)
+        - クレデンシャルなし → 手動ログイン待ち (短縮 60秒)
         """
         has_credentials = bool(config.STAKE_USERNAME and config.STAKE_PASSWORD)
         if not has_credentials:
-            logger.info("クレデンシャル未設定 — 手動ログイン待ち")
-            self._wait_for_manual_login(timeout=300)
+            logger.info("クレデンシャル未設定 — 手動ログイン待ち (60s)")
+            self._wait_for_manual_login(timeout=60)
             return
 
         # ログインモーダルが表示されるまで待機
@@ -474,9 +478,11 @@ class BaccaratScraper:
                 pass
 
         if not _form_ready:
-            logger.warning("ログインフォーム未表示 — 手動ログインに切り替え")
-            self._wait_for_manual_login(timeout=300)
-            return
+            # クレデンシャルがあるのにフォームが出ない = ページ状態が壊れている
+            # 300秒の手動待機ではなく、例外を投げて caller (agent_api) に
+            # full_recovery エスカレーションを任せる
+            logger.warning("ログインフォーム未表示 — full_recovery へエスカレーション")
+            raise RuntimeError("Login form not visible after page state recovery — escalate to full_recovery")
 
         # Email入力
         logger.info("ロビー再ログイン: 認証情報入力中...")
@@ -521,8 +527,8 @@ class BaccaratScraper:
                 logger.warning(f"ロビーリロードタイムアウト — 続行: {e}")
             time.sleep(8)
         else:
-            logger.warning("ロビー再ログイン失敗 — 手動ログインに切り替え")
-            self._wait_for_manual_login(timeout=300)
+            logger.warning("ロビー再ログイン失敗 — full_recovery へエスカレーション")
+            raise RuntimeError("Re-login submit failed — escalate to full_recovery")
 
     def _navigate_to_lobby(self):
         """バカラロビーに移動（テーブルに入らない）
