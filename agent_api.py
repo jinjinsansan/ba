@@ -1299,16 +1299,18 @@ def _run_bet_session_inner(config: dict, stop_event: threading.Event, skip_event
         round_count += 1
 
         # ── BET完全失敗チェック: bet_amount=0 なら失敗カウント ──
+        # 「ネットワーク遅延ありき」設計: 2回連続でiframeリセット
+        # （以前は3回だったが、復帰までに約2分かかっていたため短縮）
         if result.get("bet_amount", 0) == 0 and result.get("result"):
             _bet_fail_count += 1
-            send_log(f"[bet-fail] BET failed ({_bet_fail_count}/3) on {target_name}")
-            if _bet_fail_count >= 3:
-                send_action(f"BET failed 3 times on {target_name} — switching table...")
-                send_log(f"[bet-fail] 3 consecutive failures — exit table")
+            send_log(f"[bet-fail] BET failed ({_bet_fail_count}/2) on {target_name}")
+            if _bet_fail_count >= 2:
+                send_action(f"BET failed 2 times on {target_name} — resetting iframe...")
+                send_log(f"[bet-fail] 2 consecutive failures — exit + re-enter (iframe reset)")
                 executor.exit_table()
-                import random as _rand3
-                _lobby_wait3 = _rand3.uniform(10, 25)
-                send_action(f"Browsing lobby... ({_lobby_wait3:.0f}s)")
+                # ロビー滞在を短縮: iframe リセットが目的なので Bot 感を出すための長い待機は不要
+                _lobby_wait3 = 5
+                send_action(f"Resetting iframe... ({_lobby_wait3}s)")
                 if stop_event.wait(_lobby_wait3):
                     break
                 _bet_fail_count = 0

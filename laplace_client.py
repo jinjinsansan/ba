@@ -414,8 +414,10 @@ class RemoteLaplaceSession:
 
         # skip_round=False: confirm_2nd_drop() (agent_api) が入場後の見送りを担当するため
         # ここでは常に即座にBETフェーズを待つ
+        # 60s: 1ハンド ~30s なので 60s で BET phase を見つけられないなら
+        # iframe か WS が壊れている → 早くリカバリした方がロス少ない
         if not self.executor.wait_for_betting_phase(
-            timeout=120, skip_round=False
+            timeout=60, skip_round=False
         ):
             if not self.executor.check_and_dismiss_error():
                 return self._exit("error_dialog_after_bet_phase_wait")
@@ -482,6 +484,15 @@ class RemoteLaplaceSession:
                         self.client.submit_result(self.user_id, obs_result)
                     except Exception as e:
                         logger.error(f"観戦結果送信失敗: {e}")
+                # iframe ヘルスチェック: 観戦後に bet spot が再アクセス可能か確認
+                # 死んでいたら次のBET phaseを待たずに失敗扱いにして
+                # 上位ループの連続失敗カウンタを早めに発動させる
+                try:
+                    evo = self.executor._get_evo_locator()
+                    if not evo.locator('[data-betspot-destination]').first.is_visible(timeout=1500):
+                        logger.warning("[health] iframe BET spot 不可視 — iframe劣化の可能性")
+                except Exception as _hc_e:
+                    logger.warning(f"[health] iframeヘルスチェック例外: {_hc_e}")
                 return {"action": "bet", "result": None, "won": None, "bet_amount": 0,
                         "completed_set": None, "should_reset": self.should_reset()}
         else:
