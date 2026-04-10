@@ -485,7 +485,9 @@ def _run_bet_session_inner(config: dict, stop_event: threading.Event, skip_event
           2. ハンド数 >= 35（シュー約50%経過）
           3. 規則性スコア >= 70
         優先順位: リストの順
-        SESSION EXPIRED対策: 90秒ごとにiframeタッチ
+        待機中の対策:
+          - 60秒ごとにダイアログチェック+ iframeハートビート
+          - 5分ごとにStakeログイン確認 → 切れていたら再ログイン
         """
         from regularity_monitor import evaluate_table, raw_history_to_results, ENTRY_THRESHOLD, MIN_HANDS_FOR_ENTRY
 
@@ -493,20 +495,39 @@ def _run_bet_session_inner(config: dict, stop_event: threading.Event, skip_event
         send_log(f"[Sync] 推奨テーブル: {', '.join(SYNC_RECOMMENDED_TABLES)}")
         send_log(f"[Sync] 入場条件: ハンド数≥{MIN_HANDS_FOR_ENTRY}, 規則性≥{ENTRY_THRESHOLD}")
         last_heartbeat = time.time()
+        last_login_check = time.time()
         last_status = time.time()
         scan_count = 0
 
         while not stop_event.is_set():
             scan_count += 1
-            # ハートビート（90秒ごと）
-            if time.time() - last_heartbeat > 90:
-                send_log("[Sync] 💓 ハートビート送信（SESSION EXPIRED対策）")
+            # ハートビート（60秒ごと）: ダイアログチェック+iframeタッチ
+            if time.time() - last_heartbeat > 60:
+                send_log("[Sync] 💓 ハートビート（ダイアログ+WS確認）")
+                # 1. エラーダイアログ検出 → 自動dismiss
+                try:
+                    if not executor.check_and_dismiss_error():
+                        send_log("[Sync] ⚠️ SESSION EXPIRED検出 → フルリカバリ")
+                        fr = full_recovery()
+                        if not fr:
+                            return None
+                        nonlocal target_tid, target_name
+                        target_tid, target_name = fr
+                        # テーブルに入ってしまったので、退室してロビーに戻す
+                        try:
+                            executor.exit_table()
+                        except Exception:
+                            pass
+                except Exception as _de:
+                    send_log(f"[Sync] ダイアログチェックエラー: {_de}")
+                # 2. iframeタッチ
                 try:
                     inner = executor._get_evo_inner()
                     if inner:
                         inner.evaluate("() => document.documentElement.scrollTop", timeout=3000)
                 except Exception:
                     pass
+                # 3. ロビーWS再接続
                 if not scraper.get_all_table_configs():
                     send_log("[Sync] ⚠️ ロビーWS切断 → 再接続中...")
                     try:
@@ -514,6 +535,25 @@ def _run_bet_session_inner(config: dict, stop_event: threading.Event, skip_event
                     except Exception:
                         pass
                 last_heartbeat = time.time()
+
+            # Stakeログイン確認（5分ごと）
+            if time.time() - last_login_check > 300:
+                last_login_check = time.time()
+                try:
+                    if not scraper._is_logged_in():
+                        send_log("[Sync] ⚠️ Stakeログアウト検出 → 再ログイン")
+                        try:
+                            scraper._login_from_lobby()
+                            time.sleep(3)
+                            scraper.setup_ws_intercept()
+                            send_log("[Sync] ✅ 再ログイン成功")
+                        except Exception as _le:
+                            send_log(f"[Sync] ⚠️ 再ログイン失敗: {_le} → フルリカバリ")
+                            fr = full_recovery()
+                            if not fr:
+                                return None
+                except Exception as _ce:
+                    send_log(f"[Sync] ログインチェックエラー: {_ce}")
 
             configs = scraper.get_all_table_configs()
             name_to_tid = {cfg.get("title", ""): tid for tid, cfg in configs.items()}
