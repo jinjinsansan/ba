@@ -902,6 +902,7 @@ def _run_bet_session_inner(config: dict, stop_event: threading.Event, skip_event
     _last_session_check = time.time()
     _deferred_exit_reason = None   # BETウィンドウ保護: exit checkは前ラウンドで実行済み
     _awaiting_2nd_drop = (_effective_mode_box[0] == "1drop")  # 1-dropモード時のみ2落ち確認
+    _awaiting_sync_confirm = (_effective_mode_box[0] == "sync")  # syncモード: 入場直後の再確認
     _bet_fail_count = 0            # BET完全失敗カウンタ（3連続で退室）
     _sync_monitor_counter = 0      # Syncモード: 動的規則性監視カウンタ
 
@@ -1101,6 +1102,64 @@ def _run_bet_session_inner(config: dict, stop_event: threading.Event, skip_event
             else:  # "confirmed" — Playerが2落ち確認
                 _awaiting_2nd_drop = False
                 # 次のBETフェーズでrun_round()へ
+
+        # ── Syncモード: 入場後の規則性再確認（DOM読み取り）──
+        # ロビーWSとテーブル内DOMの不整合を検出、条件未達なら即退避
+        if _awaiting_sync_confirm:
+            from regularity_monitor import evaluate_table, ENTRY_THRESHOLD, MIN_HANDS_FOR_ENTRY
+            send_action("🔍 Sync: 入場後の規則性を再確認中...")
+            send_log("[Sync-Entry] ビーズロードから規則性を再計算")
+            try:
+                bead = executor.read_bead_road()
+                if bead:
+                    eval_r = evaluate_table(list(bead))
+                    reg = eval_r['regularity']
+                    hands = eval_r['hands']
+                    send_log(f"[Sync-Entry] テーブル内: {hands}ハンド reg={reg:.0f}")
+                    if hands < MIN_HANDS_FOR_ENTRY or reg < ENTRY_THRESHOLD:
+                        send_action(f"⚠️ Sync: 条件未達 (hands={hands} reg={reg:.0f}) — 退避")
+                        send_log(f"[Sync-Entry] ❌ 入場後確認失敗: {hands}ハンド reg={reg:.0f} < 閾値 → 退避")
+                        executor.exit_table()
+                        import random as _rand_se
+                        _w = _rand_se.uniform(5, 10)
+                        send_log(f"[Sync] 🚶 ロビーで{_w:.0f}秒待機...")
+                        if stop_event.wait(_w):
+                            break
+                        # 次の候補テーブルを探す
+                        if not scraper.get_all_table_configs():
+                            try:
+                                scraper.setup_ws_intercept()
+                            except Exception:
+                                pass
+                        res_s = find_sync_table()
+                        if not res_s:
+                            break
+                        target_tid, target_name = res_s
+                        with scraper._lock:
+                            scraper._target_table_ids.add(target_tid)
+                            scraper._target_table_names[target_tid] = target_name
+                            scraper._new_shoe_signals[target_tid] = False
+                            scraper._shoe_epochs[target_tid] = int(time.time())
+                        send_action(f"🚪 {target_name} に入場中...")
+                        if not executor.enter_table(target_tid, target_name):
+                            fr = full_recovery()
+                            if not fr:
+                                break
+                            target_tid, target_name = fr
+                            if not executor.enter_table(target_tid, target_name):
+                                break
+                        _awaiting_sync_confirm = True  # 新しいテーブルでも再確認
+                        continue
+                    else:
+                        send_action(f"✅ Sync: 確認OK (hands={hands} reg={reg:.0f}) — BET開始")
+                        send_log(f"[Sync-Entry] ✅ 入場後確認OK: {hands}ハンド reg={reg:.0f} → BET開始")
+                        _awaiting_sync_confirm = False
+                else:
+                    send_log("[Sync-Entry] ⚠️ ビーズロード空 — 継続（初回BET後に動的監視で判定）")
+                    _awaiting_sync_confirm = False
+            except Exception as e:
+                send_log(f"[Sync-Entry] ⚠️ エラー: {e}")
+                _awaiting_sync_confirm = False
 
         # BET phase — amount comes from session (remote: from VPS state; local: from tracker)
         bet_amount = session.get_bet_amount()
@@ -1347,6 +1406,7 @@ def _run_bet_session_inner(config: dict, stop_event: threading.Event, skip_event
                         target_tid, target_name = fr
                         if not executor.enter_table(target_tid, target_name):
                             break
+                    _awaiting_sync_confirm = True  # 新テーブルで再確認
                     continue
                 else:
                     send_action(f"✅ Sync: 継続中 (reg={monitor['regularity']:.0f})")
