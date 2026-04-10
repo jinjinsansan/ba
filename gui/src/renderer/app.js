@@ -841,10 +841,15 @@ window.valhalla.onAgentMessage((msg) => {
       if (msg.balance) {
         $('#balance').textContent = `$${msg.balance.toFixed(2)}`;
       }
-      // Update session + daily P&L from round_profit delta
-      if (typeof msg.round_profit === 'number') {
-        sessionTotal += msg.round_profit;
+      // === Phase A1: VPS の cumulative_money を sessionTotal の唯一の真実とする ===
+      // ローカル累積 (sessionTotal += round_profit) ではメッセージ取りこぼしで
+      // ズレが生じるため、毎回 VPS の値で上書きする。
+      if (typeof msg.cumulative_money === 'number') {
+        sessionTotal = msg.cumulative_money;
         updateSessionDisplay();
+      }
+      // daily P&L は round_profit delta で加算 (Phase A3 で Supabase 化予定)
+      if (typeof msg.round_profit === 'number') {
         addRoundToDaily(msg.round_profit);
         scheduleGuiStateSync(); // Supabaseに定期保存（5秒デバウンス）
       }
@@ -886,12 +891,19 @@ window.valhalla.onAgentMessage((msg) => {
       }
       // Developer panel
       updateDevPanel(msg);
-      // Resume時: VPS累計損益でセッションPNLを同期（1回のみ）
-      if (!_pnlSynced && typeof msg.cumulative_money === 'number') {
+      // === Phase A1: VPS cumulative_money を毎回同期 (旧: _pnlSynced で1回のみ) ===
+      // status メッセージは定期送信されるため、ここで毎回上書きすることで
+      // round_result メッセージを取りこぼしてもズレが補正される
+      if (typeof msg.cumulative_money === 'number') {
+        const oldTotal = sessionTotal;
         sessionTotal = msg.cumulative_money;
-        _pnlSynced = true;
-        updateSessionDisplay();
-        addLog(`Session P&L synced from VPS: $${sessionTotal >= 0 ? '+' : ''}${sessionTotal.toFixed(2)}`, 'info');
+        if (!_pnlSynced) {
+          _pnlSynced = true;
+          addLog(`Session P&L synced from VPS: $${sessionTotal >= 0 ? '+' : ''}${sessionTotal.toFixed(2)}`, 'info');
+        }
+        if (Math.abs(oldTotal - sessionTotal) > 0.01) {
+          updateSessionDisplay();
+        }
       }
       break;
     }
