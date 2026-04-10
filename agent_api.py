@@ -958,6 +958,8 @@ def _run_bet_session_inner(config: dict, stop_event: threading.Event, skip_event
     _awaiting_sync_confirm = (_effective_mode_box[0] == "sync")  # syncモード: 入場直後の再確認
     _bet_fail_count = 0            # BET完全失敗カウンタ（3連続で退室）
     _sync_monitor_counter = 0      # Syncモード: 動的規則性監視カウンタ
+    _consec_banker_loss = 0        # 連続BankerLossカウンタ（ドラゴン回避）
+    DRAGON_LOSS_THRESHOLD = 3      # N連敗で MaruBatsu state を即リセット
 
     while not stop_event.is_set() and round_count < MAX_ROUNDS:
         # ── フリーズ検出ウォッチドッグ ──
@@ -1362,6 +1364,22 @@ def _run_bet_session_inner(config: dict, stop_event: threading.Event, skip_event
                 send_action(f"LOSE. -${ba:.0f}. Balance: ${bal:.2f}")
 
             send_result(res, won, ba, bal, len(turns), turns_disp, cp, cm, round_profit)
+
+            # ── ドラゴン回避: 連続Banker敗北カウンタ ──
+            # Player BET 前提: Banker結果 = 敗北。Tie はカウントリセットせず維持
+            if res == "banker":
+                _consec_banker_loss += 1
+                if _consec_banker_loss >= DRAGON_LOSS_THRESHOLD:
+                    send_action(f"🐉 Dragon detected ({_consec_banker_loss} Bankers) — resetting session")
+                    send_log(f"[dragon] {_consec_banker_loss} consecutive Banker losses → reset_session")
+                    try:
+                        session.reset_session("dragon-avoidance")
+                    except Exception as _de:
+                        send_log(f"[dragon] reset failed: {_de}")
+                    _consec_banker_loss = 0
+            elif res == "player":
+                _consec_banker_loss = 0
+            # tie の場合は維持（連敗カウントは中断しない）
 
         # Set complete
         if result.get("completed_set"):
