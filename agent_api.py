@@ -471,6 +471,86 @@ def _run_bet_session_inner(config: dict, stop_event: threading.Event, skip_event
 
     BACCARAT_LOBBY_URL = "https://stake.com/casino/games/evolution-baccarat-lobby"
 
+    # === Sync Mode: 推奨テーブル（Phase 1: ハードコード、Phase 2でSupabase化）===
+    SYNC_RECOMMENDED_TABLES = config.get("recommended_tables") or [
+        "Japanese Speed Baccarat A",
+        "Korean Speed Baccarat B",
+    ]
+
+    def find_sync_table() -> tuple[str, str] | None:
+        """推奨テーブルから規則性の高いものを選択（入場前の静的判断）
+
+        条件:
+          1. 推奨リストにあるテーブル
+          2. ハンド数 >= 20
+          3. 規則性スコア >= 70
+        優先順位: リストの順
+        SESSION EXPIRED対策: 90秒ごとにiframeタッチ
+        """
+        from regularity_monitor import evaluate_table, raw_history_to_results, ENTRY_THRESHOLD
+
+        send_action(f"Scanning recommended tables for sync mode...")
+        send_log(f"[sync] Scanning: {SYNC_RECOMMENDED_TABLES}")
+        last_heartbeat = time.time()
+
+        while not stop_event.is_set():
+            # ハートビート（90秒ごと）
+            if time.time() - last_heartbeat > 90:
+                try:
+                    inner = executor._get_evo_inner()
+                    if inner:
+                        inner.evaluate("() => document.documentElement.scrollTop", timeout=3000)
+                except Exception:
+                    pass
+                if not scraper.get_all_table_configs():
+                    try:
+                        scraper.setup_ws_intercept()
+                    except Exception:
+                        pass
+                last_heartbeat = time.time()
+
+            configs = scraper.get_all_table_configs()
+            # name → tid マップ
+            name_to_tid = {cfg.get("title", ""): tid for tid, cfg in configs.items()}
+
+            # 推奨テーブルを順に評価
+            best = None
+            for rec_name in SYNC_RECOMMENDED_TABLES:
+                tid = name_to_tid.get(rec_name)
+                if not tid:
+                    continue
+                raw = scraper.get_raw_history(tid)
+                results = raw_history_to_results(raw)
+                eval_result = evaluate_table(results)
+                if eval_result['can_enter']:
+                    if best is None or eval_result['regularity'] > best[2]:
+                        best = (tid, rec_name, eval_result['regularity'])
+
+            if best:
+                tid, tname, reg = best
+                send_action(f"Sync: {tname} (reg={reg:.0f}) -- entering")
+                send_log(f"[sync] Selected {tname} reg={reg:.0f}")
+                return tid, tname
+
+            stop_event.wait(3)
+
+        return None
+
+    def check_sync_regularity(tid) -> dict:
+        """動的監視: 現在のテーブルの規則性をチェック（BET中）
+
+        ロビーWSではなくexecutor.read_bead_road()でDOMから読む
+        （入場後はロビーWSが切断されるため）
+        """
+        from regularity_monitor import evaluate_table
+        try:
+            bead = executor.read_bead_road()
+            if bead:
+                return evaluate_table(list(bead))
+        except Exception as e:
+            send_log(f"[sync-monitor] bead read failed: {e}")
+        return {'regularity': 0, 'hands': 0, 'can_enter': False, 'should_exit': False}
+
     def full_recovery() -> tuple[str, str] | None:
         """最終手段フルリカバリ: ページ完全リロード→ログイン確認→WS再接続→テーブル再選定
 
@@ -715,6 +795,20 @@ def _run_bet_session_inner(config: dict, stop_event: threading.Event, skip_event
             scraper.stop()
             return
 
+    # === Syncモード: 推奨テーブルから規則性が高いものを選定 ===
+    if _effective_mode_box[0] == "sync":
+        res_sync = find_sync_table()
+        if not res_sync:
+            send_log("Stopped during sync table selection")
+            scraper.stop()
+            return
+        target_tid, target_name = res_sync
+        with scraper._lock:
+            scraper._target_table_ids.add(target_tid)
+            scraper._target_table_names[target_tid] = target_name
+            scraper._new_shoe_signals[target_tid] = False
+            scraper._shoe_epochs[target_tid] = int(time.time())
+
     # === Enter table (診断ログ付き) ===
     send_action(f"Entering table: {target_name}...")
 
@@ -784,6 +878,7 @@ def _run_bet_session_inner(config: dict, stop_event: threading.Event, skip_event
     _deferred_exit_reason = None   # BETウィンドウ保護: exit checkは前ラウンドで実行済み
     _awaiting_2nd_drop = (_effective_mode_box[0] == "1drop")  # 1-dropモード時のみ2落ち確認
     _bet_fail_count = 0            # BET完全失敗カウンタ（3連続で退室）
+    _sync_monitor_counter = 0      # Syncモード: 動的規則性監視カウンタ
 
     while not stop_event.is_set() and round_count < MAX_ROUNDS:
         # ── フリーズ検出ウォッチドッグ ──
@@ -1187,6 +1282,46 @@ def _run_bet_session_inner(config: dict, stop_event: threading.Event, skip_event
         bal = executor.get_balance() if not dry_run else 0
         send_status(session, bal)
 
+        # ── Syncモード: 動的規則性監視（5ハンドごと）──
+        # 規則性が崩壊したら退避して次の推奨テーブルへ
+        if _effective_mode_box[0] == "sync" and target_tid:
+            _sync_monitor_counter += 1
+            if _sync_monitor_counter >= 5:
+                _sync_monitor_counter = 0
+                monitor = check_sync_regularity(target_tid)
+                if monitor['should_exit']:
+                    send_action(f"Sync: regularity dropped to {monitor['regularity']:.0f} — switching table")
+                    send_log(f"[sync-monitor] reg={monitor['regularity']:.0f} hands={monitor['hands']} — exit")
+                    executor.exit_table()
+                    import random as _rand_sync
+                    _wait = _rand_sync.uniform(5, 15)
+                    if stop_event.wait(_wait):
+                        break
+                    if not scraper.get_all_table_configs():
+                        try:
+                            scraper.setup_ws_intercept()
+                        except Exception:
+                            pass
+                    res_sync = find_sync_table()
+                    if not res_sync:
+                        break
+                    target_tid, target_name = res_sync
+                    with scraper._lock:
+                        scraper._target_table_ids.add(target_tid)
+                        scraper._target_table_names[target_tid] = target_name
+                        scraper._new_shoe_signals[target_tid] = False
+                        scraper._shoe_epochs[target_tid] = int(time.time())
+                    if not executor.enter_table(target_tid, target_name):
+                        fr = full_recovery()
+                        if not fr:
+                            break
+                        target_tid, target_name = fr
+                        if not executor.enter_table(target_tid, target_name):
+                            break
+                    continue
+                else:
+                    send_log(f"[sync-monitor] reg={monitor['regularity']:.0f} hands={monitor['hands']} — OK")
+
         # ── 1落ちロジック: Player負け（Banker勝ち）→ テーブル退出 → ロビー観察 ──
         # normalモードではBanker負けでも退室せず、そのままテーブルに留まる
         if result.get("result") == "banker" and _effective_mode_box[0] == "1drop":
@@ -1354,7 +1489,7 @@ def main():
 
                 elif msg_type == "change_mode":
                     new_mode = msg.get("mode", "1drop")
-                    if new_mode in ("normal", "1drop", "mix"):
+                    if new_mode in ("normal", "1drop", "mix", "sync"):
                         _bet_mode_box[0] = new_mode
                         _effective_mode_box[0] = "normal" if new_mode == "mix" else new_mode
                         send_log(f"BET mode changed to: {new_mode} (effective: {_effective_mode_box[0]})")
