@@ -34,7 +34,7 @@ ADMIN_EMAIL = os.getenv("LAPLACE_ADMIN_EMAIL", "goldbenchan@gmail.com")
 # 条件
 MIN_SHOES = 30
 MIN_HANDS_PER_SHOE = 50
-MAX_DD_THRESHOLD = 1500
+MAX_DD_THRESHOLD = 2500  # 緩和: 1500 → 2500 (より多くのテーブルを推奨)
 PROFIT_TARGET = 50
 LOSS_CUT = 3000
 
