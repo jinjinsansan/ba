@@ -848,20 +848,20 @@ window.valhalla.onAgentMessage((msg) => {
       if (msg.balance) {
         $('#balance').textContent = `$${msg.balance.toFixed(2)}`;
       }
-      // === Phase A1+: VPS cumulative_money の差分から daily を計算 ===
-      // 旧 round_profit (1ハンドごとのBET額) は MaruBatsu のセット完了タイミングと
-      // 不一致になるため使用しない。cumulative_money の delta を daily に加算する
-      // ことで sessionTotal と daily が数学的に保証された一致になる。
-      if (typeof msg.cumulative_money === 'number') {
-        const newCm = msg.cumulative_money;
-        const delta = newCm - _lastCumulativeMoney;
-        _lastCumulativeMoney = newCm;
-        sessionTotal = newCm;
+      // === Phase A1++: 1ハンドごとに round_profit で smooth 更新 ===
+      // (旧 A1+ で cumulative_money のみ使用 → 7ハンドに1回しか更新されない問題を修正)
+      // round_profit: 各ハンドの BET 額 ($win/-$lose)
+      // 1ハンドごとに sessionTotal/daily を更新 → スムーズなUX
+      // cumulative_money は status メッセージ受信時の reconciliation 用 (drift 補正)
+      if (typeof msg.round_profit === 'number') {
+        sessionTotal += msg.round_profit;
+        addRoundToDaily(msg.round_profit);
         updateSessionDisplay();
-        if (Math.abs(delta) >= 0.01) {
-          addRoundToDaily(delta);
+        // _lastCumulativeMoney は次の cumulative_money を基準にする
+        if (typeof msg.cumulative_money === 'number') {
+          _lastCumulativeMoney = msg.cumulative_money;
         }
-        scheduleGuiStateSync();  // Supabaseに定期保存（5秒デバウンス）
+        scheduleGuiStateSync();
       }
       break;
     }
@@ -901,19 +901,28 @@ window.valhalla.onAgentMessage((msg) => {
       }
       // Developer panel
       updateDevPanel(msg);
-      // === Phase A1: VPS cumulative_money を毎回同期 (旧: _pnlSynced で1回のみ) ===
-      // status メッセージは round 結果ではなく単なる sync なので daily に加算しない
-      // sessionTotal と _lastCumulativeMoney 両方を同期 (次の round_result の delta 計算のため)
+      // === Phase A1++: 初回のみ sessionTotal を VPS から同期 (resume時) ===
+      // status は定期送信されるため、毎回上書きすると セット途中で sessionTotal が
+      // リセットされてしまう。初回のみ同期し、以降は round_profit accumulator に任せる。
+      // ドリフト検知: 値が大きく違う場合は警告ログのみ (override しない)
       if (typeof msg.cumulative_money === 'number') {
-        const oldTotal = sessionTotal;
-        sessionTotal = msg.cumulative_money;
-        _lastCumulativeMoney = msg.cumulative_money;
         if (!_pnlSynced) {
+          // 初回のみ同期 (resume直後)
+          sessionTotal = msg.cumulative_money;
+          _lastCumulativeMoney = msg.cumulative_money;
           _pnlSynced = true;
-          addLog(`Session P&L synced from VPS: $${sessionTotal >= 0 ? '+' : ''}${sessionTotal.toFixed(2)}`, 'info');
-        }
-        if (Math.abs(oldTotal - sessionTotal) > 0.01) {
           updateSessionDisplay();
+          addLog(`Session P&L synced from VPS: $${sessionTotal >= 0 ? '+' : ''}${sessionTotal.toFixed(2)}`, 'info');
+        } else {
+          // ドリフト検知 (override せず警告のみ)
+          const diff = Math.abs(sessionTotal - msg.cumulative_money);
+          if (diff > 1.0) {
+            // セット途中は cumulative_money が古いので、大きい diff は許容
+            // 50以上のズレは異常
+            if (diff > 50) {
+              console.warn(`[pnl-drift] sessionTotal=${sessionTotal} vs VPS cm=${msg.cumulative_money} (diff=${diff.toFixed(2)})`);
+            }
+          }
         }
       }
       break;
