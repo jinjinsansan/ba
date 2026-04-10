@@ -101,7 +101,13 @@ let _startedAt = 0;  // START押下時刻 (stopped誤検知防止用)
 let _pnlSynced = false;  // VPS累計PNL同期フラグ（resume時に1回だけ同期）
 
 $('#btnStart').addEventListener('click', async () => {
-  const config = { ...loadSettings(), table_filter: loadTableFilter() };
+  // Syncモード用: 起動時にサーバーから最新の推奨テーブルを取得
+  await fetchRecommendedTables();
+  const config = {
+    ...loadSettings(),
+    table_filter: loadTableFilter(),
+    recommended_tables: getEnabledRecommendedTables(),
+  };
   const hasPrev = localStorage.getItem('valhalla_session_state');
   if (hasPrev) {
     const choice = await showContinueDialog();
@@ -240,6 +246,59 @@ async function syncTableFilterToServer(email, filter) {
     });
   } catch (e) {
     console.warn('[sync] bot-config sync failed:', e);
+  }
+}
+
+// --- Recommended Tables (Supabase) ---
+async function fetchRecommendedTables() {
+  const email = loadSettings().user_email;
+  const qs = email
+    ? `?email=${encodeURIComponent(email)}&api_key=${encodeURIComponent(LAPLACE_API_KEY)}`
+    : `?api_key=${encodeURIComponent(LAPLACE_API_KEY)}`;
+  try {
+    const res = await fetch(`${SITE_URL}/api/recommended-tables${qs}`);
+    const data = await res.json();
+    if (data.tables && Array.isArray(data.tables)) {
+      localStorage.setItem('recommended_tables', JSON.stringify(data.tables));
+      localStorage.setItem('recommended_tables_source', data.source || 'unknown');
+      return data.tables;
+    }
+  } catch (e) {
+    console.warn('[sync] recommended-tables fetch failed:', e);
+  }
+  // fallback
+  const cached = localStorage.getItem('recommended_tables');
+  return cached ? JSON.parse(cached) : [
+    { name: 'Japanese Speed Baccarat A', enabled: true, priority: 1 },
+    { name: 'Korean Speed Baccarat B', enabled: true, priority: 2 },
+  ];
+}
+
+async function saveRecommendedTablesToServer(tables) {
+  const email = loadSettings().user_email;
+  if (!email) return;
+  try {
+    await fetch(`${SITE_URL}/api/recommended-tables`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email, api_key: LAPLACE_API_KEY, tables }),
+    });
+  } catch (e) {
+    console.warn('[sync] recommended-tables save failed:', e);
+  }
+}
+
+function getEnabledRecommendedTables() {
+  const cached = localStorage.getItem('recommended_tables');
+  if (!cached) return ['Japanese Speed Baccarat A', 'Korean Speed Baccarat B'];
+  try {
+    const tables = JSON.parse(cached);
+    return tables
+      .filter(t => t.enabled !== false)
+      .sort((a, b) => (a.priority || 999) - (b.priority || 999))
+      .map(t => t.name);
+  } catch {
+    return ['Japanese Speed Baccarat A', 'Korean Speed Baccarat B'];
   }
 }
 
