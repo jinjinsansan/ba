@@ -24,7 +24,7 @@ from typing import Optional
 ROUTING_TABLE = {
     "テレコ+ニコ混合": "A_b2_obs3",  # BB後のみBET / BBB観戦
     "テレコ崩れ":      "A_b2_obs4",  # BB後のみBET / BBBB観戦
-    "縦流れ":          None,         # BET禁止
+    "縦流れ":          "D",          # 縦流れは Strategy D を適用
     "ブリッジ":        None,         # BET禁止
     "不明":            None,         # シュー序盤
     "ニコニコ・ニコイチ": None,       # 全戦略負け
