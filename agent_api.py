@@ -659,11 +659,13 @@ def _run_bet_session_inner(config: dict, stop_event: threading.Event, skip_event
                         seq_str = ''.join(r for r in results if r in ('P', 'B', 'T'))
                         pat = classify_pattern(seq_str)
                         pattern_label = f" pat={pat}"
-                        if pat == "テレコ+ニコ混合":
+                        if pat == "縦流れ":
+                            pattern_priority = 3  # ドラゴン優先
+                        elif pat == "テレコ+ニコ混合":
                             pattern_priority = 2  # ★最強 (ROI +12〜15%)
                         elif pat == "テレコ崩れ":
                             pattern_priority = 1  # 中位 (ROI +0〜+7%)
-                        elif pat in ("縦流れ", "ブリッジ", "ニコニコ・ニコイチ"):
+                        elif pat in ("ブリッジ", "ニコニコ・ニコイチ", "不規則", "偏在"):
                             pattern_priority = 0  # BET禁止
                         else:  # 不明
                             pattern_priority = 0  # シュー序盤は選ばない
@@ -844,7 +846,8 @@ def _run_bet_session_inner(config: dict, stop_event: threading.Event, skip_event
             scanned = 0
             tnm_count = 0   # テレコ+ニコ混合 候補数
             tk_count = 0    # テレコ崩れ 候補数
-            reject_count = 0  # BET禁止 (縦流れ/ブリッジ/不明) 数
+            tate_count = 0  # 縦流れ 候補数
+            reject_count = 0  # BET禁止 数
 
             for tid, cfg in configs.items():
                 rec_name = cfg.get("title", tid)
@@ -876,7 +879,14 @@ def _run_bet_session_inner(config: dict, stop_event: threading.Event, skip_event
                     try:
                         seq_str = ''.join(r for r in results if r in ('P', 'B', 'T'))
                         pat = classify_pattern(seq_str)
-                        if pat == "テレコ+ニコ混合":
+                        b_lead = b_count - p_count
+                        if b_lead >= 0:
+                            pattern_priority = 0
+                            reject_count += 1
+                        elif pat == "縦流れ":
+                            pattern_priority = 3
+                            tate_count += 1
+                        elif pat == "テレコ+ニコ混合":
                             pattern_priority = 2
                             tnm_count += 1
                         elif pat == "テレコ崩れ":
@@ -902,17 +912,22 @@ def _run_bet_session_inner(config: dict, stop_event: threading.Event, skip_event
             if time.time() - last_status > 15:
                 send_log(
                     f"[Pattern] スキャン: 全{len(configs)}台 / 候補{scanned}台 / "
-                    f"テレコ+ニコ混合★★={tnm_count} / テレコ崩れ★={tk_count} / "
+                    f"縦流れ★★★={tate_count} / テレコ+ニコ混合★★={tnm_count} / テレコ崩れ★={tk_count} / "
                     f"BET禁止={reject_count} (閾値reg≥{dynamic_threshold})"
                 )
                 last_status = time.time()
                 _wait_sec = int(elapsed_wait)
-                send_action(f"⏱️ Pattern待機 ({_wait_sec}s) — ★★{tnm_count} ★{tk_count}")
+                send_action(f"⏱️ Pattern待機 ({_wait_sec}s) — ★★★{tate_count} ★★{tnm_count} ★{tk_count}")
 
             # === 結果 ===
             if best:
                 tid, tname, reg, pc, bc, pr, pri, pat = best
-                pri_label = "★★テレコ+ニコ混合" if pri == 2 else "★テレコ崩れ"
+                if pri == 3:
+                    pri_label = "★★★縦流れ"
+                elif pri == 2:
+                    pri_label = "★★テレコ+ニコ混合"
+                else:
+                    pri_label = "★テレコ崩れ"
                 send_action(f"🎯 Pattern: {tname} に入場 ({pri_label} reg={reg:.0f})")
                 send_log(
                     f"[Pattern] ★ 入場決定: {tname} {pri_label} "
@@ -2107,12 +2122,44 @@ def _run_bet_session_inner(config: dict, stop_event: threading.Event, skip_event
         if _effective_mode_box[0] in ("pattern", "pattern_test"):
             try:
                 from pattern_classifier import classify_pattern
-                from strategy_router import decide_bet
+                from regularity_monitor import MIN_HANDS_FOR_ENTRY
+                from strategy_router import decide_bet_blead, compute_b_lead
                 bead = executor.read_bead_road() or ""
                 pattern = classify_pattern(bead)
+                b_lead, p_cnt, b_cnt = compute_b_lead(bead)
+
+                if (p_cnt + b_cnt) >= MIN_HANDS_FOR_ENTRY and b_lead >= 0:
+                    zone = "死亡ゾーン" if b_lead <= 5 else "Banker dominant"
+                    send_action(f"⚠️ B-lead={b_lead} ({zone}) → 退避")
+                    send_log(f"[pattern] B-lead={b_lead} P{p_cnt}/B{b_cnt} → {zone} → 退避")
+                    mark_table_exited(target_name)
+                    executor.exit_table()
+                    if stop_event.wait(BB_EXIT_LOBBY_WAIT):
+                        break
+                    if not scraper.get_all_table_configs():
+                        try:
+                            scraper.setup_ws_intercept()
+                        except Exception:
+                            pass
+                    res_sync = find_table()
+                    if not res_sync:
+                        break
+                    target_tid, target_name = res_sync
+                    with scraper._lock:
+                        scraper._target_table_ids.add(target_tid)
+                        scraper._target_table_names[target_tid] = target_name
+                        scraper._new_shoe_signals[target_tid] = False
+                        scraper._shoe_epochs[target_tid] = int(time.time())
+                    if not executor.enter_table(target_tid, target_name):
+                        fr = full_recovery()
+                        if not fr:
+                            break
+                        target_tid, target_name = fr
+                    _awaiting_sync_confirm = True
+                    continue
 
                 # BET禁止パターン → テーブル退避 → 別テーブル
-                if pattern in ("縦流れ", "ブリッジ", "ニコニコ・ニコイチ"):
+                if pattern in ("ブリッジ", "ニコニコ・ニコイチ", "不規則", "偏在"):
                     send_action(f"⚠️ パターン={pattern} → BET禁止 → 退避")
                     send_log(f"[pattern] パターン={pattern} → BET禁止 → 退避")
                     mark_table_exited(target_name)
@@ -2182,7 +2229,7 @@ def _run_bet_session_inner(config: dict, stop_event: threading.Event, skip_event
                     _pattern_unknown_count = 0
 
                 # Strategy A / D の判定 (前手から SKIP or BET P)
-                side, strat_name, reason = decide_bet(pattern, bead)
+                side, strat_name, reason = decide_bet_blead(pattern, bead)
                 if side is None:
                     # SKIP — 1ハンド観戦して次へ
                     send_log(f"[pattern-{strat_name}] {pattern} SKIP: {reason}")

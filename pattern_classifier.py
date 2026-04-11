@@ -5,8 +5,10 @@
   - "テレコ+ニコ混合"  (★最強, ROI +12〜15%)
   - "テレコ崩れ"        (中位, ROI +0〜+7%)
   - "ニコニコ・ニコイチ"  (BET禁止)
-  - "縦流れ"            (BET禁止 — サンプル不足)
-  - "ブリッジ"          (BET禁止 — サンプル不足)
+  - "縦流れ"            (Strategy D)
+  - "ブリッジ"          (BET禁止)
+  - "不規則"            (BET禁止)
+  - "偏在"              (BET禁止)
   - "不明"              (シュー序盤、まだ判定不能)
 
 判定は 大路罫線 (P/B/T 文字列を列に分解) ベース。
@@ -59,13 +61,15 @@ def classify_pattern(seq: str, min_cols: int = 5) -> str:
     """大路罫線からパターンを判定
 
     backtest (Step 3) の分類と完全一致させる。
-    判定順序が重要: テレコ+ニコ混合 を最優先 (ROI +12〜15% の最強セルだから)。
+    判定順序が重要: 縦流れ優先 → テレコ+ニコ混合 (ROI +12〜15% の最強セル)。
 
     Returns:
       "テレコ+ニコ混合"  : 1段+2段が80%以上 (★戦略A適用、ROI +12〜15%)
       "テレコ崩れ"        : 上記以外の混合 (戦略D適用、ROI +0〜+7%)
-      "縦流れ"            : pct1+pct2 < 0.80 AND 5段+ × 3回以上 (BET禁止)
-      "ブリッジ"          : pct1+pct2 < 0.80 AND テレコ → 突然5段+ (BET禁止)
+      "縦流れ"            : 5段+ × 3回以上
+      "ブリッジ"          : 短列/長列の二極化 (BET禁止)
+      "不規則"            : 列長分散が大きい (BET禁止)
+      "偏在"              : P/B 比率が 40/60 から外れる (BET禁止)
       "不明"              : 列数 < min_cols
     """
     cols = compute_big_road_columns(seq)
@@ -77,27 +81,37 @@ def classify_pattern(seq: str, min_cols: int = 5) -> str:
     pct1 = sum(1 for L in col_lens if L == 1) / n
     pct2 = sum(1 for L in col_lens if L == 2) / n
     n_long = sum(1 for L in col_lens if L >= 5)
-    max_len = max(col_lens)
+    p_count = sum(1 for ch in seq if ch == 'P')
+    b_count = sum(1 for ch in seq if ch == 'B')
+    total_pb = p_count + b_count
+    p_ratio = (p_count / total_pb) if total_pb else 0.5
+    mean_len = sum(col_lens) / n
+    variance = sum((L - mean_len) ** 2 for L in col_lens) / n
+    short_ratio = sum(1 for L in col_lens if L <= 2) / n
+    mid_ratio = sum(1 for L in col_lens if 3 <= L <= 4) / n
+    long_ratio = sum(1 for L in col_lens if L >= 5) / n
 
-    # 1. ★ テレコ+ニコ混合 を最優先 (ROI +12〜15% の最強セル)
-    # pct1+pct2 >= 0.80 なら、たとえ長列が混じっていてもこちらに分類
-    if pct1 + pct2 >= 0.80:
-        return "テレコ+ニコ混合"
-
-    # 2. 縦流れ (5段以上 × 3回以上)
+    # 1. 縦流れ (5段以上 × 3回以上)
     if n_long >= 3:
         return "縦流れ"
 
-    # 3. ブリッジ (前半テレコ + 後半5段+ 出現)
-    if max_len >= 5 and n_long >= 1:
-        long_idx = next(i for i, L in enumerate(col_lens) if L >= 5)
-        if long_idx >= 5:
-            front_lens = col_lens[:long_idx]
-            front_pct1 = sum(1 for L in front_lens if L == 1) / len(front_lens)
-            if front_pct1 >= 0.70:
-                return "ブリッジ"
+    # 2. テレコ+ニコ混合 (短列が 80%+)
+    if pct1 + pct2 >= 0.80:
+        return "テレコ+ニコ混合"
 
-    # 4. それ以外はテレコ崩れ (戦略D の対象)
+    # 3. ブリッジ (短列 + 長列の二極化)
+    if short_ratio >= 0.40 and long_ratio >= 0.20 and mid_ratio < 0.20:
+        return "ブリッジ"
+
+    # 4. 不規則 (列長分散が大きい)
+    if variance >= 2.0:
+        return "不規則"
+
+    # 5. 偏在 (P/B 比率が 40/60 から外れる)
+    if p_ratio < 0.40 or p_ratio > 0.60:
+        return "偏在"
+
+    # 6. それ以外はテレコ崩れ (戦略D の対象)
     return "テレコ崩れ"
 
 
