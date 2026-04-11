@@ -154,32 +154,13 @@ class GameWSMonitor:
                 self._balance = float(bal)
 
     def _handle_multiplier(self, value: dict):
-        """CLIENT_BACCARAT_TOTAL_MULTIPLIER_DISPLAYED の処理。
-
-        Evolution は1ラウンド中に複数の multiplier イベントを送る可能性がある:
-          - Player (我々のBET対象) → multiplier 2.0 (Player勝ち) / 0 (Banker勝ち) など
-          - Banker → multiplier 1.95 (Banker勝ち時)
-          - Tie → multiplier 8.0 (Tie時)
-          - PlayerPair / BankerPair / Lucky6 等のサイドベット
-
-        全部上書き保存すると、最後に届いたサイドベットの multiplier (例: Lucky6=0)
-        が _last_result_multiplier に残り、get_result_side が誤判定する。
-
-        修正: ★ Player の betSpot のみを保存 ★ (我々は常に Player BET なので
-        他のサイドの情報は不要)。
-        """
-        bet_spot = value.get("betSpot", "")
-        multiplier = value.get("multiplier", 0)
-        logger.info(f"Multiplier受信: betSpot={bet_spot}, multiplier={multiplier}")
-        # Player 以外 (Banker / Tie / Pair / Lucky6 等) は無視
-        if bet_spot != "Player":
-            return
         with self._lock:
             self._last_result_multiplier = {
-                "betSpot": bet_spot,
-                "multiplier": multiplier,
+                "betSpot": value.get("betSpot", ""),
+                "multiplier": value.get("multiplier", 0),
             }
             self._multiplier_received_at = time.time()
+        logger.info(f"Multiplier受信: betSpot={value.get('betSpot')}, multiplier={value.get('multiplier')}")
 
     def _handle_bet_response(self, value: dict):
         state = value.get("state", {})

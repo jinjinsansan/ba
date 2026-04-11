@@ -757,22 +757,8 @@ class BetExecutor:
         # 方法3: DOM結果オーバーレイ
         dom_result = self._detect_result_dom()
 
-        # === 矛盾チェック: 複数のソースが異なる結果を返した場合は警告 + 残高優先 ===
-        # 過去バグ: WS multiplier がサイドベット (Lucky6 等) で誤判定 → 残高と矛盾
-        # 残高 diff は最も信頼できる (実際の金銭移動) ので、矛盾時は残高を採用
-        sources = [s for s in (ws_result, balance_result, dom_result) if s]
-        if len(set(sources)) >= 2:
-            # 2つ以上のソースが異なる結果 → 矛盾
-            logger.warning(
-                f"⚠️ 結果矛盾 (ws={ws_result}, balance={balance_result}, dom={dom_result}) "
-                f"BET${bet_amount:.0f} 残高${pre_balance:.2f}→${new_balance:.2f} "
-                f"→ 残高 diff を採用"
-            )
-            # 残高 diff を最優先 (実際の金銭移動なので確実)
-            result_side = balance_result or ws_result or dom_result
-        else:
-            # 矛盾なし: WS > 残高 > DOM の通常優先順位
-            result_side = ws_result or balance_result or dom_result
+        # 最終判定: WS > 残高 > DOM
+        result_side = ws_result or balance_result or dom_result
 
         if not result_side:
             if bet_amount == 0:
