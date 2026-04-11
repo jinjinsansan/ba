@@ -1555,9 +1555,13 @@ def _run_bet_session_inner(config: dict, stop_event: threading.Event, skip_event
     entry_fail_count = 0
     session_start = time.time()
 
-    _FREEZE_TIMEOUT = 90      # WS無活動90秒でフリーズ判定
+    _FREEZE_TIMEOUT = 10 * 60  # WS無活動10分でフリーズ判定
     _SESSION_CHECK_INTERVAL = 300  # 5分おきにStakeログイン確認
     _last_session_check = time.time()
+    TRY_AGAIN_WINDOW = 5 * 60  # TRY AGAIN ループ検知ウィンドウ
+    TRY_AGAIN_LIMIT = 3        # 連続N回で再起動
+    _try_again_hits = 0
+    _try_again_window_start = time.time()
     _deferred_exit_reason = None   # BETウィンドウ保護: exit checkは前ラウンドで実行済み
     _awaiting_2nd_drop = (_effective_mode_box[0] == "1drop")  # 1-dropモード時のみ2落ち確認
     _awaiting_sync_confirm = (_effective_mode_box[0] in ("sync", "sync_pause", "pattern", "pattern_test"))  # syncモード: 入場直後の再確認
@@ -1689,6 +1693,39 @@ def _run_bet_session_inner(config: dict, stop_event: threading.Event, skip_event
                 continue
         except Exception as _se:
             send_log(f"[session] error check failed: {_se}")
+
+        # ── A0.5 TRY AGAIN ループ検知 ──
+        try:
+            err_type = executor.get_last_error_type()
+            if err_type in ("try_again", "try_again_failed"):
+                now = time.time()
+                if now - _try_again_window_start > TRY_AGAIN_WINDOW:
+                    _try_again_window_start = now
+                    _try_again_hits = 0
+                _try_again_hits += 1
+                executor.clear_last_error_type()
+                if err_type == "try_again_failed" or _try_again_hits >= TRY_AGAIN_LIMIT:
+                    send_action("⚠️ TRY AGAIN loop — restarting browser")
+                    send_log(f"[health] TRY AGAIN loop ({_try_again_hits}) → restart_browser")
+                    _try_again_hits = 0
+                    fr = restart_browser("TRY AGAIN loop")
+                    if not fr:
+                        break
+                    target_tid, target_name = fr
+                    if not executor.enter_table(target_tid, target_name):
+                        fr = full_recovery()
+                        if not fr:
+                            break
+                        target_tid, target_name = fr
+                        if not executor.enter_table(target_tid, target_name):
+                            break
+                    _awaiting_sync_confirm = (_effective_mode_box[0] in ("sync", "sync_pause", "pattern", "pattern_test"))
+                    continue
+            elif err_type is None and time.time() - _try_again_window_start > TRY_AGAIN_WINDOW:
+                _try_again_hits = 0
+                _try_again_window_start = time.time()
+        except Exception as _ta:
+            send_log(f"[health] try again guard error: {_ta}")
 
         # ── A. ブラウザ生存チェック (Camoufox死亡検知) ──
         try:

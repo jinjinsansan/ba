@@ -941,3 +941,6 @@ class BetExecutor:
 
     def get_last_error_type(self) -> str | None:
         return self._last_error_type
+
+    def clear_last_error_type(self):
+        self._last_error_type = None
