@@ -1145,7 +1145,7 @@ def _run_bet_session_inner(config: dict, stop_event: threading.Event, skip_event
             return
 
     # === Syncモード(+sync_pause): 推奨テーブルから規則性が高いものを選定 ===
-    if _effective_mode_box[0] in ("sync", "sync_pause"):
+    if _effective_mode_box[0] in ("sync", "sync_pause", "pattern"):
         res_sync = find_sync_table()
         if not res_sync:
             send_log("Stopped during sync table selection")
@@ -1226,7 +1226,7 @@ def _run_bet_session_inner(config: dict, stop_event: threading.Event, skip_event
     _last_session_check = time.time()
     _deferred_exit_reason = None   # BETウィンドウ保護: exit checkは前ラウンドで実行済み
     _awaiting_2nd_drop = (_effective_mode_box[0] == "1drop")  # 1-dropモード時のみ2落ち確認
-    _awaiting_sync_confirm = (_effective_mode_box[0] in ("sync", "sync_pause"))  # syncモード: 入場直後の再確認
+    _awaiting_sync_confirm = (_effective_mode_box[0] in ("sync", "sync_pause", "pattern"))  # syncモード: 入場直後の再確認
     _bet_fail_count = 0            # BET完全失敗カウンタ（3連続で退室）
     _sync_monitor_counter = 0      # Syncモード: 動的規則性監視カウンタ
     # ── sync_pause モード用: BB で観戦、Pで再開 (原点 465843d 版) ──
@@ -1332,7 +1332,7 @@ def _run_bet_session_inner(config: dict, stop_event: threading.Event, skip_event
                     send_log("[health] Evolution iframe 消失検知 → 予防リカバリ")
                     if not proactive_full_recovery("iframe消失"):
                         break
-                    _awaiting_sync_confirm = (_effective_mode_box[0] in ("sync", "sync_pause"))
+                    _awaiting_sync_confirm = (_effective_mode_box[0] in ("sync", "sync_pause", "pattern"))
                     continue
             except Exception as _hce:
                 send_log(f"[health] iframe チェック例外: {_hce}")
@@ -1639,6 +1639,64 @@ def _run_bet_session_inner(config: dict, stop_event: threading.Event, skip_event
                     break
             continue
 
+        # ── pattern モード: BET 直前に大路罫線パターンチェック ──
+        # backtest 結果: テレコ+ニコ混合 + Strategy A で ROI +12〜15%
+        # 詳細: PATTERN_STRATEGY_FINDINGS.md
+        if _effective_mode_box[0] == "pattern":
+            try:
+                from pattern_classifier import classify_pattern
+                from strategy_router import decide_bet
+                bead = executor.read_bead_road() or ""
+                pattern = classify_pattern(bead)
+
+                # BET禁止パターン → テーブル退避 → 別テーブル
+                if pattern in ("縦流れ", "ブリッジ", "ニコニコ・ニコイチ"):
+                    send_action(f"⚠️ パターン={pattern} → BET禁止 → 退避")
+                    send_log(f"[pattern] パターン={pattern} → BET禁止 → 退避")
+                    mark_table_exited(target_name)
+                    executor.exit_table()
+                    if stop_event.wait(BB_EXIT_LOBBY_WAIT):
+                        break
+                    if not scraper.get_all_table_configs():
+                        try:
+                            scraper.setup_ws_intercept()
+                        except Exception:
+                            pass
+                    res_sync = find_sync_table()
+                    if not res_sync:
+                        break
+                    target_tid, target_name = res_sync
+                    with scraper._lock:
+                        scraper._target_table_ids.add(target_tid)
+                        scraper._target_table_names[target_tid] = target_name
+                        scraper._new_shoe_signals[target_tid] = False
+                        scraper._shoe_epochs[target_tid] = int(time.time())
+                    if not executor.enter_table(target_tid, target_name):
+                        fr = full_recovery()
+                        if not fr:
+                            break
+                        target_tid, target_name = fr
+                    _awaiting_sync_confirm = True
+                    continue
+
+                # 不明 → シュー序盤 → BET せず1ハンド観戦
+                if pattern == "不明":
+                    send_log(f"[pattern] パターン未確定 (列数不足) → 1ハンド観戦")
+                    obs = observe_one_hand_no_bet()
+                    continue
+
+                # Strategy A / D の判定 (前手から SKIP or BET P)
+                side, strat_name, reason = decide_bet(pattern, bead)
+                if side is None:
+                    # SKIP — 1ハンド観戦して次へ
+                    send_log(f"[pattern-{strat_name}] {pattern} SKIP: {reason}")
+                    obs = observe_one_hand_no_bet()
+                    continue
+                # else: side = 'P' → 通常 BET フロー (run_round) へ進む
+                send_log(f"[pattern-{strat_name}] {pattern} BET: {reason}")
+            except Exception as _pe:
+                send_log(f"[pattern] エラー (素通り): {_pe}")
+
         # BET phase — amount comes from session (remote: from VPS state; local: from tracker)
         bet_amount = session.get_bet_amount()
         total_hands = session.total_wins + session.total_losses + session.total_ties + 1
@@ -1662,7 +1720,7 @@ def _run_bet_session_inner(config: dict, stop_event: threading.Event, skip_event
                         scraper.setup_ws_intercept()
                     except Exception:
                         pass
-                if _effective_mode_box[0] in ("sync", "sync_pause"):
+                if _effective_mode_box[0] in ("sync", "sync_pause", "pattern"):
                     res_sync = find_sync_table()
                     if not res_sync:
                         break
@@ -1865,7 +1923,7 @@ def _run_bet_session_inner(config: dict, stop_event: threading.Event, skip_event
                 time.sleep(2)
                 if casino_detour(reason=f"30分経過 ({elapsed_min:.0f}分)"):
                     # detour 後に同じテーブルへ再入場 (sync mode は新規探索)
-                    if _effective_mode_box[0] in ("sync", "sync_pause"):
+                    if _effective_mode_box[0] in ("sync", "sync_pause", "pattern"):
                         res_sync = find_sync_table()
                         if not res_sync:
                             break
@@ -1922,7 +1980,7 @@ def _run_bet_session_inner(config: dict, stop_event: threading.Event, skip_event
             send_log(f"[proactive-recovery] {reason_en} → リカバリ")
             if not proactive_full_recovery(reason_en):
                 break
-            _awaiting_sync_confirm = (_effective_mode_box[0] in ("sync", "sync_pause"))
+            _awaiting_sync_confirm = (_effective_mode_box[0] in ("sync", "sync_pause", "pattern"))
             continue
 
         # ── Mix自動切替: セット確定後にOS>=20なら1-Dropモードへ ──
@@ -1941,7 +1999,7 @@ def _run_bet_session_inner(config: dict, stop_event: threading.Event, skip_event
         # ── Syncモード(+sync_pause): 動的規則性監視（毎ハンドチェック）──
         # シュー切替は一瞬で起きるため即検出が必要
         # 規則性崩壊・ハンド数不足・Banker dominantいずれも即退避
-        if _effective_mode_box[0] in ("sync", "sync_pause") and target_tid:
+        if _effective_mode_box[0] in ("sync", "sync_pause", "pattern") and target_tid:
             monitor = check_sync_regularity(target_tid)
             _pr = monitor.get('p_ratio', 0.5)
             _pc = monitor.get('p_count', 0)
@@ -2153,7 +2211,7 @@ def main():
 
                 elif msg_type == "change_mode":
                     new_mode = msg.get("mode", "1drop")
-                    if new_mode in ("normal", "1drop", "mix", "sync", "sync_pause"):
+                    if new_mode in ("normal", "1drop", "mix", "sync", "sync_pause", "pattern"):
                         _bet_mode_box[0] = new_mode
                         _effective_mode_box[0] = "normal" if new_mode == "mix" else new_mode
                         send_log(f"BET mode changed to: {new_mode} (effective: {_effective_mode_box[0]})")
