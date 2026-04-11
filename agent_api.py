@@ -1126,6 +1126,9 @@ def _run_bet_session_inner(config: dict, stop_event: threading.Event, skip_event
     _observe_fail_count = 0        # 観戦失敗連続カウンタ
     OBSERVE_FAIL_LIMIT = 3         # N回連続失敗で観戦解除→退避判定に任せる
     BB_EXIT_LOBBY_WAIT = 15        # BB退避後にロビーで待機する秒数 (人間らしさ + Stake負荷軽減)
+    # ── Phase 1: シャッフル検知用 連続失敗カウンタ ──
+    _consec_wait_result_fail = 0   # wait_for_result が None を返した連続回数
+    WAIT_RESULT_FAIL_LIMIT = 2     # N回連続で失敗 → シャッフル中と判断 → 即テーブル退避
 
     # ── iframe 劣化対策: 予防的フルリカバリ + ヘルスチェック ──
     # Evolution iframe は長時間プレイで徐々に劣化し、最終的に完全消失する
@@ -1560,6 +1563,39 @@ def _run_bet_session_inner(config: dict, stop_event: threading.Event, skip_event
         result = session.run_round(lambda: not stop_event.is_set())
 
         if result["action"] == "exit":
+            # Phase 1: wait_for_result 連続失敗 (2回) → シャッフル中と判断 → 即テーブル退避
+            _consec_wait_result_fail += 1
+            if _consec_wait_result_fail >= WAIT_RESULT_FAIL_LIMIT:
+                send_action(f"⚠️ wait_for_result {_consec_wait_result_fail}回連続失敗 — シャッフル中と判断 → テーブル退避")
+                send_log(f"[shuffle-detect] wait_for_result 連続失敗{_consec_wait_result_fail}回 → cooldown + 別テーブル")
+                _consec_wait_result_fail = 0
+                mark_table_exited(target_name)
+                executor.exit_table()
+                if stop_event.wait(BB_EXIT_LOBBY_WAIT):
+                    break
+                if not scraper.get_all_table_configs():
+                    try:
+                        scraper.setup_ws_intercept()
+                    except Exception:
+                        pass
+                if _effective_mode_box[0] in ("sync", "sync_pause"):
+                    res_sync = find_sync_table()
+                    if not res_sync:
+                        break
+                    target_tid, target_name = res_sync
+                    with scraper._lock:
+                        scraper._target_table_ids.add(target_tid)
+                        scraper._target_table_names[target_tid] = target_name
+                        scraper._new_shoe_signals[target_tid] = False
+                        scraper._shoe_epochs[target_tid] = int(time.time())
+                    if not executor.enter_table(target_tid, target_name):
+                        fr = full_recovery()
+                        if not fr:
+                            break
+                        target_tid, target_name = fr
+                    _awaiting_sync_confirm = True
+                    continue
+
             send_action("Session interrupted — attempting re-entry...")
             executor.exit_table()
             time.sleep(5)
@@ -1672,6 +1708,7 @@ def _run_bet_session_inner(config: dict, stop_event: threading.Event, skip_event
                 continue
         else:
             _bet_fail_count = 0  # 成功したらリセット
+            _consec_wait_result_fail = 0  # Phase 1: wait_for_result 成功 → 連続失敗カウンタリセット
 
         # Send round result to GUI
         if result.get("result"):

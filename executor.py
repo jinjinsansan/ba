@@ -337,6 +337,33 @@ class BetExecutor:
 
     # ─── BET実行 ───
 
+    def is_shuffle_state(self) -> bool:
+        """シャッフル中/ディーラー交代中の状態を検知。
+        Evolution iframe にシャッフル関連テキストがあれば True。
+        BET 前の sanity check に使用。
+        """
+        try:
+            evo = self._get_evo_locator()
+            # Evolution が表示するシャッフル関連メッセージ
+            shuffle_texts = [
+                "SHUFFLING", "Shuffling", "shuffling",
+                "PLEASE WAIT", "Please wait",
+                "DEALER CHANGE", "Dealer change",
+                "DEALER WILL", "dealer will",
+                "shoe change", "Shoe Change",
+            ]
+            for keyword in shuffle_texts:
+                try:
+                    el = evo.get_by_text(keyword, exact=False).first
+                    if el.is_visible(timeout=200):
+                        logger.warning(f"シャッフル状態検知: '{keyword}'")
+                        return True
+                except Exception:
+                    continue
+        except Exception:
+            pass
+        return False
+
     def place_bet(self, side: str, amount: float) -> bool:
         """チップ選択 → BETスポットクリック → 受理確認
 
@@ -346,11 +373,17 @@ class BetExecutor:
         - BETスポットクリック間のsleepを最小化 (0.15→0.08s)
         - タイムリミット11秒、部分BETでもTrueを返す
 
-        Returns: True=BET受理(全額または部分), False=未BET
+        Returns: True=BET受理(全額または部分), False=未BET (シャッフル中含む)
         """
         if self.demo_mode:
             logger.info(f"[DEMO] ${amount:.0f} {side.upper()} BET")
             return True
+
+        # === Phase 1: シャッフル状態の事前チェック ===
+        # シャッフル中だと BET が受理されず偽 Tie になる → 事前回避
+        if self.is_shuffle_state():
+            logger.warning("BET スキップ: シャッフル状態検知")
+            return False
 
         logger.info(f"${amount:.0f} {side.upper()} BETします")
 
