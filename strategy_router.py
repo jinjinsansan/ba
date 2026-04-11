@@ -157,7 +157,9 @@ def _select_strategy_by_blead(pattern: str, b_lead: int) -> tuple[Optional[str],
         return None, f"B-lead={b_lead} (Banker dominant)"
 
     # P-dominant: B-lead < 0
-    if pattern == "縦流れ" and b_lead <= -10:
+    # ★ 縦流れは B-lead に関係なく常に D (Strategy D = 2連P後 P rider)
+    # 旧コード: pattern == "縦流れ" and b_lead <= -10 → b_lead -9〜0 で A_b2_obs3 にフォールバックするバグ
+    if pattern == "縦流れ":
         return "D", f"B-lead={b_lead} 縦流れ → D"
     if pattern == "テレコ+ニコ混合":
         return "A_b2_obs3", f"B-lead={b_lead} テレコ+ニコ混合"
