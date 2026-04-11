@@ -527,7 +527,7 @@ def _run_bet_session_inner(config: dict, stop_event: threading.Event, skip_event
           - 180秒経過: 強制ピック (最高規則性のテーブル)
           - 5分ごとにStakeログイン確認
         """
-        from regularity_monitor import evaluate_table, raw_history_to_results, ENTRY_THRESHOLD, MIN_HANDS_FOR_ENTRY
+        from regularity_monitor import evaluate_table, raw_history_to_results, ENTRY_THRESHOLD, MIN_HANDS_FOR_ENTRY, MAX_HANDS_FOR_ENTRY
 
         send_action("🔍 Syncモード: 推奨テーブルを監視中...")
         send_log(f"[Sync] 推奨テーブル: {', '.join(SYNC_RECOMMENDED_TABLES)}")
@@ -678,6 +678,8 @@ def _run_bet_session_inner(config: dict, stop_event: threading.Event, skip_event
 
                 if hands < MIN_HANDS_FOR_ENTRY:
                     table_reports.append(f"⏳ {rec_name}: {hands}ハンド（{MIN_HANDS_FOR_ENTRY}まで待機）")
+                elif hands > MAX_HANDS_FOR_ENTRY:
+                    table_reports.append(f"⏰ {rec_name}: {hands}ハンド（シュー終盤、残り少ない → スキップ）")
                 elif reg < dynamic_threshold:
                     table_reports.append(f"⚠️ {rec_name}: {hands}h reg={reg:.0f} P{p_count}/B{b_count}（規則性<{dynamic_threshold}）")
                 elif p_ratio < 0.42:
@@ -745,7 +747,7 @@ def _run_bet_session_inner(config: dict, stop_event: threading.Event, skip_event
           - p_ratio ≥ 0.42 (Banker dominant 排除)
           - パターンが BET 可能 (priority > 0)
         """
-        from regularity_monitor import evaluate_table, raw_history_to_results, ENTRY_THRESHOLD, MIN_HANDS_FOR_ENTRY
+        from regularity_monitor import evaluate_table, raw_history_to_results, ENTRY_THRESHOLD, MIN_HANDS_FOR_ENTRY, MAX_HANDS_FOR_ENTRY
         try:
             from pattern_classifier import classify_pattern
         except Exception:
@@ -754,7 +756,7 @@ def _run_bet_session_inner(config: dict, stop_event: threading.Event, skip_event
         send_action("🔍 Pattern モード: 全テーブルスキャン中...")
         send_log("[Pattern] 全エボリューションバカラテーブルから最強パターンを探索")
         send_log(f"[Pattern] 除外: lightning/super speed/always 9/salon/elite vip 等")
-        send_log(f"[Pattern] 入場条件: ハンド数≥{MIN_HANDS_FOR_ENTRY}, 規則性≥{ENTRY_THRESHOLD}")
+        send_log(f"[Pattern] 入場条件: {MIN_HANDS_FOR_ENTRY}≤ハンド数≤{MAX_HANDS_FOR_ENTRY}, 規則性≥{ENTRY_THRESHOLD}")
 
         wait_start = time.time()
         last_heartbeat = time.time()
@@ -859,7 +861,10 @@ def _run_bet_session_inner(config: dict, stop_event: threading.Event, skip_event
                 b_count = eval_result.get('b_count', 0)
 
                 # ハンド数 / 規則性 / P比率 フィルタ
-                if hands < MIN_HANDS_FOR_ENTRY or reg < dynamic_threshold or p_ratio < 0.42:
+                # MAX_HANDS_FOR_ENTRY: シュー終盤すぎ (残り少ない) を排除
+                if hands < MIN_HANDS_FOR_ENTRY or hands > MAX_HANDS_FOR_ENTRY:
+                    continue
+                if reg < dynamic_threshold or p_ratio < 0.42:
                     continue
 
                 scanned += 1
@@ -1484,7 +1489,8 @@ def _run_bet_session_inner(config: dict, stop_event: threading.Event, skip_event
     _observe_fail_count = 0        # 観戦失敗連続カウンタ (テーブル死亡検知用)
     OBSERVE_FAIL_LIMIT = 5         # N回連続失敗 → テーブル死亡疑い → full_recovery
     _pattern_unknown_count = 0     # Pattern モード: 連続「不明」カウンタ
-    PATTERN_UNKNOWN_LIMIT = 10     # N回連続「不明」 → シャッフル疑い → 退避
+    PATTERN_UNKNOWN_LIMIT = 1      # 1回でも不明 → 新シュー/シャッフル疑い → 即退避
+                                    # (流れがわからないテーブルで時間を浪費しない)
     # ── Phase 1: シャッフル検知用 連続失敗カウンタ ──
     _consec_wait_result_fail = 0   # wait_for_result が None を返した連続回数
     WAIT_RESULT_FAIL_LIMIT = 2     # N回連続で失敗 → シャッフル中と判断 → 即テーブル退避
@@ -1962,13 +1968,13 @@ def _run_bet_session_inner(config: dict, stop_event: threading.Event, skip_event
                     _awaiting_sync_confirm = True
                     continue
 
-                # 不明 → シュー序盤 → BET せず1ハンド観戦
-                # ただし、連続 PATTERN_UNKNOWN_LIMIT 回不明 → シャッフル/シュー空疑い → 退避
+                # 不明 → 新シュー / シャッフル直後 / 列数不足 → 即退避
+                # 流れがわからないテーブルで時間を浪費しない (PATTERN_UNKNOWN_LIMIT=1)
                 if pattern == "不明":
                     _pattern_unknown_count += 1
                     if _pattern_unknown_count >= PATTERN_UNKNOWN_LIMIT:
-                        send_action(f"⚠️ パターン不明 {_pattern_unknown_count}回連続 → 退避")
-                        send_log(f"[pattern] パターン不明 {_pattern_unknown_count}回連続 → シャッフル/シュー空テーブル疑い → 退避")
+                        send_action(f"⚠️ パターン不明 → 新シュー疑い → 即退避")
+                        send_log(f"[pattern] パターン不明 (列数不足/新シュー) → 即退避 + 別テーブル")
                         _pattern_unknown_count = 0
                         mark_table_exited(target_name)
                         executor.exit_table()

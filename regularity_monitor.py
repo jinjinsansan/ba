@@ -16,6 +16,8 @@ logger = logging.getLogger("baccarat.regularity")
 ENTRY_THRESHOLD = 70
 EXIT_THRESHOLD = 65
 MIN_HANDS_FOR_ENTRY = 35  # シュー約50%経過、精度87.7%
+MAX_HANDS_FOR_ENTRY = 55  # シュー終盤すぎを排除 (残り5-15ハンド = BET時間不足)
+                          # 通常シュー60-75ハンド → 入場後最低10ハンドの BET 時間確保
 CHECK_INTERVAL = 5  # BET中に5ハンドごとに再計算
 
 # P/B バランス閾値 — Banker寄り過ぎるシューを除外
