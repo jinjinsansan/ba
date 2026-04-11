@@ -769,13 +769,15 @@ def _run_bet_session_inner(config: dict, stop_event: threading.Event, skip_event
         # 4.5. Evolution iframe の存在確認 → 無ければ Evolution game URL に
         # 実際に navigate して iframe を強制ロード → バカラに戻る
         # /casino (ディレクトリ) は意味なし。実際のゲームページ必須。
+        # casino_detour 失敗時は即座に Lv4a (Page rebuild) を強制実行。
+        # Lv4a も失敗したら full_recovery 中断 (stale テーブル選定を防ぐ)。
         try:
             evo_frames = executor._get_evo_frames()
-            if not evo_frames:
+            iframe_alive = bool(evo_frames)
+            if not iframe_alive:
                 send_log("[recovery] ⚠️ Evolution iframe 不在 → ルーレット経由で復活試行")
                 send_action("Evolution iframe missing — trying roulette detour")
                 # 3つの Evolution game URL を順番に試行
-                revived = False
                 for revival_url in EVOLUTION_GAME_URLS:
                     game_name = revival_url.split('/')[-1]
                     send_log(f"[recovery] 復活試行: {game_name}")
@@ -785,12 +787,58 @@ def _run_bet_session_inner(config: dict, stop_event: threading.Event, skip_event
                         evo_check = executor._get_evo_frames()
                         if evo_check:
                             send_log(f"[recovery] ✅ {game_name} 経由で Evolution iframe 復活")
-                            revived = True
+                            iframe_alive = True
                             break
                         else:
                             send_log(f"[recovery] ⚠️ {game_name} 経由でも iframe 不在 — 次を試す")
-                if not revived:
-                    send_log("[recovery] ❌ 全 Evolution game URL 試行失敗 — 諦めて続行")
+
+                # === casino_detour 失敗 → Lv4a (Page rebuild) を強制実行 ===
+                if not iframe_alive:
+                    send_log("[recovery] ❌ 全 casino_detour 失敗 → Lv4a (Page rebuild) を強制実行")
+                    send_action("🔧 Lv4a: Page rebuild — iframe復活のため強制実行")
+                    try:
+                        if scraper.rebuild_page():
+                            send_log("[recovery-lv4a] ✅ 新規ページ作成成功 — ロビー再訪問")
+                            try:
+                                scraper.page.goto(BACCARAT_LOBBY_URL, wait_until="domcontentloaded", timeout=60000)
+                                time.sleep(10)  # SPA hydration 待機
+                                # ログイン確認
+                                for _lw in range(20):
+                                    if scraper._is_logged_in():
+                                        break
+                                    time.sleep(1)
+                                # WS 再接続
+                                try:
+                                    scraper.setup_ws_intercept()
+                                    send_log("[recovery-lv4a] Lobby WS 再接続完了")
+                                except Exception as _wse:
+                                    send_log(f"[recovery-lv4a] WS 再接続例外: {_wse}")
+                                time.sleep(3)
+                                # iframe 確認
+                                if executor._get_evo_frames():
+                                    send_log("[recovery-lv4a] ✅ rebuild 後に iframe 復活確認")
+                                    iframe_alive = True
+                                else:
+                                    # rebuild 後でも iframe 不在 → もう一度 casino_detour
+                                    send_log("[recovery-lv4a] ⚠️ rebuild 後も iframe 不在 — もう一度 detour 試行")
+                                    for revival_url in EVOLUTION_GAME_URLS:
+                                        if stop_event.is_set():
+                                            return None
+                                        if casino_detour(reason="lv4a後detour", target_url=revival_url):
+                                            time.sleep(3)
+                                            if executor._get_evo_frames():
+                                                send_log("[recovery-lv4a] ✅ rebuild + detour で iframe 復活")
+                                                iframe_alive = True
+                                                break
+                            except Exception as _gse:
+                                send_log(f"[recovery-lv4a] lobby goto 例外: {_gse}")
+                    except Exception as _re:
+                        send_log(f"[recovery-lv4a] rebuild_page 例外: {_re}")
+
+                    if not iframe_alive:
+                        send_log("[recovery] ❌ Lv4a も失敗 — full_recovery 中断 (stale テーブル選定を防止)")
+                        send_action("Recovery failed — iframe revival impossible")
+                        return None
         except Exception as _eve:
             send_log(f"[recovery] iframe 確認例外: {_eve}")
 
