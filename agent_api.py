@@ -766,30 +766,31 @@ def _run_bet_session_inner(config: dict, stop_event: threading.Event, skip_event
         if stop_event.is_set():
             return None
 
-        # 4.5. Evolution iframe の存在確認 → 無ければ casino_detour で「ページを起こす」
-        # Stake 側の不調で Evolution iframe が読み込まれない状態を検知
+        # 4.5. Evolution iframe の存在確認 → 無ければ Evolution game URL に
+        # 実際に navigate して iframe を強制ロード → バカラに戻る
+        # /casino (ディレクトリ) は意味なし。実際のゲームページ必須。
         try:
             evo_frames = executor._get_evo_frames()
             if not evo_frames:
-                send_log("[recovery] ⚠️ Evolution iframe 不在 → casino_detour で起動試行")
-                send_action("Evolution iframe missing — trying casino detour")
-                # 別ゲームに寄り道してから戻る (Evolution が「目覚める」可能性)
-                if casino_detour(reason="Evolution iframe 起動"):
-                    time.sleep(3)
-                    # 再度 iframe 確認
-                    evo_frames2 = executor._get_evo_frames()
-                    if evo_frames2:
-                        send_log("[recovery] ✅ casino_detour 後に Evolution iframe 復活")
-                    else:
-                        send_log("[recovery] ⚠️ casino_detour 後も Evolution iframe 不在 — もう1回試行")
-                        # 2回目: 別の URL で再度 detour
-                        if casino_detour(reason="Evolution iframe 起動 (2回目)"):
-                            time.sleep(3)
-                            evo_frames3 = executor._get_evo_frames()
-                            if evo_frames3:
-                                send_log("[recovery] ✅ 2回目で Evolution iframe 復活")
-                            else:
-                                send_log("[recovery] ❌ 2回試しても Evolution iframe 不在 — 諦めて続行")
+                send_log("[recovery] ⚠️ Evolution iframe 不在 → ルーレット経由で復活試行")
+                send_action("Evolution iframe missing — trying roulette detour")
+                # 3つの Evolution game URL を順番に試行
+                revived = False
+                for revival_url in EVOLUTION_GAME_URLS:
+                    game_name = revival_url.split('/')[-1]
+                    send_log(f"[recovery] 復活試行: {game_name}")
+                    if casino_detour(reason=f"iframe復活({game_name})", target_url=revival_url):
+                        # detour 後に Evolution iframe が baccarat lobby で復活したか確認
+                        time.sleep(3)
+                        evo_check = executor._get_evo_frames()
+                        if evo_check:
+                            send_log(f"[recovery] ✅ {game_name} 経由で Evolution iframe 復活")
+                            revived = True
+                            break
+                        else:
+                            send_log(f"[recovery] ⚠️ {game_name} 経由でも iframe 不在 — 次を試す")
+                if not revived:
+                    send_log("[recovery] ❌ 全 Evolution game URL 試行失敗 — 諦めて続行")
         except Exception as _eve:
             send_log(f"[recovery] iframe 確認例外: {_eve}")
 
@@ -1148,29 +1149,49 @@ def _run_bet_session_inner(config: dict, stop_event: threading.Event, skip_event
         _last_iframe_health_check = time.time()
         return True
 
-    def casino_detour(reason: str = "iframe維持") -> bool:
+    # Evolution game URLs (Evolution iframe を実際にロードするゲームページ)
+    EVOLUTION_GAME_URLS = [
+        "https://stake.com/casino/games/evolution-european-roulette",
+        "https://stake.com/casino/games/evolution-lightning-roulette",
+        "https://stake.com/casino/games/evolution-immersive-roulette",
+    ]
+
+    def casino_detour(reason: str = "iframe維持", target_url: str = None) -> bool:
         """別カジノゲームに寄り道してブラウザをアクティブに保つ。
         ロビー待機中の iframe 劣化対策。
+
+        target_url: 指定した URL に navigate (None なら ランダム選択)
         Returns: True=detour成功（ロビー復帰済）
+
+        注意: /casino (カジノトップ) は単なるディレクトリページで
+        Evolution iframe がロードされない。Evolution iframe を強制
+        ロードしたい場合は EVOLUTION_GAME_URLS から選ぶこと。
         """
         nonlocal _last_recovery_time, _last_iframe_health_check
         import random as _rand_d
-        detour_targets = [
-            "https://stake.com/casino/games/evolution-european-roulette",
-            "https://stake.com/casino/games/evolution-lightning-roulette",
-            "https://stake.com/casino/games/evolution-immersive-roulette",
-            "https://stake.com/casino",
-        ]
-        target_url = _rand_d.choice(detour_targets)
+        if target_url is None:
+            # ランダム detour: 通常運用 (人間らしさ重視)
+            detour_targets = list(EVOLUTION_GAME_URLS) + ["https://stake.com/casino"]
+            target_url = _rand_d.choice(detour_targets)
         send_action(f"🎰 Casino detour: {reason}")
         send_log(f"[detour] 寄り道開始 → {target_url}")
         try:
             scraper.page.goto(target_url, wait_until="domcontentloaded", timeout=30000)
-            # 人間らしく10-15秒滞在
+            # 人間らしく10-15秒滞在 (Evolution iframe ロード待ちも兼ねる)
             time.sleep(_rand_d.uniform(10, 15))
+            # Evolution iframe が寄り道先でロードされたか確認 (情報のみ)
+            try:
+                temp_frames = executor._get_evo_frames()
+                if temp_frames:
+                    send_log(f"[detour] 寄り道先で Evolution iframe ロード確認 ({len(temp_frames)}個)")
+                else:
+                    send_log("[detour] 寄り道先で Evolution iframe 未確認")
+            except Exception:
+                pass
             send_log("[detour] バカラロビーに復帰")
             scraper.page.goto(BACCARAT_LOBBY_URL, wait_until="domcontentloaded", timeout=30000)
-            time.sleep(5)
+            # lobby復帰後 Evolution iframe が再ロードされるまで待機 (15秒)
+            time.sleep(15)
             try:
                 scraper.setup_ws_intercept()
             except Exception as _wse:
