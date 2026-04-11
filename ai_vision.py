@@ -212,8 +212,9 @@ def check_game_state(screenshot_bytes: bytes, purpose: str = "general") -> Optio
         parsed["_purpose"] = purpose
         state = parsed.get("state", "unknown")
         can_bet = parsed.get("can_bet", False)
+        latest = parsed.get("latest_result")
         reason = str(parsed.get("reason", ""))[:60]
-        logger.info(f"[ai_vision:{purpose}] state={state} can_bet={can_bet} reason={reason}")
+        logger.info(f"[ai_vision:{purpose}] state={state} can_bet={can_bet} latest={latest} reason={reason}")
 
         # キャッシュ保存
         with _lock:

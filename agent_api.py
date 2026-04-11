@@ -1565,15 +1565,34 @@ def _run_bet_session_inner(config: dict, stop_event: threading.Event, skip_event
                 ai_can_bet = bool(ai_result.get("can_bet", False))
                 ai_latest = ai_result.get("latest_result")  # "P" | "B" | "T" | None
                 ai_reason = str(ai_result.get("reason", ""))[:40]
+
+                # AI が latest_result を返さない場合、DOM bead road をフォールバック
+                if ai_latest not in ("P", "B", "T"):
+                    try:
+                        bead = executor.read_bead_road() or ""
+                        # bead road の末尾から非Tie結果を探す
+                        for ch in reversed(bead):
+                            if ch in ('P', 'B'):
+                                ai_latest = ch
+                                break
+                    except Exception:
+                        pass
+
                 send_action(f"🐉 観戦中 [AI: {ai_state} can_bet={ai_can_bet} last={ai_latest}]")
                 send_log(f"[sync_pause-ai] {ai_state} can_bet={ai_can_bet} latest={ai_latest} reason={ai_reason}")
 
-                # 再開判定: betting_phase かつ 直近結果 P / bet OK
-                if ai_state == "betting_phase" and ai_can_bet and ai_latest == "P":
+                # 再開判定: betting_phase かつ can_bet かつ latest が P
+                # latest が読めない場合は betting_phase + can_bet のみで判定 (fallback)
+                resume_on_p = (ai_state == "betting_phase" and ai_can_bet and ai_latest == "P")
+                resume_fallback = (ai_state == "betting_phase" and ai_can_bet and ai_latest is None)
+                if resume_on_p or resume_fallback:
                     _paused_for_dragon = False
                     _consec_banker = 0
                     _observe_fail_count = 0
-                    send_log("[sync_pause-ai] ✅ BET phase + P出現 → BET再開 (MaruBatsu保持)")
+                    if resume_on_p:
+                        send_log("[sync_pause-ai] ✅ BET phase + P出現 → BET再開 (MaruBatsu保持)")
+                    else:
+                        send_log("[sync_pause-ai] ✅ BET phase (latest読取不可・fallback) → BET再開")
                     send_action("✅ Dragon ended — resuming BET")
                     continue
                 elif ai_state in ("session_expired", "iframe_dead"):
