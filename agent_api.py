@@ -1344,7 +1344,7 @@ def _run_bet_session_inner(config: dict, stop_event: threading.Event, skip_event
 
     def restart_browser(reason: str) -> tuple[str, str] | None:
         """Lv5: Camoufox プロセス再起動 + ロビー再接続 + テーブル再選定"""
-        nonlocal scraper, selector, executor, session, target_tid, target_name
+        nonlocal scraper, selector, executor, session, target_tid, target_name, _last_camoufox_restart
         send_action(f"🔁 Browser restart: {reason}")
         send_log(f"[restart] Camoufox restart triggered: {reason}")
         try:
@@ -1375,6 +1375,7 @@ def _run_bet_session_inner(config: dict, stop_event: threading.Event, skip_event
             session.executor = executor
         except Exception:
             pass
+        _last_camoufox_restart = time.time()
 
         # テーブル再選定
         send_action("Restart — selecting table...")
@@ -1574,6 +1575,8 @@ def _run_bet_session_inner(config: dict, stop_event: threading.Event, skip_event
     PROACTIVE_RECOVERY_INTERVAL = 30 * 60  # 30分
     _last_iframe_health_check = time.time()
     IFRAME_HEALTH_CHECK_INTERVAL = 5 * 60  # 5分
+    _last_camoufox_restart = time.time()
+    CAMOUFOX_RESTART_INTERVAL = 90 * 60  # 90分
 
     def proactive_full_recovery(reason: str) -> bool:
         """予防的フルリカバリ（BET中ではない時に呼出）
@@ -1646,6 +1649,32 @@ def _run_bet_session_inner(config: dict, stop_event: threading.Event, skip_event
             return False
 
     while not stop_event.is_set() and round_count < MAX_ROUNDS:
+        # ── A0. SESSION EXPIRED 即時検知 ──
+        try:
+            if executor.in_table and not executor.check_and_dismiss_error():
+                err = executor.get_last_error_type()
+                send_action("⚠️ Session expired — auto recovery")
+                send_log(f"[session] error={err} → full_recovery")
+                try:
+                    executor.exit_table()
+                except Exception:
+                    pass
+                fr = full_recovery()
+                if not fr:
+                    break
+                target_tid, target_name = fr
+                if not executor.enter_table(target_tid, target_name):
+                    fr = full_recovery()
+                    if not fr:
+                        break
+                    target_tid, target_name = fr
+                    if not executor.enter_table(target_tid, target_name):
+                        break
+                _awaiting_sync_confirm = (_effective_mode_box[0] in ("sync", "sync_pause", "pattern", "pattern_test"))
+                continue
+        except Exception as _se:
+            send_log(f"[session] error check failed: {_se}")
+
         # ── A. ブラウザ生存チェック (Camoufox死亡検知) ──
         try:
             if not scraper.is_page_alive():
@@ -1666,6 +1695,30 @@ def _run_bet_session_inner(config: dict, stop_event: threading.Event, skip_event
                 continue
         except Exception as _pe:
             send_log(f"[health] page alive check error: {_pe}")
+
+        # ── A.5 周期的 Camoufox 再起動（劣化予防） ──
+        try:
+            if time.time() - _last_camoufox_restart > CAMOUFOX_RESTART_INTERVAL:
+                safe_to_restart = (not executor.in_table) or _paused_for_dragon or len(session.tracker.current_turns) == 0
+                if safe_to_restart:
+                    send_action("🔁 Periodic browser restart")
+                    send_log("[health] periodic Camoufox restart")
+                    fr = restart_browser("periodic maintenance")
+                    if not fr:
+                        break
+                    target_tid, target_name = fr
+                    if not executor.enter_table(target_tid, target_name):
+                        fr = full_recovery()
+                        if not fr:
+                            break
+                        target_tid, target_name = fr
+                        if not executor.enter_table(target_tid, target_name):
+                            break
+                    _awaiting_sync_confirm = (_effective_mode_box[0] in ("sync", "sync_pause", "pattern", "pattern_test"))
+                    _last_camoufox_restart = time.time()
+                    continue
+        except Exception as _pr:
+            send_log(f"[health] periodic restart error: {_pr}")
 
         # ── B. iframe ヘルスチェック (5分おき、BET中以外) ──
         # Evolution iframe が消失していないか定期確認

@@ -29,6 +29,7 @@ class BetExecutor:
         self._bead_fail_count = 0
         self._bead_last_ok = 0.0
         self._entered_at = 0.0
+        self._last_error_type = None
         try:
             self.page.set_default_timeout(10000)
         except Exception:
@@ -254,6 +255,7 @@ class BetExecutor:
                             except Exception:
                                 pass
                         self._error_dialog_count = 0
+                        self._last_error_type = "session_expired"
                         return False
                 except Exception:
                     pass
@@ -266,6 +268,7 @@ class BetExecutor:
                     logger.warning(f"エラーダイアログ検出 → TRY AGAIN ({self._error_dialog_count}/2)")
                     try_again.click(timeout=3000, force=True)
                     time.sleep(5)
+                    self._last_error_type = "try_again"
                     return True
                 else:
                     logger.warning("TRY AGAIN 3回失敗 → BACK TO LOBBY")
@@ -276,10 +279,12 @@ class BetExecutor:
                     except Exception:
                         pass
                     self._error_dialog_count = 0
+                    self._last_error_type = "try_again_failed"
                     return False
         except Exception:
             pass
         self._error_dialog_count = 0
+        self._last_error_type = None
         return True
 
     # ─── ビーズロード読み取り ───
@@ -933,3 +938,6 @@ class BetExecutor:
         if self._entered_at <= 0:
             return 0.0
         return time.time() - self._entered_at
+
+    def get_last_error_type(self) -> str | None:
+        return self._last_error_type
