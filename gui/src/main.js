@@ -39,6 +39,19 @@ let pythonProcess = null;
 let sshTunnelProcess = null;
 let statusInterval = null;
 
+// === Auto-Restart on Browser/Python Crash ===
+// Camoufox がクラッシュ → Python が "Target page closed" 検知 → exit
+// → close handler が "stopped" を送信 → GUI が STOPPED 表示
+// この時に自動で Python を再起動する仕組み。
+// userInitiatedStop=false (= 予期しない終了) かつ lastStartConfig がある場合のみ自動再開。
+let userInitiatedStop = false;
+let lastStartConfig = null;
+let autoRestartCount = 0;
+let lastSpawnAt = 0;
+const MAX_AUTO_RESTARTS = 10;       // 連続失敗上限
+const AUTO_RESTART_DELAY = 5000;    // 5秒待ってから再起動
+const STABLE_RUN_THRESHOLD = 5 * 60 * 1000;  // 5分以上動いたら成功扱いでカウンタリセット
+
 // === Runtime layout ===
 //
 // Dev mode (npm start):
@@ -274,6 +287,11 @@ function startPython(config) {
 }
 
 function _doStartPython(config) {
+  // Auto-restart 用に config を保存 (browser crash 復活で使う)
+  lastStartConfig = config;
+  userInitiatedStop = false;
+  lastSpawnAt = Date.now();
+
   // Open SSH tunnel first (no-op if LAPLACE_USE_REMOTE is not set)
   startSshTunnel();
 
@@ -333,11 +351,40 @@ function _doStartPython(config) {
   // close handler — 自分自身が現在の pythonProcess の場合のみ stopped を送信
   // (再起動時に旧プロセスの close が遅延発火して UI を stopped に戻すのを防ぐ)
   const thisProcess = pythonProcess;
+  const thisSpawnAt = lastSpawnAt;
   pythonProcess.on('close', (code) => {
     console.log('[Main] Python exited:', code);
     if (pythonProcess === thisProcess || pythonProcess === null) {
       sendToRenderer('agent-message', { type: 'stopped', code });
       pythonProcess = null;
+
+      // === 自動再起動: ユーザーの STOP でない場合のみ ===
+      const ranDuration = Date.now() - thisSpawnAt;
+      if (!userInitiatedStop && lastStartConfig) {
+        // 5分以上動いていれば成功扱い → カウンタリセット
+        if (ranDuration > STABLE_RUN_THRESHOLD) {
+          console.log(`[Main] Stable run detected (${Math.round(ranDuration/1000)}s) — reset auto-restart counter`);
+          autoRestartCount = 0;
+        }
+
+        if (autoRestartCount < MAX_AUTO_RESTARTS) {
+          autoRestartCount++;
+          const msg = `🔄 自動再起動 (${autoRestartCount}/${MAX_AUTO_RESTARTS}) — ${AUTO_RESTART_DELAY/1000}秒後に bot 再開`;
+          console.log('[Main]', msg);
+          sendToRenderer('agent-message', { type: 'log', message: msg });
+          setTimeout(() => {
+            if (!pythonProcess && !userInitiatedStop && lastStartConfig) {
+              sendToRenderer('agent-message', { type: 'log', message: '🔄 自動再起動: bot を再開します...' });
+              _doStartPython(lastStartConfig);
+            }
+          }, AUTO_RESTART_DELAY);
+        } else {
+          const msg = `❌ 自動再起動 ${MAX_AUTO_RESTARTS}回失敗 — 手動 START が必要`;
+          console.error('[Main]', msg);
+          sendToRenderer('agent-message', { type: 'log', message: msg });
+          autoRestartCount = 0;  // 次の手動 START のためにリセット
+        }
+      }
     } else {
       console.log('[Main] Ignoring close from old process (new process already running)');
     }
@@ -353,6 +400,9 @@ function _doStartPython(config) {
 }
 
 function stopPython() {
+  // ユーザー主導の停止 — 自動再起動を無効化
+  userInitiatedStop = true;
+  autoRestartCount = 0;
   if (statusInterval) {
     clearInterval(statusInterval);
     statusInterval = null;
