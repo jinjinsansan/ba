@@ -379,11 +379,28 @@ class BetExecutor:
             logger.info(f"[DEMO] ${amount:.0f} {side.upper()} BET")
             return True
 
-        # === Phase 1: シャッフル状態の事前チェック ===
+        # === Phase 1: シャッフル状態の事前チェック (DOM テキスト) ===
         # シャッフル中だと BET が受理されず偽 Tie になる → 事前回避
         if self.is_shuffle_state():
-            logger.warning("BET スキップ: シャッフル状態検知")
+            logger.warning("BET スキップ: シャッフル状態検知 (DOM)")
             return False
+
+        # === Phase 2: AI Vision による BET 可否確認 (ANTHROPIC_API_KEY設定時のみ) ===
+        # 画像ベースで "今 BET 可能か" を判定。DOM では見えない状態も捕捉。
+        # AI 無効 / エラー時は None 返却で素通り (既存ロジックで判定)
+        try:
+            import ai_vision as _av
+            if _av.is_enabled():
+                can_bet = _av.check_can_bet(self.page)
+                if can_bet is False:
+                    logger.warning("BET スキップ: AI Vision が NG 判定 (シャッフル/エラー状態)")
+                    return False
+                # can_bet is None → AI 失敗、素通り
+                # can_bet is True → 通常の BET 処理へ
+        except ImportError:
+            pass  # ai_vision モジュール未配置 → スキップ
+        except Exception as _av_e:
+            logger.warning(f"AI Vision 例外 (素通り): {_av_e}")
 
         logger.info(f"${amount:.0f} {side.upper()} BETします")
 
