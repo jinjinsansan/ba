@@ -1233,6 +1233,8 @@ def _run_bet_session_inner(config: dict, stop_event: threading.Event, skip_event
     _consec_banker = 0             # 連続Banker回数
     _paused_for_dragon = False     # ドラゴン中の観戦フラグ
     PAUSE_THRESHOLD = 2            # N連続Bで観戦モード突入
+    _observe_fail_count = 0        # 観戦失敗連続カウンタ (テーブル死亡検知用)
+    OBSERVE_FAIL_LIMIT = 5         # N回連続失敗 → テーブル死亡疑い → full_recovery
     # ── Phase 1: シャッフル検知用 連続失敗カウンタ ──
     _consec_wait_result_fail = 0   # wait_for_result が None を返した連続回数
     WAIT_RESULT_FAIL_LIMIT = 2     # N回連続で失敗 → シャッフル中と判断 → 即テーブル退避
@@ -1597,20 +1599,42 @@ def _run_bet_session_inner(config: dict, stop_event: threading.Event, skip_event
                 send_log(f"[Sync-Entry] ⚠️ エラー: {e}")
                 _awaiting_sync_confirm = False
 
-        # ── sync_pause: ドラゴン中は BET せず観戦 (原点 465843d 版) ──
+        # ── sync_pause: ドラゴン中は BET せず観戦 (原点 465843d 版 + 失敗時退避) ──
         if _effective_mode_box[0] == "sync_pause" and _paused_for_dragon:
             send_action(f"🐉 Dragon pause ({_consec_banker} Bs) — observing for Player...")
             obs = observe_one_hand_no_bet()
             if obs == 'P':
                 _paused_for_dragon = False
                 _consec_banker = 0
+                _observe_fail_count = 0
                 send_log(f"[sync_pause] ✅ Player出現 → BET再開 (MaruBatsu状態保持)")
                 send_action("✅ Dragon ended — resuming BET")
             elif obs == 'B':
                 _consec_banker += 1
+                _observe_fail_count = 0
                 send_log(f"[sync_pause] 🐉 Banker継続 ({_consec_banker}連) → 観戦継続")
             else:
-                send_log(f"[sync_pause] 観戦失敗 (obs={obs}) → 1秒待機")
+                # obs=None — bead road 読み取り失敗 / wait_for_betting_phase 失敗
+                # 連続 OBSERVE_FAIL_LIMIT 回でテーブル死亡疑い → full_recovery
+                _observe_fail_count += 1
+                send_log(f"[sync_pause] 観戦失敗 ({_observe_fail_count}/{OBSERVE_FAIL_LIMIT}) → 1秒待機")
+                if _observe_fail_count >= OBSERVE_FAIL_LIMIT:
+                    send_action(f"⚠️ 観戦失敗{_observe_fail_count}回連続 → テーブル死亡疑い → full_recovery")
+                    send_log(f"[sync_pause] 観戦失敗{OBSERVE_FAIL_LIMIT}回連続 → 退避 + full_recovery")
+                    _paused_for_dragon = False
+                    _consec_banker = 0
+                    _observe_fail_count = 0
+                    try:
+                        mark_table_exited(target_name)
+                        executor.exit_table()
+                    except Exception:
+                        pass
+                    fr = full_recovery()
+                    if not fr:
+                        break
+                    target_tid, target_name = fr
+                    _awaiting_sync_confirm = True
+                    continue
                 if stop_event.wait(1):
                     break
             continue
