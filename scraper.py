@@ -1024,10 +1024,19 @@ class BaccaratScraper:
     # - lightning/prosperity/golden wealth/peek/control squeeze/no commission: コミッション/特殊ルール
     # - super speed: BET タイミングが間に合わない
     # - always 9: Banker dominant な特殊ルール (Player BET 不利)
+    # - ao vivo / rápido / rapido: ポルトガル語版 (DOM 構造が標準と違い iframe 死亡)
+    # - en vivo / en directo: スペイン語版
+    # - en direct: フランス語版
+    # - in diretta: イタリア語版
+    # - 直播 / ライブ (中国語/日本語ローカル名): 同上
     _TABLE_EXCLUDE = ("salon", "prive", "first person", "rng",
                       "lightning", "prosperity", "golden wealth",
                       "peek", "control squeeze", "no commission",
-                      "elite vip", "super speed", "always 9")
+                      "elite vip", "super speed", "always 9",
+                      "ao vivo", "rápido", "rapido",
+                      "en vivo", "en directo",
+                      "en direct", "in diretta",
+                      "直播", "ライブカジノ")
 
     def get_all_table_configs(self) -> dict[str, dict]:
         """全バカラテーブルのconfig (選定用)。除外テーブルはフィルタ済み。"""
