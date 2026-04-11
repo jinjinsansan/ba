@@ -766,6 +766,36 @@ def _run_bet_session_inner(config: dict, stop_event: threading.Event, skip_event
         if stop_event.is_set():
             return None
 
+        # 4.5. Evolution iframe の存在確認 → 無ければ casino_detour で「ページを起こす」
+        # Stake 側の不調で Evolution iframe が読み込まれない状態を検知
+        try:
+            evo_frames = executor._get_evo_frames()
+            if not evo_frames:
+                send_log("[recovery] ⚠️ Evolution iframe 不在 → casino_detour で起動試行")
+                send_action("Evolution iframe missing — trying casino detour")
+                # 別ゲームに寄り道してから戻る (Evolution が「目覚める」可能性)
+                if casino_detour(reason="Evolution iframe 起動"):
+                    time.sleep(3)
+                    # 再度 iframe 確認
+                    evo_frames2 = executor._get_evo_frames()
+                    if evo_frames2:
+                        send_log("[recovery] ✅ casino_detour 後に Evolution iframe 復活")
+                    else:
+                        send_log("[recovery] ⚠️ casino_detour 後も Evolution iframe 不在 — もう1回試行")
+                        # 2回目: 別の URL で再度 detour
+                        if casino_detour(reason="Evolution iframe 起動 (2回目)"):
+                            time.sleep(3)
+                            evo_frames3 = executor._get_evo_frames()
+                            if evo_frames3:
+                                send_log("[recovery] ✅ 2回目で Evolution iframe 復活")
+                            else:
+                                send_log("[recovery] ❌ 2回試しても Evolution iframe 不在 — 諦めて続行")
+        except Exception as _eve:
+            send_log(f"[recovery] iframe 確認例外: {_eve}")
+
+        if stop_event.is_set():
+            return None
+
         # 5. テーブル再選定
         send_action("Recovery — selecting table...")
         target_tid = None
