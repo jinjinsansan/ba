@@ -1173,6 +1173,8 @@ def _run_bet_session_inner(config: dict, stop_event: threading.Event, skip_event
     # ── sync_pause モード用: AI 有効時=観戦、無効時=即退避 ──
     _consec_banker = 0             # 連続Banker回数
     _paused_for_dragon = False     # ドラゴン中の観戦フラグ (AI 有効時のみ使用)
+    _pause_last_bead_len = 0       # 観戦モード中の前回 bead road 長
+    OBSERVE_INTERVAL = 10          # 観戦中のポーリング間隔 (秒)
     # AI 有効時は 2連B で観戦モード突入 (本来の最強戦略を復活)
     # AI 無効時は 3連B で退避 (iframe劣化対策)
     try:
@@ -1550,92 +1552,104 @@ def _run_bet_session_inner(config: dict, stop_event: threading.Event, skip_event
 
         # ── sync_pause: ドラゴン中は BET せず観戦 ──
         if _effective_mode_box[0] == "sync_pause" and _paused_for_dragon:
-            # AI 有効時: AI Vision で直接 state 判定
-            ai_result = None
+            # === 賢い観戦: ビーズロード優先 + AI 補助 (コスト最適化) ===
+            # 大半のループは bead road 読み取りのみ (無料)
+            # 新しい結果が来た時だけ AI で state 確認
             if _AI_ENABLED:
                 try:
-                    import ai_vision as _av_obs
-                    ai_result = _av_obs.check_observe_state(scraper.page)
-                except Exception as _ae:
-                    send_log(f"[sync_pause-ai] 例外: {_ae}")
+                    current_bead = executor.read_bead_road() or ""
+                except Exception:
+                    current_bead = ""
+                current_len = len(current_bead)
 
-            if ai_result is not None:
-                # AI 判定を優先
-                ai_state = ai_result.get("state", "unknown")
-                ai_can_bet = bool(ai_result.get("can_bet", False))
-                ai_latest = ai_result.get("latest_result")  # "P" | "B" | "T" | None
-                ai_reason = str(ai_result.get("reason", ""))[:40]
-
-                # AI が latest_result を返さない場合、DOM bead road をフォールバック
-                if ai_latest not in ("P", "B", "T"):
-                    try:
-                        bead = executor.read_bead_road() or ""
-                        # bead road の末尾から非Tie結果を探す
-                        for ch in reversed(bead):
-                            if ch in ('P', 'B'):
-                                ai_latest = ch
-                                break
-                    except Exception:
-                        pass
-
-                send_action(f"🐉 観戦中 [AI: {ai_state} can_bet={ai_can_bet} last={ai_latest}]")
-                send_log(f"[sync_pause-ai] {ai_state} can_bet={ai_can_bet} latest={ai_latest} reason={ai_reason}")
-
-                # 再開判定: betting_phase かつ can_bet かつ latest が P
-                # latest が読めない場合は betting_phase + can_bet のみで判定 (fallback)
-                resume_on_p = (ai_state == "betting_phase" and ai_can_bet and ai_latest == "P")
-                resume_fallback = (ai_state == "betting_phase" and ai_can_bet and ai_latest is None)
-                if resume_on_p or resume_fallback:
-                    _paused_for_dragon = False
-                    _consec_banker = 0
-                    _observe_fail_count = 0
-                    if resume_on_p:
-                        send_log("[sync_pause-ai] ✅ BET phase + P出現 → BET再開 (MaruBatsu保持)")
-                    else:
-                        send_log("[sync_pause-ai] ✅ BET phase (latest読取不可・fallback) → BET再開")
-                    send_action("✅ Dragon ended — resuming BET")
-                    continue
-                elif ai_state in ("session_expired", "iframe_dead"):
-                    # 致命的エラー → full_recovery
-                    send_log(f"[sync_pause-ai] 致命的エラー ({ai_state}) → full_recovery")
-                    _paused_for_dragon = False
-                    _consec_banker = 0
-                    fr = full_recovery()
-                    if not fr:
-                        break
-                    target_tid, target_name = fr
-                    _awaiting_sync_confirm = True
-                    continue
-                elif ai_state == "error_dialog":
-                    # TRY AGAIN 等 → テーブル退避
-                    send_log("[sync_pause-ai] error_dialog → テーブル退避")
-                    _paused_for_dragon = False
-                    _consec_banker = 0
-                    mark_table_exited(target_name)
-                    executor.exit_table()
-                    if stop_event.wait(BB_EXIT_LOBBY_WAIT):
-                        break
-                    res_sync = find_sync_table()
-                    if not res_sync:
-                        break
-                    target_tid, target_name = res_sync
-                    with scraper._lock:
-                        scraper._target_table_ids.add(target_tid)
-                        scraper._target_table_names[target_tid] = target_name
-                        scraper._new_shoe_signals[target_tid] = False
-                        scraper._shoe_epochs[target_tid] = int(time.time())
-                    if not executor.enter_table(target_tid, target_name):
-                        fr = full_recovery()
-                        if not fr:
+                # 新しい結果が来たか?
+                if current_len > _pause_last_bead_len:
+                    # 新しい char(s) を取得
+                    new_chars = current_bead[_pause_last_bead_len:]
+                    _pause_last_bead_len = current_len
+                    # 末尾から非Tie を探す
+                    latest_result = None
+                    for ch in reversed(new_chars):
+                        if ch in ('P', 'B'):
+                            latest_result = ch
                             break
-                        target_tid, target_name = fr
-                    _awaiting_sync_confirm = True
-                    continue
-                else:
-                    # shuffling / dealing / settled / unknown → 継続観戦
-                    if stop_event.wait(3):
-                        break
-                    continue
+
+                    if latest_result == 'P':
+                        # P が出た → AI で状態確認してから再開
+                        send_log(f"[sync_pause-obs] 新結果: {new_chars} → P検出 → AI確認")
+                        try:
+                            import ai_vision as _av_obs
+                            ai_result = _av_obs.check_observe_state(scraper.page)
+                        except Exception as _ae:
+                            send_log(f"[sync_pause-obs] AI例外: {_ae}")
+                            ai_result = None
+
+                        if ai_result is not None:
+                            ai_state = ai_result.get("state", "unknown")
+                            ai_can_bet = bool(ai_result.get("can_bet", False))
+                            if ai_state == "betting_phase" and ai_can_bet:
+                                _paused_for_dragon = False
+                                _consec_banker = 0
+                                _observe_fail_count = 0
+                                send_log("[sync_pause-obs] ✅ P出現 + AI確認 → BET再開 (MaruBatsu保持)")
+                                send_action("✅ Dragon ended — resuming BET")
+                                continue
+                            elif ai_state in ("session_expired", "iframe_dead"):
+                                send_log(f"[sync_pause-obs] 致命的エラー ({ai_state}) → full_recovery")
+                                _paused_for_dragon = False
+                                _consec_banker = 0
+                                fr = full_recovery()
+                                if not fr:
+                                    break
+                                target_tid, target_name = fr
+                                _awaiting_sync_confirm = True
+                                continue
+                            elif ai_state == "error_dialog":
+                                send_log("[sync_pause-obs] error_dialog → テーブル退避")
+                                _paused_for_dragon = False
+                                _consec_banker = 0
+                                mark_table_exited(target_name)
+                                executor.exit_table()
+                                if stop_event.wait(BB_EXIT_LOBBY_WAIT):
+                                    break
+                                res_sync = find_sync_table()
+                                if not res_sync:
+                                    break
+                                target_tid, target_name = res_sync
+                                with scraper._lock:
+                                    scraper._target_table_ids.add(target_tid)
+                                    scraper._target_table_names[target_tid] = target_name
+                                    scraper._new_shoe_signals[target_tid] = False
+                                    scraper._shoe_epochs[target_tid] = int(time.time())
+                                if not executor.enter_table(target_tid, target_name):
+                                    fr = full_recovery()
+                                    if not fr:
+                                        break
+                                    target_tid, target_name = fr
+                                _awaiting_sync_confirm = True
+                                continue
+                            else:
+                                # shuffling / dealing / settled / unknown → まだ待つ
+                                send_log(f"[sync_pause-obs] P出たが AI state={ai_state} → 継続観戦")
+                        else:
+                            # AI 失敗 → fallback で再開 (P出現は確認済み)
+                            _paused_for_dragon = False
+                            _consec_banker = 0
+                            _observe_fail_count = 0
+                            send_log("[sync_pause-obs] ✅ P出現 (AI失敗・fallback) → BET再開")
+                            continue
+                    elif latest_result == 'B':
+                        _consec_banker += 1
+                        send_log(f"[sync_pause-obs] 新結果: {new_chars} → Banker継続 ({_consec_banker}連)")
+                    else:
+                        # Tie のみ
+                        send_log(f"[sync_pause-obs] 新結果: {new_chars} (Tieのみ)")
+
+                # 10秒待機して次のチェック
+                send_action(f"🐉 観戦中 [bead_len={current_len}]")
+                if stop_event.wait(OBSERVE_INTERVAL):
+                    break
+                continue
 
             # === AI 無効 or AI失敗時のフォールバック (旧 DOM ベース) ===
             send_action(f"🐉 Dragon pause ({_consec_banker} Bs) — observing for Player...")
@@ -1947,8 +1961,13 @@ def _run_bet_session_inner(config: dict, stop_event: threading.Event, skip_event
                             # AI 有効 → 観戦モードへ突入 (MaruBatsu 状態保持)
                             _paused_for_dragon = True
                             _observe_fail_count = 0
+                            # 観戦開始時の bead road 長を記録 (差分検知用)
+                            try:
+                                _pause_last_bead_len = len(executor.read_bead_road() or "")
+                            except Exception:
+                                _pause_last_bead_len = 0
                             send_action(f"🐉 {_consec_banker}連B検出 → AI観戦モード")
-                            send_log(f"[sync_pause-observe] {_consec_banker}連B → AI観戦モード (MaruBatsu保持)")
+                            send_log(f"[sync_pause-observe] {_consec_banker}連B → AI観戦モード (MaruBatsu保持) bead_len={_pause_last_bead_len}")
                         else:
                             # AI 無効 → 即退避 + 別テーブル
                             _bb_exit_triggered = True
