@@ -1935,7 +1935,8 @@ def _run_bet_session_inner(config: dict, stop_event: threading.Event, skip_event
         # ── pattern モード: BET 直前に大路罫線パターンチェック ──
         # backtest 結果: テレコ+ニコ混合 + Strategy A で ROI +12〜15%
         # 詳細: PATTERN_STRATEGY_FINDINGS.md
-        if _effective_mode_box[0] == "pattern":
+        # pattern_test も同じパターン判定経路を通る ($1固定BETに分岐)
+        if _effective_mode_box[0] in ("pattern", "pattern_test"):
             try:
                 from pattern_classifier import classify_pattern
                 from strategy_router import decide_bet
@@ -2078,6 +2079,15 @@ def _run_bet_session_inner(config: dict, stop_event: threading.Event, skip_event
                 send_log(f"[pattern-{strat_name}] {pattern} BET: {reason}")
             except Exception as _pe:
                 send_log(f"[pattern] エラー (素通り): {_pe}")
+
+        # === Pattern Test モード安全装置: ここに到達したら絶対に BET しない ===
+        # 通常パターンチェックで例外発生 / 素通りした場合、本来は session.run_round() に
+        # 進むが、pattern_test では \$1 固定 BET 以外を絶対に許さない。
+        # \$50 の本気 BET 事故を防ぐため、ここで即 continue する。
+        if _effective_mode_box[0] == "pattern_test":
+            send_log("[pattern-test] ⚠️ パターン分岐外 — \$50 BET 事故防止のため SKIP (1ハンド観戦)")
+            obs = observe_one_hand_no_bet()
+            continue
 
         # BET phase — amount comes from session (remote: from VPS state; local: from tracker)
         bet_amount = session.get_bet_amount()
