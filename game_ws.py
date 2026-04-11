@@ -32,6 +32,7 @@ class GameWSMonitor:
         self._multiplier_received_at = 0.0   # multiplier受信時刻 (stale検出用)
         self._bet_placed_at = 0.0            # BET実行時刻 (stale検出用)
         self._settled_balance = None   # Settled時の残高
+        self._settled_seen_since_bet = False  # BET後にSettledを見たか (real Tie判定用)
         self._status_changed = threading.Event()
         self._connected = False
         self._last_message_at = time.time()
@@ -65,6 +66,7 @@ class GameWSMonitor:
             self._multiplier_received_at = 0.0
             self._bet_placed_at = 0.0
             self._settled_balance = None
+            self._settled_seen_since_bet = False  # BET後にSettledを見たか
             self._connected = False
             # ウォッチドッグの WS silent タイマーをリセット
             # （reset() はテーブル退出/再入場/フルリカバリで呼ばれるため、
@@ -78,6 +80,7 @@ class GameWSMonitor:
             self._bet_placed_at = time.time()
             self._last_result_multiplier = None
             self._last_confirmed = {}
+            self._settled_seen_since_bet = False  # BET 開始時にリセット
         logger.debug("BET実行記録 — multiplier/confirmed リセット")
 
     def on_ws_message(self, raw: str):
@@ -137,6 +140,7 @@ class GameWSMonitor:
 
             if new_status == "Settled":
                 self._settled_balance = self._balance
+                self._settled_seen_since_bet = True  # real Tie判定用フラグ
                 logger.info(f"Settled confirmed={confirmed} balance={self._balance}")
 
         if old != new_status:
