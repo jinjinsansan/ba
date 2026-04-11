@@ -978,6 +978,15 @@ window.valhalla.onAgentMessage((msg) => {
       syncGuiStateToServer(); // 停止時に即時保存
       break;
 
+    case 'started':
+      // 自動再起動 (watchdog / Electron auto-restart) で新しい Python が起動した時
+      // ボタン状態 (START disabled / STOP enabled) を再同期
+      _startedAt = Date.now();
+      setRunning(true);
+      setAction('Running (auto-restarted)');
+      addLog('🔄 Bot auto-restarted', 'info');
+      break;
+
     case 'log':
       addLog(msg.message || '');
       break;

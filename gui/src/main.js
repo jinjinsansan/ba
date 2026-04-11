@@ -392,6 +392,13 @@ function _doStartPython(config) {
 
   sendToAgent({ type: 'start', config });
 
+  // 自動再起動の場合は renderer に "started" を送信して UI 状態を再同期
+  // (ユーザーの START click では renderer が自分で setRunning(true) するので不要)
+  // autoRestartCount > 0 = 自動再起動経路から呼ばれた
+  if (autoRestartCount > 0) {
+    sendToRenderer('agent-message', { type: 'started' });
+  }
+
   if (!statusInterval) {
     statusInterval = setInterval(() => {
       if (pythonProcess) sendToAgent({ type: 'get_status' });
