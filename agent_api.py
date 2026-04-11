@@ -616,7 +616,7 @@ def _run_bet_session_inner(config: dict, stop_event: threading.Event, skip_event
             name_to_tid = {cfg.get("title", ""): tid for tid, cfg in configs.items()}
 
             # === Pattern モード: classify_pattern を有効化 ===
-            _is_pattern_mode = (_effective_mode_box[0] == "pattern")
+            _is_pattern_mode = (_effective_mode_box[0] in ("pattern", "pattern_test"))
             if _is_pattern_mode:
                 try:
                     from pattern_classifier import classify_pattern
@@ -931,7 +931,7 @@ def _run_bet_session_inner(config: dict, stop_event: threading.Event, skip_event
 
     def find_table() -> tuple[str, str] | None:
         """モードに応じて適切なテーブル選定関数を呼ぶ"""
-        if _effective_mode_box[0] == "pattern":
+        if _effective_mode_box[0] in ("pattern", "pattern_test"):
             return find_pattern_table()
         return find_sync_table()
 
@@ -1398,7 +1398,7 @@ def _run_bet_session_inner(config: dict, stop_event: threading.Event, skip_event
             return
 
     # === Syncモード(+sync_pause): 推奨テーブルから規則性が高いものを選定 ===
-    if _effective_mode_box[0] in ("sync", "sync_pause", "pattern"):
+    if _effective_mode_box[0] in ("sync", "sync_pause", "pattern", "pattern_test"):
         res_sync = find_table()
         if not res_sync:
             send_log("Stopped during sync table selection")
@@ -1479,7 +1479,7 @@ def _run_bet_session_inner(config: dict, stop_event: threading.Event, skip_event
     _last_session_check = time.time()
     _deferred_exit_reason = None   # BETウィンドウ保護: exit checkは前ラウンドで実行済み
     _awaiting_2nd_drop = (_effective_mode_box[0] == "1drop")  # 1-dropモード時のみ2落ち確認
-    _awaiting_sync_confirm = (_effective_mode_box[0] in ("sync", "sync_pause", "pattern"))  # syncモード: 入場直後の再確認
+    _awaiting_sync_confirm = (_effective_mode_box[0] in ("sync", "sync_pause", "pattern", "pattern_test"))  # syncモード: 入場直後の再確認
     _bet_fail_count = 0            # BET完全失敗カウンタ（3連続で退室）
     _sync_monitor_counter = 0      # Syncモード: 動的規則性監視カウンタ
     # ── sync_pause モード用: BB で観戦、Pで再開 (原点 465843d 版) ──
@@ -1491,6 +1491,10 @@ def _run_bet_session_inner(config: dict, stop_event: threading.Event, skip_event
     _pattern_unknown_count = 0     # Pattern モード: 連続「不明」カウンタ
     PATTERN_UNKNOWN_LIMIT = 1      # 1回でも不明 → 新シュー/シャッフル疑い → 即退避
                                     # (流れがわからないテーブルで時間を浪費しない)
+    # Pattern Test モード用カウンタ ($1 固定 BET、VPS 記録なし、ローカル W/L カウント)
+    _test_wins = 0
+    _test_losses = 0
+    _test_ties = 0
     # ── Phase 1: シャッフル検知用 連続失敗カウンタ ──
     _consec_wait_result_fail = 0   # wait_for_result が None を返した連続回数
     WAIT_RESULT_FAIL_LIMIT = 2     # N回連続で失敗 → シャッフル中と判断 → 即テーブル退避
@@ -1588,7 +1592,7 @@ def _run_bet_session_inner(config: dict, stop_event: threading.Event, skip_event
                     send_log("[health] Evolution iframe 消失検知 → 予防リカバリ")
                     if not proactive_full_recovery("iframe消失"):
                         break
-                    _awaiting_sync_confirm = (_effective_mode_box[0] in ("sync", "sync_pause", "pattern"))
+                    _awaiting_sync_confirm = (_effective_mode_box[0] in ("sync", "sync_pause", "pattern", "pattern_test"))
                     continue
             except Exception as _hce:
                 send_log(f"[health] iframe チェック例外: {_hce}")
@@ -2015,6 +2019,61 @@ def _run_bet_session_inner(config: dict, stop_event: threading.Event, skip_event
                     send_log(f"[pattern-{strat_name}] {pattern} SKIP: {reason}")
                     obs = observe_one_hand_no_bet()
                     continue
+
+                # === Pattern Test モード: $1 固定 BET、VPS 記録なし ===
+                if _effective_mode_box[0] == "pattern_test":
+                    test_amount = 1.0
+                    send_log(f"[pattern-test-{strat_name}] {pattern} BET ${test_amount}: {reason}")
+                    send_action(f"🧪 [TEST] BET ${test_amount} PLAYER ({pattern})")
+
+                    # BET phase 待機
+                    if not executor.wait_for_betting_phase(timeout=60, skip_round=False):
+                        send_log("[pattern-test] BET phase timeout — skip")
+                        continue
+
+                    # $1 固定 BET (実 BET だが最小単位)
+                    if not executor.place_bet("player", test_amount):
+                        send_log("[pattern-test] place_bet failed — skip")
+                        continue
+
+                    # 結果待機
+                    result_info = executor.wait_for_result(timeout=90, bet_amount=test_amount)
+                    if not result_info or not result_info.get("result"):
+                        send_log("[pattern-test] wait_for_result failed — skip")
+                        continue
+
+                    res = result_info["result"]
+                    bal = result_info.get("balance", 0)
+
+                    if res == "player":
+                        _test_wins += 1
+                        won = True
+                        send_action(f"🧪 [TEST] WIN +${test_amount:.0f} | {_test_wins}W/{_test_losses}L/{_test_ties}T")
+                    elif res == "banker":
+                        _test_losses += 1
+                        won = False
+                        send_action(f"🧪 [TEST] LOSE -${test_amount:.0f} | {_test_wins}W/{_test_losses}L/{_test_ties}T")
+                    elif res == "tie":
+                        _test_ties += 1
+                        won = None
+                        send_action(f"🧪 [TEST] TIE | {_test_wins}W/{_test_losses}L/{_test_ties}T")
+                    else:
+                        send_log(f"[pattern-test] unknown result: {res}")
+                        continue
+
+                    # GUI に test_status 送信 (sessionPNL は更新しない)
+                    send_msg({
+                        "type": "test_status",
+                        "wins": _test_wins,
+                        "losses": _test_losses,
+                        "ties": _test_ties,
+                        "last_result": res,
+                        "last_won": won,
+                        "balance": bal,
+                    })
+                    send_log(f"[pattern-test] Result: {res} → TEST {_test_wins}W/{_test_losses}L/{_test_ties}T (VPS未記録)")
+                    continue  # 通常 BET フロー (run_round) はスキップ
+
                 # else: side = 'P' → 通常 BET フロー (run_round) へ進む
                 send_log(f"[pattern-{strat_name}] {pattern} BET: {reason}")
             except Exception as _pe:
@@ -2043,7 +2102,7 @@ def _run_bet_session_inner(config: dict, stop_event: threading.Event, skip_event
                         scraper.setup_ws_intercept()
                     except Exception:
                         pass
-                if _effective_mode_box[0] in ("sync", "sync_pause", "pattern"):
+                if _effective_mode_box[0] in ("sync", "sync_pause", "pattern", "pattern_test"):
                     res_sync = find_table()
                     if not res_sync:
                         break
@@ -2246,7 +2305,7 @@ def _run_bet_session_inner(config: dict, stop_event: threading.Event, skip_event
                 time.sleep(2)
                 if casino_detour(reason=f"30分経過 ({elapsed_min:.0f}分)"):
                     # detour 後に同じテーブルへ再入場 (sync mode は新規探索)
-                    if _effective_mode_box[0] in ("sync", "sync_pause", "pattern"):
+                    if _effective_mode_box[0] in ("sync", "sync_pause", "pattern", "pattern_test"):
                         res_sync = find_table()
                         if not res_sync:
                             break
@@ -2303,7 +2362,7 @@ def _run_bet_session_inner(config: dict, stop_event: threading.Event, skip_event
             send_log(f"[proactive-recovery] {reason_en} → リカバリ")
             if not proactive_full_recovery(reason_en):
                 break
-            _awaiting_sync_confirm = (_effective_mode_box[0] in ("sync", "sync_pause", "pattern"))
+            _awaiting_sync_confirm = (_effective_mode_box[0] in ("sync", "sync_pause", "pattern", "pattern_test"))
             continue
 
         # ── Mix自動切替: セット確定後にOS>=20なら1-Dropモードへ ──
@@ -2322,7 +2381,7 @@ def _run_bet_session_inner(config: dict, stop_event: threading.Event, skip_event
         # ── Syncモード(+sync_pause): 動的規則性監視（毎ハンドチェック）──
         # シュー切替は一瞬で起きるため即検出が必要
         # 規則性崩壊・ハンド数不足・Banker dominantいずれも即退避
-        if _effective_mode_box[0] in ("sync", "sync_pause", "pattern") and target_tid:
+        if _effective_mode_box[0] in ("sync", "sync_pause", "pattern", "pattern_test") and target_tid:
             monitor = check_sync_regularity(target_tid)
             _pr = monitor.get('p_ratio', 0.5)
             _pc = monitor.get('p_count', 0)
@@ -2534,7 +2593,7 @@ def main():
 
                 elif msg_type == "change_mode":
                     new_mode = msg.get("mode", "1drop")
-                    if new_mode in ("normal", "1drop", "mix", "sync", "sync_pause", "pattern"):
+                    if new_mode in ("normal", "1drop", "mix", "sync", "sync_pause", "pattern", "pattern_test"):
                         _bet_mode_box[0] = new_mode
                         _effective_mode_box[0] = "normal" if new_mode == "mix" else new_mode
                         send_log(f"BET mode changed to: {new_mode} (effective: {_effective_mode_box[0]})")

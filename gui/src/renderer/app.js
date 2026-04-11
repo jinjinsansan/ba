@@ -882,6 +882,24 @@ window.valhalla.onAgentMessage((msg) => {
       }
       break;
 
+    case 'test_status': {
+      // Pattern Test mode: 別カウンタ表示 (sessionPNL等は更新しない)
+      const tw = msg.wins || 0;
+      const tl = msg.losses || 0;
+      const tt = msg.ties || 0;
+      const total = tw + tl;
+      const wr = total > 0 ? ((tw / total) * 100).toFixed(1) : '0.0';
+      const el = $('#testCounter');
+      if (el) {
+        el.style.display = 'block';
+        el.textContent = `🧪 TEST: ${tw}W ${tl}L ${tt}T (${wr}%)`;
+      }
+      // 視覚フィードバック (フラッシュのみ、PNL は更新しない)
+      if (msg.last_won === true) flashScreen('win');
+      else if (msg.last_won === false) flashScreen('lose');
+      break;
+    }
+
     case 'status': {
       $('#betCount').textContent = `${msg.wins || 0}W / ${msg.losses || 0}L`;
       const totalBets = (msg.wins || 0) + (msg.losses || 0);
