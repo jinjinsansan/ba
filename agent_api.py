@@ -2021,10 +2021,19 @@ def _run_bet_session_inner(config: dict, stop_event: threading.Event, skip_event
                     obs = observe_one_hand_no_bet()
                     continue
 
-                # === Pattern Test モード: $1 固定 BET、VPS 記録なし ===
+                # === Pattern Test モード: $1 固定 BET、VPS 記録なし、bead road 直読み ===
+                # 結果判定は bead road を真実とする (balance diff の timing 問題を回避)
                 if _effective_mode_box[0] == "pattern_test":
                     test_amount = 1.0
-                    send_log(f"[pattern-test-{strat_name}] {pattern} BET ${test_amount}: {reason}")
+
+                    # BET 前の bead road 長を記録 (差分検知用)
+                    try:
+                        pre_bead = executor.read_bead_road() or ""
+                    except Exception:
+                        pre_bead = ""
+                    pre_bead_len = len(pre_bead)
+
+                    send_log(f"[pattern-test-{strat_name}] {pattern} BET ${test_amount}: {reason} (bead_len={pre_bead_len})")
                     send_action(f"🧪 [TEST] BET ${test_amount} PLAYER ({pattern})")
 
                     # BET phase 待機
@@ -2037,30 +2046,51 @@ def _run_bet_session_inner(config: dict, stop_event: threading.Event, skip_event
                         send_log("[pattern-test] place_bet failed — skip")
                         continue
 
-                    # 結果待機
-                    result_info = executor.wait_for_result(timeout=90, bet_amount=test_amount)
-                    if not result_info or not result_info.get("result"):
-                        send_log("[pattern-test] wait_for_result failed — skip")
+                    # bead road 更新を待って結果を読む (90秒タイムアウト)
+                    # balance diff の timing 問題を回避するため、bead road を真実とする
+                    result_char = None
+                    _deadline = time.time() + 90
+                    while time.time() < _deadline:
+                        if stop_event.is_set():
+                            break
+                        try:
+                            new_bead = executor.read_bead_road() or ""
+                            if len(new_bead) > pre_bead_len:
+                                new_chars = new_bead[pre_bead_len:]
+                                # 末尾の文字 = この BET の結果
+                                for ch in reversed(new_chars):
+                                    if ch in ('P', 'B', 'T'):
+                                        result_char = ch
+                                        break
+                                if result_char:
+                                    break
+                        except Exception:
+                            pass
+                        if stop_event.wait(0.5):
+                            break
+
+                    if not result_char:
+                        send_log("[pattern-test] bead road 更新タイムアウト — skip")
                         continue
 
-                    res = result_info["result"]
-                    bal = result_info.get("balance", 0)
-
-                    if res == "player":
-                        _test_wins += 1
+                    # 結果分類
+                    if result_char == 'P':
+                        res = "player"
                         won = True
+                        _test_wins += 1
                         send_action(f"🧪 [TEST] WIN +${test_amount:.0f} | {_test_wins}W/{_test_losses}L/{_test_ties}T")
-                    elif res == "banker":
-                        _test_losses += 1
+                    elif result_char == 'B':
+                        res = "banker"
                         won = False
+                        _test_losses += 1
                         send_action(f"🧪 [TEST] LOSE -${test_amount:.0f} | {_test_wins}W/{_test_losses}L/{_test_ties}T")
-                    elif res == "tie":
-                        _test_ties += 1
+                    else:  # 'T'
+                        res = "tie"
                         won = None
-                        send_action(f"🧪 [TEST] TIE | {_test_wins}W/{_test_losses}L/{_test_ties}T")
-                    else:
-                        send_log(f"[pattern-test] unknown result: {res}")
-                        continue
+                        _test_ties += 1
+                        send_action(f"🧪 [TEST] TIE (BET返却) | {_test_wins}W/{_test_losses}L/{_test_ties}T")
+
+                    bal = executor.get_balance() if not dry_run else 0
 
                     # GUI に test_status 送信 (sessionPNL は更新しない)
                     send_msg({
@@ -2072,7 +2102,7 @@ def _run_bet_session_inner(config: dict, stop_event: threading.Event, skip_event
                         "last_won": won,
                         "balance": bal,
                     })
-                    send_log(f"[pattern-test] Result: {res} → TEST {_test_wins}W/{_test_losses}L/{_test_ties}T (VPS未記録)")
+                    send_log(f"[pattern-test] Result: {res} (bead='{result_char}') → TEST {_test_wins}W/{_test_losses}L/{_test_ties}T (VPS未記録)")
                     continue  # 通常 BET フロー (run_round) はスキップ
 
                 # else: side = 'P' → 通常 BET フロー (run_round) へ進む
