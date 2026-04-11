@@ -683,7 +683,27 @@ class BetExecutor:
             elif diff < -0.01:
                 balance_result = "banker"
             else:
-                balance_result = "tie"
+                # 残高変化なし → Tie候補だが、WS Settled確認が必要
+                # シャッフル中など BET未受理だと残高変化なし＝Tie誤判定の危険
+                # mark_bet_placed() で _last_confirmed = {} にクリアされるため、
+                # 値が入っていれば BET 後に Settled message が到着している証拠
+                ws_confirmed = False
+                ws_status_ok = False
+                try:
+                    if self.game_ws:
+                        ws_confirmed = bool(self.game_ws._last_confirmed)
+                        ws_status_ok = self.game_ws.status in ("Settled", "Idle")
+                except Exception:
+                    pass
+                if ws_confirmed and ws_status_ok:
+                    balance_result = "tie"
+                else:
+                    logger.warning(
+                        f"残高変化なし AND WS Settled未確認 "
+                        f"(confirmed={ws_confirmed}, status={getattr(self.game_ws, 'status', 'N/A')}) "
+                        f"— BET未受理 (Tie誤判定を回避)"
+                    )
+                    balance_result = None
 
         # 方法3: DOM結果オーバーレイ
         dom_result = self._detect_result_dom()
