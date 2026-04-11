@@ -766,31 +766,54 @@ def _run_bet_session_inner(config: dict, stop_event: threading.Event, skip_event
         if stop_event.is_set():
             return None
 
-        # 4.5. Evolution iframe の存在確認 → 無ければ Evolution game URL に
-        # 実際に navigate して iframe を強制ロード → バカラに戻る
-        # /casino (ディレクトリ) は意味なし。実際のゲームページ必須。
-        # casino_detour 失敗時は即座に Lv4a (Page rebuild) を強制実行。
-        # Lv4a も失敗したら full_recovery 中断 (stale テーブル選定を防ぐ)。
+        # 4.5. Evolution iframe の機能的存在確認
+        # URL マッチだけでは不十分 (死んだ iframe / ルーレット残骸 / TRY AGAIN 表示中も
+        # frame URL は "evo-games.com/frontend/" を含む)。
+        # frame 存在 + URL が baccarat 系 + エラーダイアログ無し の3条件で判定。
+        # 不健全なら casino_detour → Lv4a (Page rebuild) → 中断 の順でエスカレーション。
+        def _iframe_healthy() -> tuple[bool, str]:
+            """iframe が機能的に生存しているか深くチェック
+            Returns: (healthy, reason)
+            """
+            try:
+                frames = executor._get_evo_frames()
+                if not frames:
+                    return False, "no frames"
+                url0 = (frames[0].url or "").lower()
+                if "roulette" in url0:
+                    return False, f"roulette残骸: {url0[:60]}"
+                if "baccarat" not in url0 and "category=" not in url0:
+                    return False, f"non-baccarat: {url0[:60]}"
+                # エラーダイアログチェック (SESSION EXPIRED 等は False を返す)
+                try:
+                    if not executor.check_and_dismiss_error():
+                        return False, "error dialog (SESSION EXPIRED/TRY AGAIN失敗)"
+                except Exception:
+                    pass
+                return True, "ok"
+            except Exception as e:
+                return False, f"exception: {e}"
+
         try:
-            evo_frames = executor._get_evo_frames()
-            iframe_alive = bool(evo_frames)
-            if not iframe_alive:
-                send_log("[recovery] ⚠️ Evolution iframe 不在 → ルーレット経由で復活試行")
-                send_action("Evolution iframe missing — trying roulette detour")
+            iframe_alive, _hr = _iframe_healthy()
+            if iframe_alive:
+                send_log(f"[recovery] ✅ iframe 健全性 OK ({_hr})")
+            else:
+                send_log(f"[recovery] ⚠️ Evolution iframe 不健全 ({_hr}) → ルーレット経由で復活試行")
+                send_action("Evolution iframe unhealthy — trying roulette detour")
                 # 3つの Evolution game URL を順番に試行
                 for revival_url in EVOLUTION_GAME_URLS:
                     game_name = revival_url.split('/')[-1]
                     send_log(f"[recovery] 復活試行: {game_name}")
                     if casino_detour(reason=f"iframe復活({game_name})", target_url=revival_url):
-                        # detour 後に Evolution iframe が baccarat lobby で復活したか確認
                         time.sleep(3)
-                        evo_check = executor._get_evo_frames()
-                        if evo_check:
-                            send_log(f"[recovery] ✅ {game_name} 経由で Evolution iframe 復活")
+                        h, hr = _iframe_healthy()
+                        if h:
+                            send_log(f"[recovery] ✅ {game_name} 経由で iframe 復活 ({hr})")
                             iframe_alive = True
                             break
                         else:
-                            send_log(f"[recovery] ⚠️ {game_name} 経由でも iframe 不在 — 次を試す")
+                            send_log(f"[recovery] ⚠️ {game_name} 経由でも不健全 ({hr}) — 次を試す")
 
                 # === casino_detour 失敗 → Lv4a (Page rebuild) を強制実行 ===
                 if not iframe_alive:
@@ -814,20 +837,22 @@ def _run_bet_session_inner(config: dict, stop_event: threading.Event, skip_event
                                 except Exception as _wse:
                                     send_log(f"[recovery-lv4a] WS 再接続例外: {_wse}")
                                 time.sleep(3)
-                                # iframe 確認
-                                if executor._get_evo_frames():
-                                    send_log("[recovery-lv4a] ✅ rebuild 後に iframe 復活確認")
+                                # iframe 健全性確認 (機能チェック)
+                                lv4a_h, lv4a_hr = _iframe_healthy()
+                                if lv4a_h:
+                                    send_log(f"[recovery-lv4a] ✅ rebuild 後に iframe 健全 ({lv4a_hr})")
                                     iframe_alive = True
                                 else:
-                                    # rebuild 後でも iframe 不在 → もう一度 casino_detour
-                                    send_log("[recovery-lv4a] ⚠️ rebuild 後も iframe 不在 — もう一度 detour 試行")
+                                    # rebuild 後でも不健全 → もう一度 casino_detour
+                                    send_log(f"[recovery-lv4a] ⚠️ rebuild 後も不健全 ({lv4a_hr}) — もう一度 detour 試行")
                                     for revival_url in EVOLUTION_GAME_URLS:
                                         if stop_event.is_set():
                                             return None
                                         if casino_detour(reason="lv4a後detour", target_url=revival_url):
                                             time.sleep(3)
-                                            if executor._get_evo_frames():
-                                                send_log("[recovery-lv4a] ✅ rebuild + detour で iframe 復活")
+                                            redet_h, redet_hr = _iframe_healthy()
+                                            if redet_h:
+                                                send_log(f"[recovery-lv4a] ✅ rebuild + detour で iframe 健全 ({redet_hr})")
                                                 iframe_alive = True
                                                 break
                             except Exception as _gse:
