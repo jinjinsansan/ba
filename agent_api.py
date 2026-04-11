@@ -826,6 +826,57 @@ def _run_bet_session_inner(config: dict, stop_event: threading.Event, skip_event
                     return None
 
         send_log("[recovery] Full recovery failed — no table available")
+        # === Lv4a: Page 破棄 + 新規 Page (最終手段) ===
+        # 通常の full_recovery で復活できなかった場合、
+        # ページ自体を破棄して新規作成 (Cookie は Browser context 側で維持)
+        send_action("🔧 Lv4a: Page rebuild — 新規ページ作成試行")
+        send_log("[recovery-lv4a] Page rebuild を試行")
+        try:
+            if scraper.rebuild_page():
+                send_log("[recovery-lv4a] ✅ 新規ページ作成成功 — ロビー再訪問")
+                # 新しいページで lobby にアクセス
+                try:
+                    scraper.page.goto(BACCARAT_LOBBY_URL, wait_until="domcontentloaded", timeout=60000)
+                    time.sleep(10)  # SPA hydration 待機
+                    # ログイン確認
+                    logged_in_retry = False
+                    for _lw in range(20):
+                        if scraper._is_logged_in():
+                            logged_in_retry = True
+                            break
+                        time.sleep(1)
+                    if not logged_in_retry:
+                        send_log("[recovery-lv4a] ⚠️ 新ページでログイン未確認 — 続行")
+                    # WS 再接続
+                    try:
+                        scraper.setup_ws_intercept()
+                        send_log("[recovery-lv4a] Lobby WS 再接続完了")
+                    except Exception as _wse:
+                        send_log(f"[recovery-lv4a] WS 再接続例外: {_wse}")
+                    # テーブル選定リトライ
+                    time.sleep(3)
+                    for _rt in range(3):
+                        if stop_event.is_set():
+                            return None
+                        best = pick_table()
+                        if best:
+                            target_tid = best.table_id
+                            target_name = best.title
+                            with scraper._lock:
+                                scraper._target_table_ids.add(target_tid)
+                                scraper._target_table_names[target_tid] = target_name
+                                scraper._new_shoe_signals[target_tid] = False
+                                scraper._shoe_epochs[target_tid] = int(time.time())
+                            send_action(f"✅ Lv4a 成功 — {target_name}")
+                            send_log(f"[recovery-lv4a] ✅ Table selected: {target_name}")
+                            return target_tid, target_name
+                        if stop_event.wait(5):
+                            return None
+                except Exception as _gse:
+                    send_log(f"[recovery-lv4a] lobby goto 例外: {_gse}")
+        except Exception as _re:
+            send_log(f"[recovery-lv4a] rebuild_page 例外: {_re}")
+        send_log("[recovery-lv4a] ❌ Lv4a も失敗 — 完全に諦める")
         return None
 
     def observe_one_hand_no_bet() -> str | None:

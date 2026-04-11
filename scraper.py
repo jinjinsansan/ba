@@ -140,6 +140,38 @@ class BaccaratScraper:
         # EvolutionロビーWS接続を待機（未接続ならリロードして再試行）
         self.setup_ws_intercept()
 
+    def rebuild_page(self) -> bool:
+        """ページを完全に破棄して新規ページを作成する (Lv4a nuclear recovery)
+
+        TRY AGAIN / SESSION EXPIRED / iframe死亡など、
+        page.goto やリロードでは復活できない深刻な状態からの救済。
+        Browser context は維持されるため Cookie は保持される (再ログイン不要)。
+
+        Returns: True=成功, False=失敗
+        """
+        try:
+            old_page = self.page
+            logger.info("[rebuild_page] 古いページを破棄して新規ページ作成")
+            # Browser context (persistent_context) で new_page
+            new_page = self.browser.new_page()
+            # 古いページを閉じる
+            try:
+                old_page.close()
+            except Exception as _ce:
+                logger.warning(f"[rebuild_page] 古いページクローズ例外: {_ce}")
+            # 新しいページを参照に設定
+            self.page = new_page
+            # WS リスナー再登録 (新しいページに対して)
+            try:
+                self._register_ws_listener()
+            except Exception as _we:
+                logger.warning(f"[rebuild_page] WSリスナー登録例外: {_we}")
+            logger.info("[rebuild_page] ✅ 新規ページ作成完了")
+            return True
+        except Exception as e:
+            logger.error(f"[rebuild_page] ❌ 失敗: {e}")
+            return False
+
     def _restore_cookies(self):
         """保存済みCookieを復元"""
         cookie_file = config.AUTH_STATE_DIR / "stake_cookies.json"
