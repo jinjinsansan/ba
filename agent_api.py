@@ -1116,6 +1116,9 @@ def _run_bet_session_inner(config: dict, stop_event: threading.Event, skip_event
                     if not iframe_alive:
                         send_log("[recovery] ❌ Lv4a も失敗 — full_recovery 中断 (stale テーブル選定を防止)")
                         send_action("Recovery failed — iframe revival impossible")
+                        rb = restart_browser("iframe revival failed (Lv4a)")
+                        if rb:
+                            return rb
                         return None
         except Exception as _eve:
             send_log(f"[recovery] iframe 確認例外: {_eve}")
@@ -1203,6 +1206,9 @@ def _run_bet_session_inner(config: dict, stop_event: threading.Event, skip_event
         except Exception as _re:
             send_log(f"[recovery-lv4a] rebuild_page 例外: {_re}")
         send_log("[recovery-lv4a] ❌ Lv4a も失敗 — 完全に諦める")
+        rb = restart_browser("full_recovery exhausted")
+        if rb:
+            return rb
         return None
 
     def observe_one_hand_no_bet() -> str | None:
@@ -1276,13 +1282,14 @@ def _run_bet_session_inner(config: dict, stop_event: threading.Event, skip_event
     send_action("Loading table data...")
     time.sleep(12)  # configs/histories/playersCount の初期ロード待機
 
+    _selector_client = None
+    _user_id = os.getenv("LAPLACE_USER", "dev-machine")
     if use_remote:
         # All scoring / exclusion / threshold logic runs on the VPS.
         # This client never ships table_selector.py.
         from laplace_client import LaplaceClient as _LaplaceClient
         _api_url = os.getenv("LAPLACE_API_URL", "http://127.0.0.1:8000")
         _api_key = os.getenv("LAPLACE_API_KEY", "")
-        _user_id = os.getenv("LAPLACE_USER", "dev-machine")
         _selector_client = _LaplaceClient(_api_url, _api_key)
         selector = RemoteTableSelector(scraper, _selector_client, _user_id)
     else:
@@ -1334,6 +1341,64 @@ def _run_bet_session_inner(config: dict, stop_event: threading.Event, skip_event
             send_log(f"FATAL: local mode requires marubatsu_bet/marubatsu_strategy ({imp_err}). Set LAPLACE_USE_REMOTE=1 to use the VPS API instead.")
             return
     _active_session = session
+
+    def restart_browser(reason: str) -> tuple[str, str] | None:
+        """Lv5: Camoufox プロセス再起動 + ロビー再接続 + テーブル再選定"""
+        nonlocal scraper, selector, executor, session, target_tid, target_name
+        send_action(f"🔁 Browser restart: {reason}")
+        send_log(f"[restart] Camoufox restart triggered: {reason}")
+        try:
+            scraper.stop()
+        except Exception as e:
+            send_log(f"[restart] scraper.stop error: {e}")
+        time.sleep(3)
+
+        scraper = BaccaratScraper()
+        scraper.table_name = "all"
+        try:
+            scraper.start()
+        except Exception as e:
+            send_log(f"[restart] Browser launch failed: {e}")
+            return None
+
+        scraper.setup_ws_intercept()
+        time.sleep(12)  # configs/histories/playersCount の初期ロード待機
+
+        if use_remote:
+            selector = RemoteTableSelector(scraper, _selector_client, _user_id)
+        else:
+            from table_selector import TableSelector
+            selector = TableSelector(scraper)
+
+        executor = BetExecutor(scraper.page, scraper.game_ws, executor_config, humanizer=humanizer)
+        try:
+            session.executor = executor
+        except Exception:
+            pass
+
+        # テーブル再選定
+        send_action("Restart — selecting table...")
+        target_tid = None
+        target_name = None
+        for _rt in range(5):
+            if stop_event.is_set():
+                return None
+            best = pick_table()
+            if best:
+                target_tid = best.table_id
+                target_name = best.title
+                with scraper._lock:
+                    scraper._target_table_ids.add(target_tid)
+                    scraper._target_table_names[target_tid] = target_name
+                    scraper._new_shoe_signals[target_tid] = False
+                    scraper._shoe_epochs[target_tid] = int(time.time())
+                send_action(f"Restart complete — picked {target_name}")
+                send_log(f"[restart] Table selected: {target_name}")
+                return target_tid, target_name
+            if stop_event.wait(10):
+                return None
+        send_log("[restart] Failed to select table after restart")
+        return None
 
     # Apply any pending config updates received before session creation
     if _pending_config_update:
@@ -1499,6 +1564,8 @@ def _run_bet_session_inner(config: dict, stop_event: threading.Event, skip_event
     _consec_wait_result_fail = 0   # wait_for_result が None を返した連続回数
     WAIT_RESULT_FAIL_LIMIT = 2     # N回連続で失敗 → シャッフル中と判断 → 即テーブル退避
     BB_EXIT_LOBBY_WAIT = 15        # 退避後ロビー待機 (shuffle/error 検出時で使用)
+    BEAD_FAIL_LIMIT = 30           # bead road 連続失敗回数で iframe 劣化判定
+    BEAD_FAIL_GRACE_SEC = 60       # 入場直後の猶予時間
 
     # ── iframe 劣化対策: 予防的フルリカバリ + ヘルスチェック ──
     # Evolution iframe は長時間プレイで徐々に劣化し、最終的に完全消失する
@@ -1579,6 +1646,27 @@ def _run_bet_session_inner(config: dict, stop_event: threading.Event, skip_event
             return False
 
     while not stop_event.is_set() and round_count < MAX_ROUNDS:
+        # ── A. ブラウザ生存チェック (Camoufox死亡検知) ──
+        try:
+            if not scraper.is_page_alive():
+                send_action("⚠️ Browser closed — restarting Camoufox...")
+                send_log("[health] page not alive → Camoufox restart")
+                fr = restart_browser("page not alive")
+                if not fr:
+                    break
+                target_tid, target_name = fr
+                if not executor.enter_table(target_tid, target_name):
+                    fr = full_recovery()
+                    if not fr:
+                        break
+                    target_tid, target_name = fr
+                    if not executor.enter_table(target_tid, target_name):
+                        break
+                _awaiting_sync_confirm = (_effective_mode_box[0] in ("sync", "sync_pause", "pattern", "pattern_test"))
+                continue
+        except Exception as _pe:
+            send_log(f"[health] page alive check error: {_pe}")
+
         # ── B. iframe ヘルスチェック (5分おき、BET中以外) ──
         # Evolution iframe が消失していないか定期確認
         # paused=True または set 完了直後など、BET中じゃない時に実行
@@ -1596,6 +1684,33 @@ def _run_bet_session_inner(config: dict, stop_event: threading.Event, skip_event
                     continue
             except Exception as _hce:
                 send_log(f"[health] iframe チェック例外: {_hce}")
+
+        # ── B.5 bead road 連続失敗チェック (iframe 劣化早期検知) ──
+        try:
+            if executor.in_table and executor.get_bead_fail_count() >= BEAD_FAIL_LIMIT:
+                if executor.get_table_uptime() >= BEAD_FAIL_GRACE_SEC:
+                    send_action(f"⚠️ Bead road fail x{executor.get_bead_fail_count()} — recovery")
+                    send_log(f"[health] bead road {executor.get_bead_fail_count()}連続失敗 → full_recovery")
+                    executor.reset_bead_fail_count()
+                    try:
+                        executor.exit_table()
+                    except Exception:
+                        pass
+                    fr = full_recovery()
+                    if not fr:
+                        break
+                    target_tid, target_name = fr
+                    if not executor.enter_table(target_tid, target_name):
+                        fr = full_recovery()
+                        if not fr:
+                            break
+                        target_tid, target_name = fr
+                        if not executor.enter_table(target_tid, target_name):
+                            break
+                    _awaiting_sync_confirm = (_effective_mode_box[0] in ("sync", "sync_pause", "pattern", "pattern_test"))
+                    continue
+        except Exception as _be:
+            send_log(f"[health] bead fail check error: {_be}")
 
         # ── フリーズ検出ウォッチドッグ ──
         ws_idle = scraper.game_ws.seconds_since_last_message() if hasattr(scraper, 'game_ws') and scraper.game_ws else 0
@@ -2042,7 +2157,7 @@ def _run_bet_session_inner(config: dict, stop_event: threading.Event, skip_event
                         continue
 
                     # $1 固定 BET (実 BET だが最小単位)
-                    if not executor.place_bet("player", test_amount):
+                    if not executor.place_bet("player", test_amount, strict=True):
                         send_log("[pattern-test] place_bet failed — skip")
                         continue
 

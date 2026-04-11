@@ -22,12 +22,12 @@ from typing import Optional
 # パターン → 戦略 ルーティングテーブル
 # ─────────────────────────────────────────────
 ROUTING_TABLE = {
-    "テレコ+ニコ混合": "A",   # ★最強 ROI +12〜15%
-    "テレコ崩れ":      "D",   # 中位 ROI +0〜+7%
-    "縦流れ":          None,  # BET禁止
-    "ブリッジ":        None,  # BET禁止
-    "不明":            None,  # シュー序盤
-    "ニコニコ・ニコイチ": None,  # 全戦略負け
+    "テレコ+ニコ混合": "A_b2_obs3",  # BB後のみBET / BBB観戦
+    "テレコ崩れ":      "A_b2_obs4",  # BB後のみBET / BBBB観戦
+    "縦流れ":          None,         # BET禁止
+    "ブリッジ":        None,         # BET禁止
+    "不明":            None,         # シュー序盤
+    "ニコニコ・ニコイチ": None,       # 全戦略負け
 }
 
 
@@ -39,8 +39,12 @@ def get_strategy_for_pattern(pattern: str) -> Optional[str]:
 # ─────────────────────────────────────────────
 # 戦略ロジック (各戦略の BET 判定)
 # ─────────────────────────────────────────────
-def decide_bet_strategy_a(seq: str) -> tuple[Optional[str], str]:
-    """Strategy A: B→P chase / P→skip / 3連B観戦
+def decide_bet_strategy_a(
+    seq: str,
+    observe_b: int = 3,
+    bet_on_b_min: int = 1,
+) -> tuple[Optional[str], str]:
+    """Strategy A: B→P chase / P→skip / 連続Bで観戦
 
     現在の seq から「次の手」を BET するか判定。
     Returns:
@@ -68,8 +72,8 @@ def decide_bet_strategy_a(seq: str) -> tuple[Optional[str], str]:
     # 次の手の判定
     if observing:
         return None, f"観戦中 (連続B={consec_b})"
-    if last_nt == 'B':
-        return 'P', f"前手B → P狙い"
+    if last_nt == 'B' and consec_b >= bet_on_b_min:
+        return 'P', f"連続B={consec_b} → P狙い"
     if last_nt == 'P':
         return None, f"前手P → SKIP"
     return None, "判定不能 (空 or T のみ)"
@@ -117,6 +121,12 @@ def decide_bet(pattern: str, seq: str) -> tuple[Optional[str], str, str]:
     if strategy == "A":
         side, reason = decide_bet_strategy_a(seq)
         return side, "A", reason
+    if strategy == "A_b2_obs3":
+        side, reason = decide_bet_strategy_a(seq, observe_b=3, bet_on_b_min=2)
+        return side, "A_b2_obs3", reason
+    if strategy == "A_b2_obs4":
+        side, reason = decide_bet_strategy_a(seq, observe_b=4, bet_on_b_min=2)
+        return side, "A_b2_obs4", reason
     if strategy == "D":
         side, reason = decide_bet_strategy_d(seq)
         return side, "D", reason

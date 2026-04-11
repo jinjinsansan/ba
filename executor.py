@@ -26,6 +26,9 @@ class BetExecutor:
         self._pre_bet_balance = 0.0
         self._available_chips = None  # テーブル入場後にスキャン
         self._chip_plan_cache = {}   # BET額→チップ計画の事前計算キャッシュ
+        self._bead_fail_count = 0
+        self._bead_last_ok = 0.0
+        self._entered_at = 0.0
         try:
             self.page.set_default_timeout(10000)
         except Exception:
@@ -79,6 +82,9 @@ class BetExecutor:
             self.in_table = True
             self.current_table_id = table_id
             self.current_table_name = table_name
+            self._entered_at = time.time()
+            self._bead_fail_count = 0
+            self._bead_last_ok = time.time()
             return True
 
         try:
@@ -123,6 +129,9 @@ class BetExecutor:
             self.in_table = True
             self.current_table_id = table_id
             self.current_table_name = table_name
+            self._entered_at = time.time()
+            self._bead_fail_count = 0
+            self._bead_last_ok = time.time()
             self._scan_available_chips()
             logger.info(f"{table_name} 入場完了")
             return True
@@ -285,6 +294,9 @@ class BetExecutor:
             text = evo.locator('[data-role="Bead-road"]').first.text_content(timeout=3000)
             if text and text.strip():
                 road = text.strip()
+                if self.in_table:
+                    self._bead_fail_count = 0
+                    self._bead_last_ok = time.time()
                 return road
         except Exception:
             pass
@@ -294,6 +306,9 @@ class BetExecutor:
             text = evo.locator('[class*="beadRoad"]').first.text_content(timeout=3000)
             if text and text.strip():
                 road = text.strip()
+                if self.in_table:
+                    self._bead_fail_count = 0
+                    self._bead_last_ok = time.time()
                 return road
         except Exception:
             pass
@@ -304,10 +319,15 @@ class BetExecutor:
             if text and text.strip():
                 road = ''.join(ch for ch in text.strip() if ch in 'PBT')
                 if road:
+                    if self.in_table:
+                        self._bead_fail_count = 0
+                        self._bead_last_ok = time.time()
                     return road
         except Exception:
             pass
         logger.warning("ビーズロード取得失敗 — 全方法が失敗")
+        if self.in_table:
+            self._bead_fail_count += 1
         return ""
 
     def get_last_streaks_from_bead(self) -> list[dict]:
@@ -379,7 +399,7 @@ class BetExecutor:
 
         return False
 
-    def place_bet(self, side: str, amount: float) -> bool:
+    def place_bet(self, side: str, amount: float, strict: bool = False) -> bool:
         """チップ選択 → BETスポットクリック → 受理確認
 
         高速化設計:
@@ -515,6 +535,9 @@ class BetExecutor:
 
         # DOM確認がタイムアウトでも、BETスポットクリックが成功していれば
         # WS CLIENT_BET_CHIP で受理されている可能性が高い → 楽観的に受理
+        if strict:
+            logger.warning("BET受理確認タイムアウト — strict=True のため未受理扱い")
+            return False
         logger.warning("BET受理確認タイムアウト — クリック成功のため受理とみなす")
         return True
 
@@ -676,6 +699,10 @@ class BetExecutor:
         logger.info("結果を待っています...")
         deadline = time.time() + timeout
         pre_balance = self._pre_bet_balance
+        try:
+            pre_bead = self.read_bead_road() or ""
+        except Exception:
+            pre_bead = ""
 
         # Step 1: BETフェーズ終了を待つ (タイマー消失)
         while time.time() < deadline:
@@ -708,6 +735,30 @@ class BetExecutor:
             if not self.check_and_dismiss_error():
                 return None
             time.sleep(0.15)
+
+        # Step 2.5: ビーズロード差分で結果を優先判定
+        bead_result = None
+        if pre_bead:
+            bead_deadline = min(deadline, time.time() + 8)
+            while time.time() < bead_deadline:
+                if not self.check_and_dismiss_error():
+                    return None
+                try:
+                    new_bead = self.read_bead_road() or ""
+                    if len(new_bead) > len(pre_bead):
+                        new_chars = new_bead[len(pre_bead):]
+                        for ch in reversed(new_chars):
+                            if ch in ("P", "B", "T"):
+                                bead_result = {"P": "player", "B": "banker", "T": "tie"}[ch]
+                                break
+                        if bead_result:
+                            logger.info(
+                                f"ビーズロード結果検出: {bead_result.upper()} (diff='{new_chars[-5:] if new_chars else ''}')"
+                            )
+                            break
+                except Exception:
+                    pass
+                time.sleep(0.3)
 
         # Step 3: WS multiplier (来ないテーブルが多いので最大0.3秒のみ待機)
         ws_result = None
@@ -757,8 +808,8 @@ class BetExecutor:
         # 方法3: DOM結果オーバーレイ
         dom_result = self._detect_result_dom()
 
-        # 最終判定: WS > 残高 > DOM
-        result_side = ws_result or balance_result or dom_result
+        # 最終判定: ビーズロード > WS > 残高 > DOM
+        result_side = bead_result or ws_result or balance_result or dom_result
 
         if not result_side:
             if bet_amount == 0:
@@ -869,3 +920,16 @@ class BetExecutor:
         self.in_table = False
         self.current_table_id = ""
         self.current_table_name = ""
+        self._bead_fail_count = 0
+        self._entered_at = 0.0
+
+    def get_bead_fail_count(self) -> int:
+        return self._bead_fail_count
+
+    def reset_bead_fail_count(self):
+        self._bead_fail_count = 0
+
+    def get_table_uptime(self) -> float:
+        if self._entered_at <= 0:
+            return 0.0
+        return time.time() - self._entered_at
