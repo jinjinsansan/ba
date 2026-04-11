@@ -1119,12 +1119,13 @@ def _run_bet_session_inner(config: dict, stop_event: threading.Event, skip_event
     _awaiting_sync_confirm = (_effective_mode_box[0] in ("sync", "sync_pause"))  # syncモード: 入場直後の再確認
     _bet_fail_count = 0            # BET完全失敗カウンタ（3連続で退室）
     _sync_monitor_counter = 0      # Syncモード: 動的規則性監視カウンタ
-    # ── sync_pause モード用: BB で観戦、Pで再開 ──
+    # ── sync_pause モード用: BB で即退避、Pで再開 ──
     _consec_banker = 0             # 連続Banker回数
-    _paused_for_dragon = False     # ドラゴン中の観戦フラグ
-    PAUSE_THRESHOLD = 2            # N連続Bで観戦モード突入
+    _paused_for_dragon = False     # ドラゴン中の観戦フラグ (旧設計、現在は未使用)
+    PAUSE_THRESHOLD = 3            # N連続Bで即退避 (旧2→3に緩和、テーブル切替頻度を半減)
     _observe_fail_count = 0        # 観戦失敗連続カウンタ
     OBSERVE_FAIL_LIMIT = 3         # N回連続失敗で観戦解除→退避判定に任せる
+    BB_EXIT_LOBBY_WAIT = 15        # BB退避後にロビーで待機する秒数 (人間らしさ + Stake負荷軽減)
 
     # ── iframe 劣化対策: 予防的フルリカバリ + ヘルスチェック ──
     # Evolution iframe は長時間プレイで徐々に劣化し、最終的に完全消失する
@@ -1808,13 +1809,17 @@ def _run_bet_session_inner(config: dict, stop_event: threading.Event, skip_event
             _awaiting_sync_confirm = (_effective_mode_box[0] in ("sync", "sync_pause"))
             continue
 
-        # ── sync_pause: 連B 退避処理 (BB検出時) ──
+        # ── sync_pause: 連B 退避処理 (BBB検出時) ──
         # 既存の Set complete / session_reset の後に実行
         # _bb_exit_triggered が True なら即退避 + 新テーブル
+        # 高速ナビゲーションで Stake が TRY AGAIN エラーを出すのを防ぐため
+        # ロビーで BB_EXIT_LOBBY_WAIT 秒待機 (人間らしさ + 負荷軽減)
         if _bb_exit_triggered:
             mark_table_exited(target_name)
             executor.exit_table()
-            if stop_event.wait(3):
+            send_action(f"🚶 BB退避: {BB_EXIT_LOBBY_WAIT}秒ロビー待機")
+            send_log(f"[sync_pause-exit] ロビーで{BB_EXIT_LOBBY_WAIT}秒待機 (人間らしさ + Stake負荷軽減)")
+            if stop_event.wait(BB_EXIT_LOBBY_WAIT):
                 break
             if not scraper.get_all_table_configs():
                 try:
