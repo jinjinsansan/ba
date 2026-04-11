@@ -32,6 +32,44 @@ def log_stale() -> bool:
         return False
 
 
+def find_agent_pids() -> list[int]:
+    try:
+        output = subprocess.check_output(
+            [
+                "wmic",
+                "process",
+                "where",
+                "CommandLine like '%agent_api.py%'",
+                "get",
+                "ProcessId,CommandLine",
+            ],
+            text=True,
+            errors="ignore",
+        )
+        pids = []
+        for line in output.splitlines():
+            line = line.strip()
+            if not line or "ProcessId" in line:
+                continue
+            parts = line.split()
+            try:
+                pids.append(int(parts[-1]))
+            except Exception:
+                continue
+        return pids
+    except Exception:
+        return []
+
+
+def stop_agent():
+    for pid in find_agent_pids():
+        subprocess.call(
+            ["taskkill", "/F", "/PID", str(pid)],
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+        )
+
+
 def stop_gui():
     subprocess.call(
         ["taskkill", "/F", "/IM", PROCESS_NAME],
@@ -55,11 +93,19 @@ def main():
         if (not running) or stale:
             now = time.time()
             if now - last_restart >= RESTART_COOLDOWN:
-                reason = "process down" if not running else "log stale"
-                print(f"[watchdog] restart ({reason})")
-                stop_gui()
-                time.sleep(3)
-                start_gui()
+                if not running:
+                    print("[watchdog] gui down — restarting gui")
+                    stop_agent()
+                    start_gui()
+                elif stale:
+                    if find_agent_pids():
+                        print("[watchdog] log stale — restarting agent")
+                        stop_agent()
+                    else:
+                        print("[watchdog] log stale + no agent — restarting gui")
+                        stop_gui()
+                        time.sleep(3)
+                        start_gui()
                 last_restart = now
         time.sleep(CHECK_INTERVAL)
 
