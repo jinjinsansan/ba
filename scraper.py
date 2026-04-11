@@ -1019,10 +1019,15 @@ class BaccaratScraper:
         return results
 
     # テーブル選定から除外するキーワード (get_all_table_configs / _resolve_target_table 共通)
+    # 除外理由:
+    # - salon/prive/elite vip/first person/rng: 高額/RNG/特殊
+    # - lightning/prosperity/golden wealth/peek/control squeeze/no commission: コミッション/特殊ルール
+    # - super speed: BET タイミングが間に合わない
+    # - always 9: Banker dominant な特殊ルール (Player BET 不利)
     _TABLE_EXCLUDE = ("salon", "prive", "first person", "rng",
                       "lightning", "prosperity", "golden wealth",
                       "peek", "control squeeze", "no commission",
-                      "elite vip", "super speed")
+                      "elite vip", "super speed", "always 9")
 
     def get_all_table_configs(self) -> dict[str, dict]:
         """全バカラテーブルのconfig (選定用)。除外テーブルはフィルタ済み。"""

@@ -723,6 +723,213 @@ def _run_bet_session_inner(config: dict, stop_event: threading.Event, skip_event
 
         return None
 
+    def find_pattern_table() -> tuple[str, str] | None:
+        """Pattern モード専用: エボリューション全テーブルから最強パターンを探す
+
+        SYNC_RECOMMENDED_TABLES (15件) ではなく、scraper.get_all_table_configs() で
+        取得できる全 baccarat テーブル (除外フィルタ済) を対象にスキャンする。
+
+        scraper の _TABLE_EXCLUDE で除外:
+          - salon / prive / elite vip / first person / rng
+          - lightning / prosperity / golden wealth / peek / control squeeze
+          - no commission / super speed / always 9
+
+        パターン分類:
+          - テレコ+ニコ混合 (priority 2) → ★最強 (ROI +12〜15%)
+          - テレコ崩れ (priority 1)      → 中位 (ROI +0〜+7%)
+          - 縦流れ/ブリッジ/不明         → BET禁止
+
+        条件:
+          - hands ≥ MIN_HANDS_FOR_ENTRY (35)
+          - reg ≥ ENTRY_THRESHOLD (時間で緩和)
+          - p_ratio ≥ 0.42 (Banker dominant 排除)
+          - パターンが BET 可能 (priority > 0)
+        """
+        from regularity_monitor import evaluate_table, raw_history_to_results, ENTRY_THRESHOLD, MIN_HANDS_FOR_ENTRY
+        try:
+            from pattern_classifier import classify_pattern
+        except Exception:
+            classify_pattern = None
+
+        send_action("🔍 Pattern モード: 全テーブルスキャン中...")
+        send_log("[Pattern] 全エボリューションバカラテーブルから最強パターンを探索")
+        send_log(f"[Pattern] 除外: lightning/super speed/always 9/salon/elite vip 等")
+        send_log(f"[Pattern] 入場条件: ハンド数≥{MIN_HANDS_FOR_ENTRY}, 規則性≥{ENTRY_THRESHOLD}")
+
+        wait_start = time.time()
+        last_heartbeat = time.time()
+        last_login_check = time.time()
+        last_status = time.time()
+        last_detour = time.time()
+        scan_count = 0
+
+        while not stop_event.is_set():
+            scan_count += 1
+
+            # === ハートビート (60秒ごと) ===
+            if time.time() - last_heartbeat > 60:
+                send_log("[Pattern] 💓 ハートビート")
+                try:
+                    if not executor.check_and_dismiss_error():
+                        send_log("[Pattern] ⚠️ SESSION EXPIRED → フルリカバリ")
+                        fr = full_recovery()
+                        if not fr:
+                            return None
+                        nonlocal target_tid, target_name
+                        target_tid, target_name = fr
+                        try:
+                            executor.exit_table()
+                        except Exception:
+                            pass
+                except Exception:
+                    pass
+                try:
+                    inner = executor._get_evo_inner()
+                    if inner:
+                        inner.evaluate("() => document.documentElement.scrollTop", timeout=3000)
+                except Exception:
+                    pass
+                if not scraper.get_all_table_configs():
+                    try:
+                        scraper.setup_ws_intercept()
+                    except Exception:
+                        pass
+                last_heartbeat = time.time()
+
+            # === Stake ログイン確認 (5分ごと) ===
+            if time.time() - last_login_check > 300:
+                last_login_check = time.time()
+                try:
+                    if not scraper._is_logged_in():
+                        send_log("[Pattern] ⚠️ Stakeログアウト → 再ログイン")
+                        try:
+                            scraper._login_from_lobby()
+                            time.sleep(3)
+                            scraper.setup_ws_intercept()
+                        except Exception:
+                            fr = full_recovery()
+                            if not fr:
+                                return None
+                except Exception:
+                    pass
+
+            # === 動的閾値: 時間経過で緩和 ===
+            elapsed_wait = time.time() - wait_start
+            if elapsed_wait < 60:
+                dynamic_threshold = ENTRY_THRESHOLD  # 70
+            elif elapsed_wait < 120:
+                dynamic_threshold = max(ENTRY_THRESHOLD - 5, 65)
+            else:
+                dynamic_threshold = max(ENTRY_THRESHOLD - 10, 60)
+
+            # === Casino detour (60秒ごと) ===
+            if time.time() - last_detour > 60 and elapsed_wait > 60:
+                send_log("[Pattern] ⏱️ 60秒経過 → casino detour で iframe維持")
+                if casino_detour(reason="Pattern待機中"):
+                    last_detour = time.time()
+                    last_heartbeat = time.time()
+
+            # === 全テーブルスキャン ===
+            configs = scraper.get_all_table_configs()
+            if not configs:
+                if time.time() - last_status > 15:
+                    send_log("[Pattern] ⏳ ロビーWS にテーブル情報なし — 待機")
+                    last_status = time.time()
+                stop_event.wait(3)
+                continue
+
+            best = None  # (tid, name, reg, pc, bc, pr, priority, pattern)
+            scanned = 0
+            tnm_count = 0   # テレコ+ニコ混合 候補数
+            tk_count = 0    # テレコ崩れ 候補数
+            reject_count = 0  # BET禁止 (縦流れ/ブリッジ/不明) 数
+
+            for tid, cfg in configs.items():
+                rec_name = cfg.get("title", tid)
+                # クールダウン中はスキップ
+                if is_table_in_cooldown(rec_name):
+                    continue
+                raw = scraper.get_raw_history(tid)
+                results = raw_history_to_results(raw)
+                eval_result = evaluate_table(results)
+                reg = eval_result['regularity']
+                hands = eval_result['hands']
+                p_ratio = eval_result.get('p_ratio', 0.5)
+                p_count = eval_result.get('p_count', 0)
+                b_count = eval_result.get('b_count', 0)
+
+                # ハンド数 / 規則性 / P比率 フィルタ
+                if hands < MIN_HANDS_FOR_ENTRY or reg < dynamic_threshold or p_ratio < 0.42:
+                    continue
+
+                scanned += 1
+
+                # パターン分類
+                pattern_priority = 0
+                pat = "不明"
+                if classify_pattern:
+                    try:
+                        seq_str = ''.join(r for r in results if r in ('P', 'B', 'T'))
+                        pat = classify_pattern(seq_str)
+                        if pat == "テレコ+ニコ混合":
+                            pattern_priority = 2
+                            tnm_count += 1
+                        elif pat == "テレコ崩れ":
+                            pattern_priority = 1
+                            tk_count += 1
+                        else:
+                            pattern_priority = 0
+                            reject_count += 1
+                    except Exception:
+                        pattern_priority = 0
+
+                if pattern_priority == 0:
+                    continue
+
+                # priority 優先、同 priority なら reg 優先
+                candidate = (tid, rec_name, reg, p_count, b_count, p_ratio, pattern_priority, pat)
+                if best is None:
+                    best = candidate
+                elif (pattern_priority, reg) > (best[6], best[2]):
+                    best = candidate
+
+            # === 状況ログ (15秒ごと) ===
+            if time.time() - last_status > 15:
+                send_log(
+                    f"[Pattern] スキャン: 全{len(configs)}台 / 候補{scanned}台 / "
+                    f"テレコ+ニコ混合★★={tnm_count} / テレコ崩れ★={tk_count} / "
+                    f"BET禁止={reject_count} (閾値reg≥{dynamic_threshold})"
+                )
+                last_status = time.time()
+                _wait_sec = int(elapsed_wait)
+                send_action(f"⏱️ Pattern待機 ({_wait_sec}s) — ★★{tnm_count} ★{tk_count}")
+
+            # === 結果 ===
+            if best:
+                tid, tname, reg, pc, bc, pr, pri, pat = best
+                pri_label = "★★テレコ+ニコ混合" if pri == 2 else "★テレコ崩れ"
+                send_action(f"🎯 Pattern: {tname} に入場 ({pri_label} reg={reg:.0f})")
+                send_log(
+                    f"[Pattern] ★ 入場決定: {tname} {pri_label} "
+                    f"reg={reg:.0f} P{pc}/B{bc} (P{pr:.0%}) [閾値{dynamic_threshold}]"
+                )
+                with scraper._lock:
+                    scraper._target_table_ids.add(tid)
+                    scraper._target_table_names[tid] = tname
+                    scraper._new_shoe_signals[tid] = False
+                    scraper._shoe_epochs[tid] = int(time.time())
+                return tid, tname
+
+            stop_event.wait(3)
+
+        return None
+
+    def find_table() -> tuple[str, str] | None:
+        """モードに応じて適切なテーブル選定関数を呼ぶ"""
+        if _effective_mode_box[0] == "pattern":
+            return find_pattern_table()
+        return find_sync_table()
+
     def check_sync_regularity(tid) -> dict:
         """動的監視: 現在のテーブルの規則性をチェック（BET中）
 
@@ -1187,7 +1394,7 @@ def _run_bet_session_inner(config: dict, stop_event: threading.Event, skip_event
 
     # === Syncモード(+sync_pause): 推奨テーブルから規則性が高いものを選定 ===
     if _effective_mode_box[0] in ("sync", "sync_pause", "pattern"):
-        res_sync = find_sync_table()
+        res_sync = find_table()
         if not res_sync:
             send_log("Stopped during sync table selection")
             scraper.stop()
@@ -1276,6 +1483,8 @@ def _run_bet_session_inner(config: dict, stop_event: threading.Event, skip_event
     PAUSE_THRESHOLD = 2            # N連続Bで観戦モード突入
     _observe_fail_count = 0        # 観戦失敗連続カウンタ (テーブル死亡検知用)
     OBSERVE_FAIL_LIMIT = 5         # N回連続失敗 → テーブル死亡疑い → full_recovery
+    _pattern_unknown_count = 0     # Pattern モード: 連続「不明」カウンタ
+    PATTERN_UNKNOWN_LIMIT = 10     # N回連続「不明」 → シャッフル疑い → 退避
     # ── Phase 1: シャッフル検知用 連続失敗カウンタ ──
     _consec_wait_result_fail = 0   # wait_for_result が None を返した連続回数
     WAIT_RESULT_FAIL_LIMIT = 2     # N回連続で失敗 → シャッフル中と判断 → 即テーブル退避
@@ -1610,7 +1819,7 @@ def _run_bet_session_inner(config: dict, stop_event: threading.Event, skip_event
                                 scraper.setup_ws_intercept()
                             except Exception:
                                 pass
-                        res_s = find_sync_table()
+                        res_s = find_table()
                         if not res_s:
                             break
                         target_tid, target_name = res_s
@@ -1634,8 +1843,41 @@ def _run_bet_session_inner(config: dict, stop_event: threading.Event, skip_event
                         send_log(f"[Sync-Entry] ✅ 入場後確認OK: {hands}ハンド reg={reg:.0f} → BET開始")
                         _awaiting_sync_confirm = False
                 else:
-                    send_log("[Sync-Entry] ⚠️ ビーズロード空 — 継続（初回BET後に動的監視で判定）")
-                    _awaiting_sync_confirm = False
+                    # ビーズロード空 = シャッフル直後 / 新シュー直後 → BET不可テーブル
+                    # 過去はここで「継続」していたが、Pattern モードでは判定不能 → 即退避
+                    send_action("⚠️ Sync: ビーズロード空 (シャッフル/新シュー) — 退避")
+                    send_log("[Sync-Entry] ❌ ビーズロード空 → シャッフル/新シュー疑い → 退避")
+                    mark_table_exited(target_name)
+                    executor.exit_table()
+                    import random as _rand_empty
+                    _w = _rand_empty.uniform(5, 10)
+                    send_log(f"[Sync] 🚶 ロビーで{_w:.0f}秒待機...")
+                    if stop_event.wait(_w):
+                        break
+                    if not scraper.get_all_table_configs():
+                        try:
+                            scraper.setup_ws_intercept()
+                        except Exception:
+                            pass
+                    res_s = find_table()
+                    if not res_s:
+                        break
+                    target_tid, target_name = res_s
+                    with scraper._lock:
+                        scraper._target_table_ids.add(target_tid)
+                        scraper._target_table_names[target_tid] = target_name
+                        scraper._new_shoe_signals[target_tid] = False
+                        scraper._shoe_epochs[target_tid] = int(time.time())
+                    send_action(f"🚪 {target_name} に入場中...")
+                    if not executor.enter_table(target_tid, target_name):
+                        fr = full_recovery()
+                        if not fr:
+                            break
+                        target_tid, target_name = fr
+                        if not executor.enter_table(target_tid, target_name):
+                            break
+                    _awaiting_sync_confirm = True
+                    continue
             except Exception as e:
                 send_log(f"[Sync-Entry] ⚠️ エラー: {e}")
                 _awaiting_sync_confirm = False
@@ -1703,7 +1945,7 @@ def _run_bet_session_inner(config: dict, stop_event: threading.Event, skip_event
                             scraper.setup_ws_intercept()
                         except Exception:
                             pass
-                    res_sync = find_sync_table()
+                    res_sync = find_table()
                     if not res_sync:
                         break
                     target_tid, target_name = res_sync
@@ -1721,10 +1963,44 @@ def _run_bet_session_inner(config: dict, stop_event: threading.Event, skip_event
                     continue
 
                 # 不明 → シュー序盤 → BET せず1ハンド観戦
+                # ただし、連続 PATTERN_UNKNOWN_LIMIT 回不明 → シャッフル/シュー空疑い → 退避
                 if pattern == "不明":
-                    send_log(f"[pattern] パターン未確定 (列数不足) → 1ハンド観戦")
+                    _pattern_unknown_count += 1
+                    if _pattern_unknown_count >= PATTERN_UNKNOWN_LIMIT:
+                        send_action(f"⚠️ パターン不明 {_pattern_unknown_count}回連続 → 退避")
+                        send_log(f"[pattern] パターン不明 {_pattern_unknown_count}回連続 → シャッフル/シュー空テーブル疑い → 退避")
+                        _pattern_unknown_count = 0
+                        mark_table_exited(target_name)
+                        executor.exit_table()
+                        if stop_event.wait(BB_EXIT_LOBBY_WAIT):
+                            break
+                        if not scraper.get_all_table_configs():
+                            try:
+                                scraper.setup_ws_intercept()
+                            except Exception:
+                                pass
+                        res_sync = find_table()
+                        if not res_sync:
+                            break
+                        target_tid, target_name = res_sync
+                        with scraper._lock:
+                            scraper._target_table_ids.add(target_tid)
+                            scraper._target_table_names[target_tid] = target_name
+                            scraper._new_shoe_signals[target_tid] = False
+                            scraper._shoe_epochs[target_tid] = int(time.time())
+                        if not executor.enter_table(target_tid, target_name):
+                            fr = full_recovery()
+                            if not fr:
+                                break
+                            target_tid, target_name = fr
+                        _awaiting_sync_confirm = True
+                        continue
+                    send_log(f"[pattern] パターン未確定 ({_pattern_unknown_count}/{PATTERN_UNKNOWN_LIMIT}) → 1ハンド観戦")
                     obs = observe_one_hand_no_bet()
                     continue
+                else:
+                    # 既知パターン検出 → 不明カウンタリセット
+                    _pattern_unknown_count = 0
 
                 # Strategy A / D の判定 (前手から SKIP or BET P)
                 side, strat_name, reason = decide_bet(pattern, bead)
@@ -1762,7 +2038,7 @@ def _run_bet_session_inner(config: dict, stop_event: threading.Event, skip_event
                     except Exception:
                         pass
                 if _effective_mode_box[0] in ("sync", "sync_pause", "pattern"):
-                    res_sync = find_sync_table()
+                    res_sync = find_table()
                     if not res_sync:
                         break
                     target_tid, target_name = res_sync
@@ -1965,7 +2241,7 @@ def _run_bet_session_inner(config: dict, stop_event: threading.Event, skip_event
                 if casino_detour(reason=f"30分経過 ({elapsed_min:.0f}分)"):
                     # detour 後に同じテーブルへ再入場 (sync mode は新規探索)
                     if _effective_mode_box[0] in ("sync", "sync_pause", "pattern"):
-                        res_sync = find_sync_table()
+                        res_sync = find_table()
                         if not res_sync:
                             break
                         target_tid, target_name = res_sync
@@ -2062,7 +2338,7 @@ def _run_bet_session_inner(config: dict, stop_event: threading.Event, skip_event
                     except Exception:
                         pass
                 send_action("🔍 次の推奨テーブルを探しています...")
-                res_sync = find_sync_table()
+                res_sync = find_table()
                 if not res_sync:
                     break
                 target_tid, target_name = res_sync
