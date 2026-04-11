@@ -615,7 +615,20 @@ def _run_bet_session_inner(config: dict, stop_event: threading.Event, skip_event
             configs = scraper.get_all_table_configs()
             name_to_tid = {cfg.get("title", ""): tid for tid, cfg in configs.items()}
 
+            # === Pattern モード: classify_pattern を有効化 ===
+            _is_pattern_mode = (_effective_mode_box[0] == "pattern")
+            if _is_pattern_mode:
+                try:
+                    from pattern_classifier import classify_pattern
+                except Exception:
+                    classify_pattern = None
+            else:
+                classify_pattern = None
+
             # 推奨テーブルを順に評価
+            # best は7要素タプル: (tid, name, reg, pc, bc, pr, priority)
+            #   priority: 2=テレコ+ニコ混合(★最強), 1=テレコ崩れ(中位), 0=BET禁止
+            #   pattern モード以外は priority=1 で扱う
             best = None
             force_best = None  # 強制ピック用 (閾値未達でも最高reg)
             table_reports = []
@@ -638,21 +651,48 @@ def _run_bet_session_inner(config: dict, stop_event: threading.Event, skip_event
                 p_count = eval_result.get('p_count', 0)
                 b_count = eval_result.get('b_count', 0)
 
+                # === Pattern モード: 大路罫線パターンを判定 ===
+                pattern_priority = 1  # default: 中位
+                pattern_label = ""
+                if _is_pattern_mode and classify_pattern:
+                    try:
+                        seq_str = ''.join(r for r in results if r in ('P', 'B', 'T'))
+                        pat = classify_pattern(seq_str)
+                        pattern_label = f" pat={pat}"
+                        if pat == "テレコ+ニコ混合":
+                            pattern_priority = 2  # ★最強 (ROI +12〜15%)
+                        elif pat == "テレコ崩れ":
+                            pattern_priority = 1  # 中位 (ROI +0〜+7%)
+                        elif pat in ("縦流れ", "ブリッジ", "ニコニコ・ニコイチ"):
+                            pattern_priority = 0  # BET禁止
+                        else:  # 不明
+                            pattern_priority = 0  # シュー序盤は選ばない
+                    except Exception:
+                        pattern_priority = 1
+
                 # 強制ピック候補 (規則性のみ、ハンド数最低35とP比率0.4以上)
-                if hands >= MIN_HANDS_FOR_ENTRY and p_ratio >= 0.40:
+                # pattern モードでは BET禁止パターンは強制ピック対象外
+                if hands >= MIN_HANDS_FOR_ENTRY and p_ratio >= 0.40 and pattern_priority > 0:
                     if force_best is None or reg > force_best[2]:
-                        force_best = (tid, rec_name, reg, p_count, b_count, p_ratio)
+                        force_best = (tid, rec_name, reg, p_count, b_count, p_ratio, pattern_priority)
 
                 if hands < MIN_HANDS_FOR_ENTRY:
                     table_reports.append(f"⏳ {rec_name}: {hands}ハンド（{MIN_HANDS_FOR_ENTRY}まで待機）")
                 elif reg < dynamic_threshold:
                     table_reports.append(f"⚠️ {rec_name}: {hands}h reg={reg:.0f} P{p_count}/B{b_count}（規則性<{dynamic_threshold}）")
-                elif p_ratio < 0.42:  # P比率閾値 (緩和してない)
+                elif p_ratio < 0.42:
                     table_reports.append(f"⚠️ {rec_name}: {hands}h reg={reg:.0f} P{p_count}/B{b_count}（Banker dominant P{p_ratio:.0%}）")
+                elif _is_pattern_mode and pattern_priority == 0:
+                    table_reports.append(f"❌ {rec_name}: {hands}h reg={reg:.0f}{pattern_label} → BET禁止パターン")
                 else:
-                    table_reports.append(f"✅ {rec_name}: {hands}h reg={reg:.0f} P{p_count}/B{b_count}（P{p_ratio:.0%}）→ クリア! (閾値{dynamic_threshold})")
-                    if best is None or reg > best[2]:
-                        best = (tid, rec_name, reg, p_count, b_count, p_ratio)
+                    star = "★★" if pattern_priority == 2 else "★" if pattern_priority == 1 else ""
+                    table_reports.append(f"✅ {rec_name}: {hands}h reg={reg:.0f} P{p_count}/B{b_count}{pattern_label} {star}クリア! (閾値{dynamic_threshold})")
+                    candidate = (tid, rec_name, reg, p_count, b_count, p_ratio, pattern_priority)
+                    # priority 優先、同 priority なら reg 優先
+                    if best is None:
+                        best = candidate
+                    elif (pattern_priority, reg) > (best[6], best[2]):
+                        best = candidate
 
             # 15秒ごとに候補状況をログ出力
             if time.time() - last_status > 15:
@@ -661,14 +701,15 @@ def _run_bet_session_inner(config: dict, stop_event: threading.Event, skip_event
                 last_status = time.time()
 
             if best:
-                tid, tname, reg, p_count, b_count, p_ratio = best
-                send_action(f"🎯 Sync: {tname} に入場 (reg={reg:.0f} P{p_count}/B{b_count})")
-                send_log(f"[Sync] ★ 入場決定: {tname} 規則性={reg:.0f} P{p_count}/B{b_count} (P{p_ratio:.0%}) [閾値{dynamic_threshold}]")
+                tid, tname, reg, p_count, b_count, p_ratio, pri = best
+                pri_label = "★★テレコ+ニコ混合" if pri == 2 else "★テレコ崩れ" if pri == 1 else ""
+                send_action(f"🎯 Sync: {tname} に入場 (reg={reg:.0f} P{p_count}/B{b_count}) {pri_label}")
+                send_log(f"[Sync] ★ 入場決定: {tname} 規則性={reg:.0f} P{p_count}/B{b_count} (P{p_ratio:.0%}) {pri_label} [閾値{dynamic_threshold}]")
                 return tid, tname
 
             # 強制ピック (3分経過): 通常条件を満たすテーブルがなくても最高規則性を選ぶ
             if force_pick and force_best:
-                tid, tname, reg, p_count, b_count, p_ratio = force_best
+                tid, tname, reg, p_count, b_count, p_ratio, pri = force_best
                 send_action(f"⚡ 強制ピック (3分経過): {tname} reg={reg:.0f}")
                 send_log(f"[Sync] 🆘 強制ピック: {tname} 規則性={reg:.0f} P{p_count}/B{b_count} (P{p_ratio:.0%}) — 待機回避")
                 return tid, tname
