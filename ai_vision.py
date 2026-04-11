@@ -277,3 +277,96 @@ def clear_cache():
     """キャッシュクリア (状態変化が確実な時に呼ぶ)"""
     with _lock:
         _cache.clear()
+
+
+# ─── シャッフル専用検知 (executor.is_shuffle_state Layer 2) ───
+# DOM テキストでは取れない Canvas 描画のシャッフル画面を検知する。
+# 5秒キャッシュで連続BET時のコストとレイテンシを抑える。
+_shuffle_cache_at: float = 0.0
+_shuffle_cache_result: bool = False
+SHUFFLE_CACHE_TTL = 5.0   # 5秒キャッシュ
+
+_PROMPT_SHUFFLE = """このEvolution バカラ画面はシャッフル中ですか?
+
+シャッフル中の特徴:
+- "Shuffling" / "Please wait" / "Dealer change" / "Shoe change" / "Be right back" 等の表示
+- カードがディーラーによって混ぜられている
+- ベットエリアが非アクティブで、チップを置けない
+- カウントダウンタイマー (BETベッティングフェーズの円形タイマー) が無い
+
+JSON のみで返答 (他の文章は不要):
+{"shuffling": true/false, "reason": "短い理由 30文字以内"}
+"""
+
+
+def check_shuffle(page) -> bool:
+    """シャッフル中か AI で判定 (5秒キャッシュ付き)
+
+    executor.is_shuffle_state() の Layer 2 として呼ばれる。
+    DOM テキスト検知が空振りした場合のみ呼び出される設計。
+
+    Returns:
+      True:  シャッフル中 → BET スキップすべき
+      False: BET 可能 or 判定不能 (素通り)
+    """
+    global _shuffle_cache_at, _shuffle_cache_result
+
+    if not is_enabled() or page is None:
+        return False
+
+    # キャッシュチェック (5秒以内なら再利用)
+    now = time.time()
+    with _lock:
+        if now - _shuffle_cache_at < SHUFFLE_CACHE_TTL:
+            return _shuffle_cache_result
+
+    client = _get_client()
+    if client is None:
+        return False
+
+    screenshot = take_screenshot(page)
+    if not screenshot:
+        return False
+
+    try:
+        _rate_limit()
+        b64 = base64.b64encode(screenshot).decode()
+
+        response = client.messages.create(
+            model="claude-haiku-4-5",
+            max_tokens=80,
+            messages=[{
+                "role": "user",
+                "content": [
+                    {
+                        "type": "image",
+                        "source": {
+                            "type": "base64",
+                            "media_type": "image/png",
+                            "data": b64,
+                        },
+                    },
+                    {"type": "text", "text": _PROMPT_SHUFFLE},
+                ],
+            }],
+        )
+
+        text = response.content[0].text if response.content else ""
+        parsed = _extract_json(text)
+        if parsed is None:
+            logger.warning(f"[ai_vision:shuffle] JSON parse failed: {text[:100]}")
+            return False
+
+        shuffling = bool(parsed.get("shuffling", False))
+        reason = str(parsed.get("reason", ""))[:60]
+        logger.info(f"[ai_vision:shuffle] shuffling={shuffling} reason={reason}")
+
+        # キャッシュ更新
+        with _lock:
+            _shuffle_cache_at = now
+            _shuffle_cache_result = shuffling
+
+        return shuffling
+    except Exception as e:
+        logger.warning(f"[ai_vision:shuffle] API call failed: {e}")
+        return False

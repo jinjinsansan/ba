@@ -339,31 +339,44 @@ class BetExecutor:
 
     def is_shuffle_state(self) -> bool:
         """シャッフル中/ディーラー交代中の状態を検知。
-        単一 JS evaluate で一度に全キーワードをスキャン (~50-100ms)。
+
+        Layer 1: DOM テキスト (高速 ~100ms)
+          - 単一 JS evaluate で全キーワードを一度にスキャン
+        Layer 2: AI Vision (Layer 1 空振り時のみ、5秒キャッシュ)
+          - Evolution の Canvas 描画シャッフル画面 (DOM では取れない) を検知
+          - ANTHROPIC_API_KEY 未設定なら即 False で素通り
         """
+        # === Layer 1: DOM テキスト ===
         try:
-            # iframe 内の innerText を一度だけ取得して全キーワードチェック
-            # 旧: get_by_text × 11回 × 200ms timeout = 最悪2.2秒 → この版で ~100ms に短縮
             inner = self._get_evo_inner()
-            if not inner:
-                return False
-            found = inner.evaluate(
-                """() => {
-                    try {
-                        const text = (document.body?.innerText || '').toUpperCase();
-                        const keywords = ['SHUFFLING', 'PLEASE WAIT', 'DEALER CHANGE', 'DEALER WILL', 'SHOE CHANGE', 'BE RIGHT BACK'];
-                        for (const kw of keywords) {
-                            if (text.includes(kw)) return kw;
-                        }
-                        return null;
-                    } catch (e) { return null; }
-                }"""
-            )
-            if found:
-                logger.warning(f"シャッフル状態検知: '{found}'")
-                return True
+            if inner:
+                found = inner.evaluate(
+                    """() => {
+                        try {
+                            const text = (document.body?.innerText || '').toUpperCase();
+                            const keywords = ['SHUFFLING', 'PLEASE WAIT', 'DEALER CHANGE', 'DEALER WILL', 'SHOE CHANGE', 'BE RIGHT BACK'];
+                            for (const kw of keywords) {
+                                if (text.includes(kw)) return kw;
+                            }
+                            return null;
+                        } catch (e) { return null; }
+                    }"""
+                )
+                if found:
+                    logger.warning(f"シャッフル状態検知 (DOM): '{found}'")
+                    return True
         except Exception:
             pass
+
+        # === Layer 2: AI Vision (DOM 空振り時のみ、5秒キャッシュ) ===
+        try:
+            import ai_vision
+            if ai_vision.is_enabled() and ai_vision.check_shuffle(self.page):
+                logger.warning("シャッフル状態検知 (AI Vision)")
+                return True
+        except Exception as _ae:
+            logger.debug(f"AI shuffle check skipped: {_ae}")
+
         return False
 
     def place_bet(self, side: str, amount: float) -> bool:
