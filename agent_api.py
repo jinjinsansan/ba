@@ -2453,22 +2453,49 @@ def _run_bet_session_inner(config: dict, stop_event: threading.Event, skip_event
             cp = session.tracker.cumulative_profit
             cm = cp * chip_base
 
-            # Per-round profit in dollars (for daily P&L aggregation)
-            if res == "tie":
-                round_profit = 0.0
-            elif won:
-                round_profit = ba  # Player win returns 1x bet
+            # Bet confirmation guard: avoid GUI L/W when no bet was actually placed
+            bet_confirmed = True
+            if ba <= 0:
+                bet_confirmed = False
             else:
-                round_profit = -ba
+                dom_total = 0.0
+                confirmed_total = 0.0
+                try:
+                    dom_total = executor._get_total_bet()
+                except Exception:
+                    pass
+                try:
+                    if executor.game_ws:
+                        confirmed = getattr(executor.game_ws, "_last_confirmed", {})
+                        if isinstance(confirmed, dict):
+                            confirmed_total = sum(
+                                v for v in confirmed.values()
+                                if isinstance(v, (int, float))
+                            )
+                except Exception:
+                    pass
+                if dom_total <= 0 and confirmed_total <= 0:
+                    bet_confirmed = False
 
-            if res == "tie":
-                send_action(f"Tie — BET returned. Balance: ${bal:.2f}")
-            elif won:
-                send_action(f"WIN! +${ba:.0f}. Balance: ${bal:.2f}")
+            if bet_confirmed:
+                # Per-round profit in dollars (for daily P&L aggregation)
+                if res == "tie":
+                    round_profit = 0.0
+                elif won:
+                    round_profit = ba  # Player win returns 1x bet
+                else:
+                    round_profit = -ba
+
+                if res == "tie":
+                    send_action(f"Tie — BET returned. Balance: ${bal:.2f}")
+                elif won:
+                    send_action(f"WIN! +${ba:.0f}. Balance: ${bal:.2f}")
+                else:
+                    send_action(f"LOSE. -${ba:.0f}. Balance: ${bal:.2f}")
+
+                send_result(res, won, ba, bal, len(turns), turns_disp, cp, cm, round_profit)
             else:
-                send_action(f"LOSE. -${ba:.0f}. Balance: ${bal:.2f}")
-
-            send_result(res, won, ba, bal, len(turns), turns_disp, cp, cm, round_profit)
+                send_log("[bet] result observed but bet not confirmed — skipping GUI result")
 
             # ── sync_pause: 連B 検出と観戦突入判定 (原点 465843d 版) ──
             if _effective_mode_box[0] == "sync_pause":
