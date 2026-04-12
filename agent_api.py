@@ -1744,6 +1744,7 @@ def _run_bet_session_inner(config: dict, stop_event: threading.Event, skip_event
         flat_wins = 0
         flat_losses = 0
         flat_ties = 0
+        chip_fail_streak = 0
 
         send_action("Counter mode starting...")
         send_log(f"[counter] mode={_effective_mode_box[0]} entry={int(ENTRY_WINDOW)}cols short>={int(100*0.85)}%")
@@ -1879,6 +1880,7 @@ def _run_bet_session_inner(config: dict, stop_event: threading.Event, skip_event
                     current_name = None
                     continue
                 last_bead = _pre_bead
+                last_non_tie = _last_non_tie_from_seq(last_bead) or last_non_tie
             except Exception:
                 pass
 
@@ -1903,11 +1905,69 @@ def _run_bet_session_inner(config: dict, stop_event: threading.Event, skip_event
                     lambda: not stop_event.is_set(),
                     side=side,
                 )
+                if round_result.get("action") == "exit":
+                    send_log("[counter] ⚠️ run_round exit → 退室して再探索")
+                    try:
+                        mark_table_exited(current_name)
+                        executor.exit_table()
+                    except Exception:
+                        pass
+                    current_tid = None
+                    current_name = None
+                    chip_fail_streak = 0
+                    continue
 
                 # ── GUI送信 (他モードと同じ send_result + status) ──
                 rr_res = round_result.get("result")
                 rr_won = round_result.get("won")
                 rr_ba = round_result.get("bet_amount", 0)
+                confirmed_total = 0.0
+                dom_total = 0.0
+                try:
+                    dom_total = executor._get_total_bet()
+                except Exception:
+                    pass
+                try:
+                    if executor.game_ws:
+                        confirmed = getattr(executor.game_ws, "_last_confirmed", {})
+                        if isinstance(confirmed, dict):
+                            confirmed_total = sum(
+                                v for v in confirmed.values()
+                                if isinstance(v, (int, float))
+                            )
+                except Exception:
+                    pass
+                actual_total = confirmed_total if confirmed_total > 0 else dom_total
+                bet_confirmed = bool(rr_ba and actual_total > 0)
+                partial_detected = False
+                if actual_total > 0 and rr_ba and abs(actual_total - rr_ba) > 0.5:
+                    partial_detected = True
+                    send_log(f"[counter] ⚠️ 部分BET検出: 計画${rr_ba:.0f} → 実際${actual_total:.2f}")
+                    rr_ba = actual_total
+
+                if not bet_confirmed:
+                    chip_fail_streak += 1
+                    send_log("[counter] ⚠️ BET未確認 → GUI更新スキップ")
+                    if chip_fail_streak >= 2:
+                        send_log(f"[counter] ⚠️ チップ失敗{chip_fail_streak}連続 → 退室")
+                        try:
+                            mark_table_exited(current_name)
+                            executor.exit_table()
+                        except Exception:
+                            pass
+                        if chip_fail_streak >= 4:
+                            _restart_counter_browser("chip select failed x2 after re-entry")
+                            chip_fail_streak = 0
+                        current_tid = None
+                        current_name = None
+                        continue
+                    continue
+
+                if partial_detected:
+                    chip_fail_streak += 1
+                else:
+                    chip_fail_streak = 0
+
                 if rr_res:
                     bal = executor.get_balance() if not dry_run else 0
                     turns = counter_session.tracker.current_turns
@@ -1944,6 +2004,7 @@ def _run_bet_session_inner(config: dict, stop_event: threading.Event, skip_event
                         "running": True,
                         "session_count": counter_session.session_count,
                     })
+                    _schedule_session_state_sync(user_email, counter_session, user_id, session_api_key)
 
                     if rr_res != "tie":
                         send_action(f"{'WIN' if rr_won else 'LOSE'} {side.upper()} ${rr_ba:.0f}. Balance: ${bal:.2f}")
@@ -1953,6 +2014,20 @@ def _run_bet_session_inner(config: dict, stop_event: threading.Event, skip_event
                     s = round_result["completed_set"]
                     send_set_complete(s, chip_base)
                     send_shoe_history(counter_session.tracker.sets, chip_base)
+
+                if partial_detected and chip_fail_streak >= 2:
+                    send_log("[counter] ⚠️ 部分BETが連続 → 退室して再探索")
+                    try:
+                        mark_table_exited(current_name)
+                        executor.exit_table()
+                    except Exception:
+                        pass
+                    if chip_fail_streak >= 4:
+                        _restart_counter_browser("chip select failed x2 after re-entry")
+                        chip_fail_streak = 0
+                    current_tid = None
+                    current_name = None
+                    continue
             else:
                 # flat mode: 直接BET
                 send_log(f"[counter] BET {side.upper()} ${FLAT_BET_AMOUNT:.0f} (flat)")
@@ -1987,13 +2062,54 @@ def _run_bet_session_inner(config: dict, stop_event: threading.Event, skip_event
                     continue
 
                 result = result_info["result"]
+                confirmed_total = 0.0
+                dom_total = 0.0
+                try:
+                    dom_total = executor._get_total_bet()
+                except Exception:
+                    pass
+                try:
+                    if executor.game_ws:
+                        confirmed = getattr(executor.game_ws, "_last_confirmed", {})
+                        if isinstance(confirmed, dict):
+                            confirmed_total = sum(
+                                v for v in confirmed.values()
+                                if isinstance(v, (int, float))
+                            )
+                except Exception:
+                    pass
+                actual_total = confirmed_total if confirmed_total > 0 else dom_total
+                bet_confirmed = actual_total > 0
+                if not bet_confirmed:
+                    chip_fail_streak += 1
+                    send_log("[counter] ⚠️ BET未確認 → GUI更新スキップ")
+                    if chip_fail_streak >= 2:
+                        send_log(f"[counter] ⚠️ チップ失敗{chip_fail_streak}連続 → 退室")
+                        try:
+                            mark_table_exited(current_name)
+                            executor.exit_table()
+                        except Exception:
+                            pass
+                        if chip_fail_streak >= 4:
+                            _restart_counter_browser("chip select failed x2 after re-entry")
+                            chip_fail_streak = 0
+                        current_tid = None
+                        current_name = None
+                    continue
+                if actual_total > 0 and abs(actual_total - FLAT_BET_AMOUNT) > 0.5:
+                    send_log(f"[counter] ⚠️ 部分BET検出: 計画${FLAT_BET_AMOUNT:.0f} → 実際${actual_total:.2f}")
+                    chip_fail_streak += 1
+                else:
+                    chip_fail_streak = 0
+
                 won = None if result == "tie" else (result == side)
                 round_profit = 0.0
+                bet_amt = actual_total if actual_total > 0 else FLAT_BET_AMOUNT
                 if won is True:
-                    round_profit = FLAT_BET_AMOUNT * (0.95 if side == "banker" else 1.0)
+                    round_profit = bet_amt * (0.95 if side == "banker" else 1.0)
                     flat_wins += 1
                 elif won is False:
-                    round_profit = -FLAT_BET_AMOUNT
+                    round_profit = -bet_amt
                     flat_losses += 1
                 else:
                     flat_ties += 1
@@ -2002,7 +2118,7 @@ def _run_bet_session_inner(config: dict, stop_event: threading.Event, skip_event
 
                 bal = float(result_info.get("balance", 0) or 0)
                 send_result(
-                    result=result, won=won, bet_amount=FLAT_BET_AMOUNT,
+                    result=result, won=won, bet_amount=bet_amt,
                     balance=bal, turn=0, turns_display="",
                     cumulative_profit=0, cumulative_money=money_pnl,
                     round_profit_dollars=round_profit,
@@ -2017,6 +2133,19 @@ def _run_bet_session_inner(config: dict, stop_event: threading.Event, skip_event
                     "balance": bal, "turns_display": "", "running": True,
                     "session_count": 0,
                 })
+                if chip_fail_streak >= 2:
+                    send_log("[counter] ⚠️ 部分BETが連続 → 退室して再探索")
+                    try:
+                        mark_table_exited(current_name)
+                        executor.exit_table()
+                    except Exception:
+                        pass
+                    if chip_fail_streak >= 4:
+                        _restart_counter_browser("chip select failed x2 after re-entry")
+                        chip_fail_streak = 0
+                    current_tid = None
+                    current_name = None
+                    continue
                 round_result = {
                     "action": "bet", "result": result, "won": won,
                     "bet_amount": FLAT_BET_AMOUNT,
