@@ -1756,21 +1756,28 @@ def _run_bet_session_inner(config: dict, stop_event: threading.Event, skip_event
                     pass
 
             # Wait for the round result (重要: ここを誤ると同一BETフェーズで2回BET→UNDOが発生する)
-            result_info = executor.wait_for_result(timeout=90, bet_amount=0)
+            result_info = executor.wait_for_result(timeout=90, bet_amount=bet_amount if placed else 0)
             if not result_info or result_info.get("result") in (None, "unknown"):
-                send_log("[counter] ⚠️ 結果取得失敗/不明 → 退室して再探索")
-                result_timeout_streak += 1
-                try:
-                    mark_table_exited(current_name)
-                    executor.exit_table()
-                except Exception:
-                    pass
-                if result_timeout_streak >= 2:
-                    _restart_counter_browser("result unknown x2")
-                    result_timeout_streak = 0
-                current_tid = None
-                current_name = None
-                continue
+                # Fallback: bead-road diff (短時間だけ)
+                send_log("[counter] ⚠️ 結果不明 → bead-road fallback")
+                fallback = _wait_bead_change(last_bead, timeout_sec=30.0)
+                if fallback:
+                    last_bead, hand_fb = fallback
+                    result_info = {"result": {"P": "player", "B": "banker", "T": "tie"}[hand_fb], "balance": 0.0}
+                else:
+                    send_log("[counter] ⚠️ 結果取得失敗/不明 → 退室して再探索")
+                    result_timeout_streak += 1
+                    try:
+                        mark_table_exited(current_name)
+                        executor.exit_table()
+                    except Exception:
+                        pass
+                    if result_timeout_streak >= 2:
+                        _restart_counter_browser("result unknown x2")
+                        result_timeout_streak = 0
+                    current_tid = None
+                    current_name = None
+                    continue
             result_timeout_streak = 0
 
             result = result_info["result"]  # player/banker/tie
