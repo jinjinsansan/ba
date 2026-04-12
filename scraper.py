@@ -14,6 +14,7 @@ import json
 import os
 import re
 import shutil
+import subprocess
 import time
 import logging
 import threading
@@ -114,6 +115,21 @@ class BaccaratScraper:
         except Exception as e:
             logger.warning(f"プロファイル退避に失敗（続行）: {e}")
 
+    def _kill_camoufox_processes(self, reason: str) -> None:
+        # Windows only. On crash loops we prefer "hard reset" over attempting to reuse a broken browser process.
+        if os.name != "nt":
+            return
+        try:
+            logger.warning(f"Camoufoxプロセス強制終了: {reason}")
+            for img in ("camoufox.exe", "firefox.exe"):
+                subprocess.call(
+                    ["taskkill", "/F", "/T", "/IM", img],
+                    stdout=subprocess.DEVNULL,
+                    stderr=subprocess.DEVNULL,
+                )
+        except Exception:
+            pass
+
     def _repair_profile_dir(self) -> None:
         self._profile_dir.mkdir(parents=True, exist_ok=True)
 
@@ -141,12 +157,17 @@ class BaccaratScraper:
         state = self._load_profile_state()
         now = time.time()
         crash_streak = int(state.get("crash_streak", 0) or 0)
+        lock_exists = any((self._profile_dir / n).exists() for n in ("parent.lock", ".parentlock", "lock"))
 
         # 前回「booting=true」のままなら、異常終了（クラッシュ/kill/電源断）とみなす
         if state.get("booting") is True:
             last_ts = float(state.get("boot_ts", 0) or 0)
             if last_ts and (now - last_ts) < 20 * 60:
                 crash_streak += 1
+
+        # 前回異常終了 or lock残存なら、プロセス自体がゾンビになっていることがあるため先に殺す
+        if state.get("booting") is True or crash_streak > 0 or lock_exists:
+            self._kill_camoufox_processes(reason=f"booting={state.get('booting')} crash_streak={crash_streak} lock={lock_exists}")
 
         # 連続クラッシュ時はプロファイル腐敗を疑ってローテーション
         if crash_streak >= 3:
