@@ -238,54 +238,6 @@ class UserNotifier(TelegramNotifier):
         chat = chat_id or os.getenv("TELEGRAM_CHAT_ID", "")
         super().__init__(token, chat, label="USER")
 
-    def notify_startup(self, table_name: str, config: dict | None = None):
-        base = None
-        target = None
-        loss = None
-        if isinstance(config, dict):
-            base = config.get("chip_base")
-            target = config.get("profit_target")
-            loss = config.get("loss_cut")
-        details = ""
-        if base is not None and target is not None and loss is not None:
-            details = f"\nBase: ${base:.2f} | Target: ${target:.0f} | LossCut: ${loss:.0f}"
-        self.send(
-            f"🃏 LAPLACE started\n"
-            f"Table: {table_name}{details}"
-        )
-
-    def notify_shutdown(self, reason: str = ""):
-        self.send(f"⛔ LAPLACE stopped{': ' + reason if reason else ''}")
-
-    def notify_profit_target(self, session_num: int, amount: float,
-                             cumulative_today: float, table_name: str = ""):
-        table_line = f"\nTable: {table_name}" if table_name else ""
-        self.send(
-            f"🎉 Profit target hit (Session #{session_num})\n"
-            f"Locked: +${amount:.0f}\n"
-            f"Today: {cumulative_today:+.0f}{table_line}"
-        )
-
-    def notify_loss_cut(self, session_num: int, amount: float,
-                        cumulative_today: float, table_name: str = ""):
-        table_line = f"\nTable: {table_name}" if table_name else ""
-        self.send(
-            f"⚠️ Loss cut (Session #{session_num})\n"
-            f"Locked: -${abs(amount):.0f}\n"
-            f"Today: {cumulative_today:+.0f}{table_line}"
-        )
-
-    def notify_daily_summary(self, date_str: str, total_sessions: int,
-                              profit_sessions: int, loss_sessions: int,
-                              net_profit: float, table_name: str = ""):
-        sign = "+" if net_profit >= 0 else ""
-        table_line = f"\nLast table: {table_name}" if table_name else ""
-        self.send(
-            f"📊 Daily Summary — {date_str}\n"
-            f"Sessions: {total_sessions} (Profit {profit_sessions} / Loss {loss_sessions})\n"
-            f"Net: {sign}${net_profit:.0f}{table_line}"
-        )
-
 
 # ==========================================================
 #  Composite — 複数のNotifierを1つにまとめる
@@ -312,7 +264,7 @@ class CompositeNotifier:
         if self.public and config.get("verification_mode"):
             self.public.notify_verification_start(table_name)
         if self.user:
-            self.user.notify_startup(table_name, config)
+            self.user.notify_startup(table_name)
 
     def on_shutdown(self, user: str, reason: str = ""):
         if self.admin:
@@ -325,30 +277,18 @@ class CompositeNotifier:
             self.public.notify_set_complete(set_data, cumulative_dollars)
 
     def on_profit_target(self, user: str, session_num: int, amount: float,
-                           hands: int, cumulative_today: float, verification: bool,
-                           table_name: str = ""):
+                           hands: int, cumulative_today: float, verification: bool):
         if self.admin:
             self.admin.notify_user_profit(user, session_num, amount, cumulative_today)
         if self.public and verification:
             self.public.notify_profit_target(session_num, amount, hands)
-        if self.user:
-            self.user.notify_profit_target(session_num, amount, cumulative_today, table_name)
 
     def on_loss_cut(self, user: str, session_num: int, amount: float,
-                     hands: int, cumulative_today: float, verification: bool,
-                     table_name: str = ""):
+                     hands: int, cumulative_today: float, verification: bool):
         if self.admin:
             self.admin.notify_user_loss_cut(user, session_num, amount, cumulative_today)
         if self.public and verification:
             self.public.notify_loss_cut(session_num, amount, hands)
-        if self.user:
-            self.user.notify_loss_cut(session_num, amount, cumulative_today, table_name)
-
-    def on_daily_summary(self, date_str: str, total_sessions: int,
-                          profit_sessions: int, loss_sessions: int,
-                          net_profit: float, table_name: str = ""):
-        if self.user:
-            self.user.notify_daily_summary(date_str, total_sessions, profit_sessions, loss_sessions, net_profit, table_name)
 
     def on_error(self, user: str, error_type: str, detail: str):
         if self.admin:

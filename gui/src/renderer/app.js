@@ -28,7 +28,6 @@ function showMain() {
 
 async function initLicense() {
   const env = await window.valhalla.getEnv();
-  LAPLACE_API_KEY = (env.laplace_api_key || '').trim();
   const email = env.account_email;
 
   if (!email) {
@@ -237,7 +236,6 @@ const DEFAULT_SETTINGS = {
   chip_base: 1,
   profit_target: 50,
   loss_cut: 200,
-  telegram_bot_token: '',
   telegram_chat_id: '',
   user_email: '',
   dry_run: false,
@@ -245,7 +243,7 @@ const DEFAULT_SETTINGS = {
 };
 
 const SITE_URL = 'https://bafather.uk';
-let LAPLACE_API_KEY = '';
+const LAPLACE_API_KEY = 'c6gDoe0xIyBOTQ7bvzRaAHNYn4ZE1W9Mriumqkw8Shf5Jlsd';
 
 async function syncTableFilterToServer(email, filter) {
   if (!email) return;
@@ -521,7 +519,6 @@ $('#btnSettings').addEventListener('click', () => {
   $('#inputChipBase').value = s.chip_base;
   $('#inputProfitTarget').value = s.profit_target;
   $('#inputLossCut').value = s.loss_cut;
-  $('#inputTelegramToken').value = s.telegram_bot_token || '';
   $('#inputTelegramChat').value = s.telegram_chat_id || '';
   $('#inputUserEmail').value = s.user_email || '';
   $('#inputDryRun').checked = !!s.dry_run;
@@ -541,7 +538,6 @@ $('#btnSaveSettings').addEventListener('click', async () => {
     chip_base: parseFloat($('#inputChipBase').value) || 1,
     profit_target: parseFloat($('#inputProfitTarget').value) || 50,
     loss_cut: parseFloat($('#inputLossCut').value) || 200,
-    telegram_bot_token: $('#inputTelegramToken').value.trim(),
     telegram_chat_id: $('#inputTelegramChat').value.trim(),
     user_email: $('#inputUserEmail').value.trim(),
     dry_run: $('#inputDryRun').checked,
