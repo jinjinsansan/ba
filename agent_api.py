@@ -244,6 +244,19 @@ def _extract_session_state(session) -> dict | None:
     return None
 
 
+def _has_session_state(state: dict | None) -> bool:
+    if not isinstance(state, dict):
+        return False
+    if state.get("sets"):
+        return True
+    turns = state.get("current_turns") or state.get("turns_display")
+    if turns:
+        return True
+    if (state.get("total_bets") or 0) > 0:
+        return True
+    return False
+
+
 def _load_session_state_from_server(email: str, api_key: str = "") -> dict | None:
     key = api_key or _SESSION_API_KEY
     if not email or not key:
@@ -305,6 +318,24 @@ def _schedule_session_state_sync(email: str, session, user_id: str = "", api_key
             _session_sync_inflight = False
 
     threading.Thread(target=_worker, daemon=True).start()
+
+
+def _backfill_session_state(email: str, session, user_id: str = "", api_key: str = "") -> bool:
+    key = api_key or _SESSION_API_KEY
+    if not email or not key:
+        return False
+    state = _extract_session_state(session)
+    if not _has_session_state(state):
+        return False
+    if user_id:
+        state["user_id"] = user_id
+    state["updated_at"] = datetime.utcnow().isoformat() + "Z"
+
+    def _worker():
+        _post_session_state_to_server(email, state, key)
+
+    threading.Thread(target=_worker, daemon=True).start()
+    return True
 
 
 def _apply_session_state(session, state: dict) -> bool:
@@ -474,14 +505,17 @@ def _run_bet_session_inner(config: dict, stop_event: threading.Event, skip_event
     user_id = os.getenv("LAPLACE_USER", "dev-machine")
     session_api_key = (config.get("site_api_key") or _SESSION_API_KEY).strip()
     supabase_state = None
+    supabase_missing = False
     if resume:
         if user_email and session_api_key:
             supabase_state = _load_session_state_from_server(user_email, session_api_key)
             if supabase_state:
                 send_log("[session] Supabase session loaded")
             else:
+                supabase_missing = True
                 send_log("[session] Supabase session not found/empty")
         else:
+            supabase_missing = True
             send_log("[session] Supabase session skipped (missing user_email or site_api_key)")
 
     # Convert dollar amounts to chip units
@@ -1530,6 +1564,9 @@ def _run_bet_session_inner(config: dict, stop_event: threading.Event, skip_event
         if counter_session is not None and supabase_state:
             if _apply_session_state(counter_session, supabase_state):
                 send_log("[counter] Supabase session restored")
+        elif counter_session is not None and supabase_missing:
+            if _backfill_session_state(user_email, counter_session, user_id, session_api_key):
+                send_log("[counter] Supabase session backfilled from local state")
 
         entry_fail_streak = 0
         result_timeout_streak = 0
@@ -2126,6 +2163,9 @@ def _run_bet_session_inner(config: dict, stop_event: threading.Event, skip_event
             return
     if supabase_state and _apply_session_state(session, supabase_state):
         send_log("[session] Supabase session restored")
+    elif supabase_missing:
+        if _backfill_session_state(user_email, session, user_id, session_api_key):
+            send_log("[session] Supabase session backfilled from local/VPS state")
     _active_session = session
 
     def restart_browser(reason: str) -> tuple[str, str] | None:
