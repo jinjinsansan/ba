@@ -132,6 +132,7 @@ $('#btnStart').addEventListener('click', async () => {
     // resume時は復元された sessionTotal を _lastCumulativeMoney と同期
     _lastCumulativeMoney = sessionTotal;
   }
+  config.resume_results = Array.isArray(results) ? results.slice() : [];
   _startedAt = Date.now();
   setRunning(true);
   addLog('Bot starting...', 'info');
