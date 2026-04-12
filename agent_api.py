@@ -1592,6 +1592,25 @@ def _run_bet_session_inner(config: dict, stop_event: threading.Event, skip_event
                     current_name = None
                     continue
                 last_non_tie = _last_non_tie_from_seq(last_bead)
+                # Initialize column state from existing bead road (entry might be mid-column)
+                if in_cols:
+                    current_col_len = in_cols[-1]
+                    current_col_side = last_non_tie
+                else:
+                    current_col_len = 0
+                    current_col_side = None
+                # If already in a long column at entry, exit immediately (e.g., 5+ drop ongoing)
+                exit_reason = should_exit(columns_since_entry, current_col_len)
+                if exit_reason:
+                    send_log(f"[counter] ⚠️ 入室直後に退室判定: {current_name} ({exit_reason})")
+                    try:
+                        mark_table_exited(current_name)
+                        executor.exit_table()
+                    except Exception:
+                        pass
+                    current_tid = None
+                    current_name = None
+                    continue
                 continue
 
             # Wait for betting phase (no blocking on result detection)
