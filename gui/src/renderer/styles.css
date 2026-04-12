@@ -1,59 +1,32 @@
 /* === Valhalla II — Futuristic Dark Theme === */
 
 :root {
-  --bg: #05070f;
-  --bg-card: rgba(12, 18, 35, 0.9);
-  --bg-glass: rgba(18, 28, 55, 0.65);
-  --accent: #6cf3ff;
-  --accent-alt: #7a7dff;
-  --accent-dim: rgba(108, 243, 255, 0.18);
+  --bg: #080b12;
+  --bg-card: rgba(15, 20, 35, 0.85);
+  --bg-glass: rgba(20, 28, 50, 0.6);
+  --accent: #00e5ff;
+  --accent-dim: rgba(0, 229, 255, 0.15);
   --win: #00ff88;
   --lose: #ff3366;
   --tie: #ffcc00;
-  --text: #e6f0ff;
-  --text-muted: #7f90b5;
-  --text-dim: #4c5b79;
-  --border: rgba(108, 243, 255, 0.18);
-  --glow: 0 0 24px rgba(108, 243, 255, 0.2);
-  --radius: 12px;
+  --text: #e0e8f0;
+  --text-muted: #7888a0;
+  --text-dim: #4a5568;
+  --border: rgba(0, 229, 255, 0.12);
+  --glow: 0 0 20px rgba(0, 229, 255, 0.15);
+  --radius: 10px;
 }
 
 * { margin: 0; padding: 0; box-sizing: border-box; }
 
 body {
   font-family: 'Segoe UI', 'Inter', -apple-system, sans-serif;
-  background: radial-gradient(circle at 10% 0%, rgba(108,243,255,0.08), transparent 40%),
-              radial-gradient(circle at 90% 10%, rgba(122,125,255,0.08), transparent 45%),
-              var(--bg);
+  background: var(--bg);
   color: var(--text);
   height: 100vh;
   display: flex;
   flex-direction: column;
   overflow: hidden;
-}
-
-body::before {
-  content: "";
-  position: fixed;
-  inset: 0;
-  background-image: linear-gradient(rgba(108,243,255,0.04) 1px, transparent 1px),
-                    linear-gradient(90deg, rgba(108,243,255,0.04) 1px, transparent 1px);
-  background-size: 40px 40px;
-  pointer-events: none;
-  opacity: 0.35;
-  z-index: 0;
-}
-
-.main-content, .title-bar, .modal, .action-bar, .stats-row, .section, .log-panel {
-  position: relative;
-  z-index: 1;
-}
-
-html[data-variant="user"] .dev-only {
-  display: none !important;
-}
-html[data-variant="user"] .os-tag {
-  display: none !important;
 }
 
 /* === Flash Overlay === */
@@ -177,7 +150,6 @@ html[data-variant="user"] .os-tag {
   -webkit-app-region: drag;
   border-bottom: 1px solid var(--border);
   flex-shrink: 0;
-  box-shadow: 0 0 20px rgba(108,243,255,0.08);
 }
 .title-bar-left { display: flex; align-items: center; gap: 8px; }
 .title-bar-logo { color: var(--accent); font-size: 16px; filter: drop-shadow(0 0 4px var(--accent)); }
@@ -207,7 +179,6 @@ html[data-variant="user"] .os-tag {
   border: 1px solid var(--border);
   border-radius: var(--radius);
   backdrop-filter: blur(10px);
-  box-shadow: inset 0 0 20px rgba(108,243,255,0.06);
 }
 .action-dot {
   width: 6px; height: 6px;
@@ -279,13 +250,12 @@ html[data-variant="user"] .os-tag {
   border: 1px solid var(--border);
   border-radius: var(--radius);
   padding: 12px 16px;
-  backdrop-filter: blur(12px);
-  box-shadow: 0 0 30px rgba(0,0,0,0.35), inset 0 0 20px rgba(108,243,255,0.05);
+  backdrop-filter: blur(10px);
 }
 .section-header {
-  font-size: 10px;
+  font-size: 9px;
   font-weight: 800;
-  letter-spacing: 2.5px;
+  letter-spacing: 2px;
   color: var(--text-dim);
   margin-bottom: 8px;
 }
@@ -386,17 +356,6 @@ html[data-variant="user"] .os-tag {
   font-variant-numeric: tabular-nums;
 }
 .dev-sets-container { padding: 4px 0 12px; }
-.dev-sets-header {
-  display: grid;
-  grid-template-columns: 44px 1fr 120px;
-  gap: 8px;
-  padding: 6px 12px 4px;
-  font-size: 9px;
-  font-weight: 800;
-  letter-spacing: 1px;
-  color: var(--text-dim);
-  text-transform: uppercase;
-}
 .dev-sets {
   font-family: 'Cascadia Code', 'Consolas', monospace;
   font-size: 11px;
@@ -407,18 +366,14 @@ html[data-variant="user"] .os-tag {
   color: var(--text);
 }
 .dev-sets .set-line {
-  display: grid;
-  grid-template-columns: 44px 1fr 120px;
-  gap: 8px;
-  align-items: center;
+  white-space: nowrap;
   position: relative;
-  padding: 2px 0;
+  padding: 1px 0;
 }
-.dev-sets .set-index { color: var(--text-dim); }
-.dev-sets .set-marks { white-space: nowrap; }
+.dev-sets .set-index { color: var(--text-dim); margin-right: 6px; }
 .dev-sets .set-mark-o { color: var(--win); }
 .dev-sets .set-mark-x { color: var(--lose); }
-.dev-sets .set-meta { color: var(--text-muted); font-size: 10px; text-align: right; }
+.dev-sets .set-meta { color: var(--text-muted); margin-left: 8px; font-size: 10px; }
 .dev-sets .scissors { color: #ffcc00; margin-left: 4px; }
 .dev-sets .set-line.slashed { opacity: 0.5; }
 .dev-sets .set-line.slashed::after {
@@ -495,55 +450,49 @@ html[data-variant="user"] .os-tag {
 }
 .btn {
   padding: 10px 0;
-  border: 1px solid transparent;
-  border-radius: 10px;
+  border: none;
+  border-radius: var(--radius);
   font-size: 12px;
   font-weight: 800;
-  letter-spacing: 1px;
+  letter-spacing: 2px;
   cursor: pointer;
-  transition: all 0.2s ease;
+  transition: all 0.2s;
   flex: 1;
-  text-transform: uppercase;
-  box-shadow: 0 0 18px rgba(108,243,255,0.12);
 }
 .btn:disabled { opacity: 0.3; cursor: not-allowed; }
 .btn-start {
-  background: linear-gradient(135deg, #6cf3ff, #00c2ff);
-  color: #05070f;
-  border-color: rgba(108,243,255,0.5);
-  box-shadow: 0 0 20px rgba(108,243,255,0.35);
+  background: linear-gradient(135deg, #00e5ff, #00b8d4);
+  color: #080b12;
+  box-shadow: 0 0 15px rgba(0,229,255,0.2);
 }
 .btn-start:hover:not(:disabled) {
-  box-shadow: 0 0 35px rgba(108,243,255,0.6);
+  box-shadow: 0 0 25px rgba(0,229,255,0.4);
   transform: translateY(-1px);
 }
 .btn-stop {
-  background: linear-gradient(135deg, #ff4b7d, #ff1f57);
+  background: linear-gradient(135deg, #ff3366, #cc0033);
   color: white;
-  border-color: rgba(255,51,102,0.5);
-  box-shadow: 0 0 18px rgba(255,51,102,0.35);
+  box-shadow: 0 0 15px rgba(255,51,102,0.2);
 }
 .btn-stop:hover:not(:disabled) {
-  box-shadow: 0 0 35px rgba(255,51,102,0.6);
+  box-shadow: 0 0 25px rgba(255,51,102,0.4);
   transform: translateY(-1px);
 }
 .btn-skip {
-  background: linear-gradient(135deg, #ffd36c, #ff9f2f);
-  color: #05070f;
-  border-color: rgba(255,179,0,0.5);
-  box-shadow: 0 0 18px rgba(255,179,0,0.35);
+  background: linear-gradient(135deg, #ffb300, #ff8800);
+  color: #080b12;
+  box-shadow: 0 0 15px rgba(255,179,0,0.2);
 }
 .btn-skip:hover:not(:disabled) {
-  box-shadow: 0 0 35px rgba(255,179,0,0.6);
+  box-shadow: 0 0 25px rgba(255,179,0,0.4);
   transform: translateY(-1px);
 }
 .btn-gear {
   flex: 0 0 44px;
   background: var(--bg-glass);
-  border: 1px solid rgba(108,243,255,0.3);
+  border: 1px solid var(--border);
   color: var(--text-muted);
   font-size: 18px;
-  box-shadow: 0 0 12px rgba(108,243,255,0.15);
 }
 .btn-gear:hover { color: var(--accent); border-color: var(--accent); }
 

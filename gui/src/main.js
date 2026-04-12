@@ -464,15 +464,7 @@ ipcMain.handle('send-command', (event, cmd) => {
 
 ipcMain.handle('get-env', () => {
   const env = loadDotEnv();
-  const variant = (env.GUI_VARIANT
-    || env.LAPLACE_GUI_VARIANT
-    || process.env.GUI_VARIANT
-    || (app.isPackaged ? 'user' : 'dev')).toLowerCase();
-  return {
-    stake_username: env.STAKE_USERNAME || '',
-    account_email: env.LAPLACE_ACCOUNT_EMAIL || '',
-    gui_variant: variant,
-  };
+  return { stake_username: env.STAKE_USERNAME || '', account_email: env.LAPLACE_ACCOUNT_EMAIL || '' };
 });
 
 ipcMain.handle('check-license', async (_, email) => {

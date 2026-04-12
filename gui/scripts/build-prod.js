@@ -40,7 +40,7 @@ console.log('[OK] app.js processed (developer mode removed)');
 let html = fs.readFileSync(path.join(SRC, 'index.html'), 'utf-8');
 
 // Remove Developer Mode Panel
-html = html.replace(/<!-- DEV PANEL START -->[\s\S]*?<!-- DEV PANEL END -->/g, '');
+html = html.replace(/<!-- Developer Mode Panel[\s\S]*?<!-- \/Developer Mode Panel -->/g, '');
 
 // Remove devModeLink / devModeStatus span
 html = html.replace(/<span id="devModeLink"[\s\S]*?<\/span>\s*<\/span>/g, '');

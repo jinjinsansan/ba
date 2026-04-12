@@ -13,7 +13,7 @@
   <!-- Update Banner -->
   <div id="updateBanner" style="display:none;background:#1a2a1a;border-bottom:1px solid #2a4a2a;padding:6px 16px;font-size:11px;color:#6fbf6f;align-items:center;gap:10px;-webkit-app-region:no-drag;">
     <span id="updateText"></span>
-    <button id="btnInstallUpdate" data-i18n="update_open" style="display:none;padding:2px 10px;background:#2a5a2a;color:#9fdf9f;border:1px solid #3a7a3a;border-radius:3px;cursor:pointer;font-size:11px;">OPEN DOWNLOAD PAGE</button>
+    <button id="btnInstallUpdate" style="display:none;padding:2px 10px;background:#2a5a2a;color:#9fdf9f;border:1px solid #3a7a3a;border-radius:3px;cursor:pointer;font-size:11px;">ダウンロードページを開く</button>
   </div>
 
   <!-- Title Bar -->
@@ -33,36 +33,36 @@
   <div id="setupScreen" style="display:none;position:fixed;inset:0;background:#0f1117;z-index:9999;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:32px;">
     <div style="width:100%;max-width:360px;">
       <div style="font-size:22px;font-weight:800;letter-spacing:0.1em;color:#fff;margin-bottom:4px;">LAPLACE</div>
-      <div data-i18n="setup_subtitle" style="font-size:11px;color:#666;margin-bottom:28px;letter-spacing:0.05em;">ACTIVATE YOUR LICENSE</div>
+      <div style="font-size:11px;color:#666;margin-bottom:28px;letter-spacing:0.05em;">ACTIVATE YOUR LICENSE</div>
 
       <div id="setupError" style="display:none;background:#2a1a1a;border:1px solid #5a2a2a;border-radius:6px;padding:10px 14px;font-size:11px;color:#ff7070;margin-bottom:16px;"></div>
 
       <div style="margin-bottom:14px;">
-        <div data-i18n="setup_account_email" style="font-size:10px;color:#888;margin-bottom:5px;letter-spacing:0.08em;text-transform:uppercase;">bafather.uk Account Email</div>
-        <input id="setupEmail" type="email" placeholder="your@email.com" data-i18n-placeholder="setup_email_placeholder"
+        <div style="font-size:10px;color:#888;margin-bottom:5px;letter-spacing:0.08em;text-transform:uppercase;">bafather.uk Account Email</div>
+        <input id="setupEmail" type="email" placeholder="your@email.com"
           style="width:100%;box-sizing:border-box;background:#1a1d27;border:1px solid #2a2d3a;border-radius:6px;padding:9px 12px;color:#fff;font-size:13px;outline:none;">
       </div>
 
       <div style="margin-bottom:14px;">
-        <div data-i18n="setup_stake_email" style="font-size:10px;color:#888;margin-bottom:5px;letter-spacing:0.08em;text-transform:uppercase;">Stake.com Email</div>
-        <input id="setupStakeUser" type="email" placeholder="stake@email.com" data-i18n-placeholder="setup_stake_email_placeholder"
+        <div style="font-size:10px;color:#888;margin-bottom:5px;letter-spacing:0.08em;text-transform:uppercase;">Stake.com Email</div>
+        <input id="setupStakeUser" type="email" placeholder="stake@email.com"
           style="width:100%;box-sizing:border-box;background:#1a1d27;border:1px solid #2a2d3a;border-radius:6px;padding:9px 12px;color:#fff;font-size:13px;outline:none;">
       </div>
 
       <div style="margin-bottom:22px;">
-        <div data-i18n="setup_stake_pass" style="font-size:10px;color:#888;margin-bottom:5px;letter-spacing:0.08em;text-transform:uppercase;">Stake.com Password</div>
+        <div style="font-size:10px;color:#888;margin-bottom:5px;letter-spacing:0.08em;text-transform:uppercase;">Stake.com Password</div>
         <input id="setupStakePass" type="password" placeholder="••••••••"
           style="width:100%;box-sizing:border-box;background:#1a1d27;border:1px solid #2a2d3a;border-radius:6px;padding:9px 12px;color:#fff;font-size:13px;outline:none;">
       </div>
 
-      <button id="btnActivate" data-i18n="setup_activate"
+      <button id="btnActivate"
         style="width:100%;padding:11px;background:#1e3a5f;color:#7ab3e0;border:1px solid #2a5a8a;border-radius:6px;font-size:13px;font-weight:700;letter-spacing:0.1em;cursor:pointer;text-transform:uppercase;">
         ACTIVATE
       </button>
-      <div id="setupLoading" data-i18n="setup_verifying" style="display:none;text-align:center;margin-top:12px;font-size:11px;color:#555;">Verifying license...</div>
+      <div id="setupLoading" style="display:none;text-align:center;margin-top:12px;font-size:11px;color:#555;">Verifying license...</div>
 
       <div style="margin-top:20px;text-align:center;font-size:10px;color:#444;">
-        <span data-i18n="setup_no_account">No account? Visit</span> <span style="color:#7ab3e0;cursor:pointer;" id="linkBafather">bafather.uk</span>
+        No account? Visit <span style="color:#7ab3e0;cursor:pointer;" id="linkBafather">bafather.uk</span>
       </div>
     </div>
   </div>
@@ -73,82 +73,79 @@
     <!-- Live Action Feed -->
     <div class="action-bar" id="actionBar">
       <span class="action-dot"></span>
-      <span class="action-text" id="actionText" data-i18n="action_initializing">Initializing...</span>
+      <span class="action-text" id="actionText">Initializing...</span>
     </div>
 
     <!-- Stats Row -->
     <div class="stats-row">
       <div class="stat-card">
-        <div class="stat-label" data-i18n="stat_balance">BALANCE</div>
+        <div class="stat-label">BALANCE</div>
         <div class="stat-value" id="balance">$0.00</div>
       </div>
       <div class="stat-card accent">
-        <div class="stat-label" data-i18n="stat_session">SESSION (TO RESET)</div>
+        <div class="stat-label">SESSION (TO RESET)</div>
         <div class="stat-value" id="sessionPnl">$0.00</div>
       </div>
       <div class="stat-card">
-        <div class="stat-label"><span data-i18n="stat_bets">BETS</span> <span class="os-tag" id="osValue">OS 0</span></div>
+        <div class="stat-label">BETS <span class="os-tag" id="osValue">OS 0</span></div>
         <div class="stat-value" id="betCount">0W / 0L</div>
         <div id="testCounter" style="display:none; font-size:11px; color:#ffaa00; margin-top:6px; letter-spacing:1px;">🧪 TEST: 0W 0L 0T</div>
       </div>
       <div class="stat-card">
-        <div class="stat-label" data-i18n="stat_winrate">WIN RATE</div>
+        <div class="stat-label">WIN RATE</div>
         <div class="stat-value" id="winRate">-</div>
       </div>
     </div>
 
-    <!-- DEV PANEL START -->
-    <div class="section glass dev-panel hidden dev-only" id="devPanel">
+    <!-- Developer Mode Panel (hidden unless unlocked) -->
+    <div class="section glass dev-panel hidden" id="devPanel">
       <div class="section-header dev-header">
-        <span data-i18n="laplace_panel_title">DEVELOPER VIEW</span>
-        <span class="dev-badge" data-i18n="laplace_panel_badge">DEV</span>
+        DEVELOPER VIEW <span class="dev-badge">DEV</span>
       </div>
       <div class="dev-grid">
         <div class="dev-item">
-          <div class="dev-label" data-i18n="laplace_unit_idx">Current Unit Idx</div>
+          <div class="dev-label">Current Unit Idx</div>
           <div class="dev-value" id="devUnitIdx">-</div>
         </div>
         <div class="dev-item">
-          <div class="dev-label" data-i18n="laplace_unit">Current Unit ($)</div>
+          <div class="dev-label">Current Unit ($)</div>
           <div class="dev-value" id="devUnit">-</div>
         </div>
         <div class="dev-item">
-          <div class="dev-label" data-i18n="laplace_set">Current Set</div>
+          <div class="dev-label">Current Set</div>
           <div class="dev-value" id="devSet">-</div>
         </div>
         <div class="dev-item">
-          <div class="dev-label" data-i18n="laplace_turn">Turn in Set</div>
+          <div class="dev-label">Turn in Set</div>
           <div class="dev-value" id="devTurn">-/7</div>
         </div>
         <div class="dev-item">
-          <div class="dev-label" data-i18n="laplace_set_profit">Set Profit (chip)</div>
+          <div class="dev-label">Set Profit (chip)</div>
           <div class="dev-value" id="devSetProfit">-</div>
         </div>
         <div class="dev-item">
-          <div class="dev-label" data-i18n="laplace_cum_profit">Cumul. Profit (chip)</div>
+          <div class="dev-label">Cumul. Profit (chip)</div>
           <div class="dev-value" id="devCumProfit">-</div>
         </div>
         <div class="dev-item">
-          <div class="dev-label" data-i18n="laplace_overshoot">Overshoot</div>
+          <div class="dev-label">Overshoot</div>
           <div class="dev-value" id="devOvershoot">0</div>
         </div>
         <div class="dev-item">
-          <div class="dev-label" data-i18n="laplace_total_bets">Total Bets</div>
+          <div class="dev-label">Total Bets</div>
           <div class="dev-value" id="devTotalBets">0</div>
         </div>
       </div>
       <div class="dev-sets-container">
-        <div class="dev-label" style="padding:0 12px;" data-i18n="laplace_set_history">Set History (7 hands per line)</div>
-        <div class="dev-sets-header" id="devSetsHeader"></div>
+        <div class="dev-label" style="padding:0 12px;">Set History (7 hands per line)</div>
         <div class="dev-sets" id="devSets"></div>
       </div>
     </div>
-    <!-- DEV PANEL END -->
 
     <!-- Daily P&L -->
     <div class="section glass daily-section">
       <div class="section-header">
-        <span data-i18n="daily_total">DAILY TOTAL</span> <span class="today-pnl" id="todayPnl">$0</span>
+        DAILY TOTAL <span class="today-pnl" id="todayPnl">$0</span>
       </div>
       <div class="daily-row" id="dailyRow">
         <div class="daily-empty">No history yet</div>
@@ -157,7 +154,7 @@
 
     <!-- Current Round (last 10 results) -->
     <div class="section glass">
-      <div class="section-header" data-i18n="live_feed">LIVE FEED</div>
+      <div class="section-header">LIVE FEED</div>
       <div class="feed-row" id="feedRow">
         <span class="feed-cursor"></span>
       </div>
@@ -165,7 +162,7 @@
 
     <!-- Recent History (last 20 hands, no set boundaries) -->
     <div class="section glass shoe-section">
-      <div class="section-header" data-i18n="recent_hands">RECENT HANDS</div>
+      <div class="section-header">RECENT HANDS</div>
       <div class="recent-grid" id="recentGrid">
         <div class="shoe-empty">Waiting for results...</div>
       </div>
@@ -173,9 +170,9 @@
 
     <!-- Controls -->
     <div class="controls">
-      <button class="btn btn-start" id="btnStart" data-i18n="btn_start">START</button>
-      <button class="btn btn-stop" id="btnStop" data-i18n="btn_stop" disabled>STOP</button>
-      <button class="btn btn-skip" id="btnSkip" data-i18n="btn_skip" disabled>SKIP TABLE</button>
+      <button class="btn btn-start" id="btnStart">START</button>
+      <button class="btn btn-stop" id="btnStop" disabled>STOP</button>
+      <button class="btn btn-skip" id="btnSkip" disabled>SKIP TABLE</button>
       <button class="btn btn-gear" id="btnSettings">&#x2699;</button>
     </div>
 
@@ -183,16 +180,16 @@
     <div class="modal hidden" id="continueModal">
       <div class="modal-content glass">
         <div class="modal-header">
-          <h2 data-i18n="continue_title">PREVIOUS SESSION DETECTED</h2>
+          <h2>PREVIOUS SESSION DETECTED</h2>
           <button class="modal-close" id="continueClose">&times;</button>
         </div>
         <div class="modal-body">
-          <p data-i18n="continue_desc" style="color: var(--text-muted); font-size:12px; line-height:1.6; margin-bottom:16px;">
+          <p style="color: var(--text-muted); font-size:12px; line-height:1.6; margin-bottom:16px;">
             A previous session state was found. Choose how to start:
           </p>
           <div style="display:flex; flex-direction:column; gap:10px;">
-            <button class="btn btn-start" id="btnContinue" data-i18n="continue_btn" style="width:100%;">CONTINUE FROM LAST SESSION</button>
-            <button class="btn btn-stop" id="btnResetAll" data-i18n="reset_btn" style="width:100%;">RESET SESSION (Daily P&L kept)</button>
+            <button class="btn btn-start" id="btnContinue" style="width:100%;">CONTINUE FROM LAST SESSION</button>
+            <button class="btn btn-stop" id="btnResetAll" style="width:100%;">RESET SESSION (Daily P&L kept)</button>
           </div>
         </div>
       </div>
@@ -211,54 +208,172 @@
   <div class="modal hidden" id="settingsModal">
     <div class="modal-content glass" style="width:420px;max-width:98vw;">
       <div class="modal-header">
-        <h2 data-i18n="settings_title">SETTINGS</h2>
+        <h2>SETTINGS</h2>
         <button class="modal-close" id="settingsClose">&times;</button>
       </div>
       <div class="modal-body">
 
+        <!-- Tabs -->
+        <div class="modal-tabs">
+          <span class="modal-tab active" id="tabBotBtn">BOT</span>
+          <span class="modal-tab" id="tabTableBtn">TABLE FILTER</span>
+        </div>
+
+        <!-- BOT Tab -->
         <div id="tabBotContent" class="tab-content">
           <div class="form-group">
-            <label data-i18n="settings_base_bet">Base Bet ($)</label>
+            <label>License Key</label>
+            <input type="text" id="inputLicense" placeholder="XXXX-XXXX-XXXX-XXXX">
+          </div>
+          <div class="form-group">
+            <label>Base Bet ($)</label>
             <input type="number" id="inputChipBase" value="1" min="0.5" step="0.5">
           </div>
           <div class="form-group">
-            <label data-i18n="settings_profit_target">Profit Target ($)</label>
+            <label>Profit Target ($)</label>
             <input type="number" id="inputProfitTarget" value="50" min="10" step="10">
           </div>
           <div class="form-group">
-            <label data-i18n="settings_loss_cut">Loss Cut ($)</label>
+            <label>Loss Cut ($)</label>
             <input type="number" id="inputLossCut" value="200" min="50" step="10">
           </div>
           <div class="form-group">
-            <label data-i18n="settings_telegram">Telegram Chat ID</label>
-            <input type="text" id="inputTelegramChat" placeholder="Optional" data-i18n-placeholder="settings_telegram_placeholder">
+            <label>Telegram Chat ID</label>
+            <input type="text" id="inputTelegramChat" placeholder="Optional">
           </div>
           <div class="form-group">
-            <label data-i18n="settings_account_email">Account Email</label>
-            <input type="email" id="inputUserEmail" placeholder="your@email.com" data-i18n-placeholder="settings_email_placeholder">
+            <label>Account Email</label>
+            <input type="email" id="inputUserEmail" placeholder="your@email.com">
           </div>
           <div class="form-group">
             <label class="checkbox-label">
-              <input type="checkbox" id="inputDryRun"> <span data-i18n="settings_dry_run">Dry Run (no real bets)</span>
+              <input type="checkbox" id="inputDryRun"> Dry Run (no real bets)
             </label>
           </div>
           <div class="form-group">
-            <label data-i18n="settings_bet_mode">BET Mode</label>
+            <label>BET Mode</label>
             <select id="inputBetMode" style="width:100%;padding:8px;background:var(--bg-card);color:var(--text-main);border:1px solid var(--border);border-radius:6px;">
-              <option value="1drop" data-i18n="mode_1drop">1-Drop (observe & enter)</option>
-              <option value="normal" data-i18n="mode_normal">Normal (stay in table)</option>
-              <option value="mix" data-i18n="mode_mix">Mix (Normal → 1-Drop at OS≥20)</option>
-              <option value="sync" data-i18n="mode_sync">Sync (Top tables + regularity monitor)</option>
-              <option value="sync_pause" data-i18n="mode_sync_pause">Sync+Pause (sync + BB pause / P resume)</option>
-              <option value="pattern" data-i18n="mode_pattern" class="dev-only">Pattern (Strategy A)</option>
-              <option value="pattern_test" data-i18n="mode_pattern_test" class="dev-only">Pattern Test ($1 fixed) 🧪TEST</option>
-              <option value="counter" data-i18n="mode_counter" class="dev-only">Counter (Reverse)</option>
-              <option value="counter_flat" data-i18n="mode_counter_flat" class="dev-only">Counter Flat ($1 fixed) 🧪TEST</option>
+              <option value="1drop">1-Drop (observe & enter)</option>
+              <option value="normal">Normal (stay in table)</option>
+              <option value="mix">Mix (Normal → 1-Drop at OS≥20)</option>
+              <option value="sync">Sync (Top tables + regularity monitor)</option>
+              <option value="sync_pause">Sync+Pause (sync + BB pause / P resume)</option>
+              <option value="pattern">Pattern (大路罫線分類 + Strategy A)</option>
+              <option value="pattern_test">Pattern Test ($1 固定・VPS記録なし) 🧪TEST</option>
+              <option value="counter">Counter (テレコ逆張り + 〇✖) ★NEW</option>
+              <option value="counter_flat">Counter Flat (テレコ逆張り $1固定) 🧪TEST</option>
             </select>
           </div>
-          <button class="btn btn-start" id="btnSaveSettings" data-i18n="settings_save" style="width:100%;margin-top:12px;">SAVE</button>
+          <button class="btn btn-start" id="btnSaveSettings" style="width:100%;margin-top:12px;">SAVE</button>
+          <div style="text-align:center; margin-top:16px;">
+            <span id="devModeLink" style="font-size:10px; color:var(--text-dim); cursor:pointer; letter-spacing:1px;">
+              <span id="devModeStatus">Developer Mode: OFF</span>
+            </span>
+          </div>
         </div>
 
+        <!-- TABLE FILTER Tab -->
+        <div id="tabTableContent" class="tab-content hidden">
+          <div class="filter-grid">
+
+            <!-- Primary Players -->
+            <div class="filter-item">
+              <div class="filter-label">PRIMARY PLAYERS</div>
+              <div class="fx-stepper">
+                <button class="fx-step-btn" id="ppDec">&#x2212;</button>
+                <span class="fx-step-value" id="ppValue">10</span>
+                <button class="fx-step-btn" id="ppInc">&#x2B;</button>
+              </div>
+              <div class="filter-hint">Min to enter immediately</div>
+            </div>
+
+            <!-- Relax After -->
+            <div class="filter-item">
+              <div class="filter-label">RELAX AFTER (SEC)</div>
+              <div class="fx-stepper">
+                <button class="fx-step-btn" id="rwDec">&#x2212;</button>
+                <span class="fx-step-value" id="rwValue">60</span>
+                <button class="fx-step-btn" id="rwInc">&#x2B;</button>
+              </div>
+              <div class="filter-hint">Wait before loosening threshold</div>
+            </div>
+
+            <!-- Min Hands -->
+            <div class="filter-item">
+              <div class="filter-label">MIN HANDS</div>
+              <div class="fx-stepper">
+                <button class="fx-step-btn" id="mnDec">&#x2212;</button>
+                <span class="fx-step-value" id="mnValue">20</span>
+                <button class="fx-step-btn" id="mnInc">&#x2B;</button>
+              </div>
+              <div class="filter-hint">Min shoe progress</div>
+            </div>
+
+            <!-- Max Hands -->
+            <div class="filter-item">
+              <div class="filter-label">MAX HANDS</div>
+              <div class="fx-stepper">
+                <button class="fx-step-btn" id="mxDec">&#x2212;</button>
+                <span class="fx-step-value" id="mxValue">40</span>
+                <button class="fx-step-btn" id="mxInc">&#x2B;</button>
+              </div>
+              <div class="filter-hint">Max shoe progress</div>
+            </div>
+
+            <!-- Dragon Avoid (full width) -->
+            <div class="filter-item full">
+              <div class="filter-label">DRAGON AVOID — Consecutive Banker</div>
+              <div class="fx-segment" id="dragonSeg">
+                <button class="fx-seg-btn" data-val="0">OFF</button>
+                <button class="fx-seg-btn" data-val="3">3</button>
+                <button class="fx-seg-btn" data-val="4">4</button>
+                <button class="fx-seg-btn active" data-val="5">5</button>
+                <button class="fx-seg-btn" data-val="6">6</button>
+                <button class="fx-seg-btn" data-val="7">7</button>
+              </div>
+            </div>
+
+            <!-- P > B Required (full width) -->
+            <div class="filter-item full">
+              <div class="filter-toggle-row">
+                <div>
+                  <div class="filter-label">P &gt; B REQUIRED</div>
+                  <div class="filter-hint" style="margin-top:2px;">Enter only when Player count exceeds Banker</div>
+                </div>
+                <div class="fx-toggle" id="pbToggle">
+                  <div class="fx-toggle-track on" id="pbTrack">
+                    <div class="fx-toggle-thumb"></div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+          </div>
+
+          <button class="btn btn-start" id="btnSaveTable" style="width:100%;margin-top:16px;">SAVE TABLE SETTINGS</button>
+          <div class="filter-reset-link" id="btnResetTable">Reset to defaults</div>
+        </div>
+
+      </div>
+    </div>
+  </div>
+
+  <!-- Developer Mode Password Dialog -->
+  <div class="modal hidden" id="devModeModal">
+    <div class="modal-content glass" style="max-width:360px;">
+      <div class="modal-header">
+        <h2>DEVELOPER MODE</h2>
+        <button class="modal-close" id="devModeClose">&times;</button>
+      </div>
+      <div class="modal-body">
+        <p style="color:var(--text-muted); font-size:11px; line-height:1.6; margin-bottom:14px;">
+          Enter developer password to enable detailed logic view.
+        </p>
+        <div class="form-group">
+          <label>Password</label>
+          <input type="password" id="inputDevPassword" placeholder="********">
+        </div>
+        <button class="btn btn-start" id="btnDevAuth" style="width:100%;margin-top:8px;">UNLOCK</button>
       </div>
     </div>
   </div>
