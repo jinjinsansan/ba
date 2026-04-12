@@ -236,6 +236,7 @@ const DEFAULT_SETTINGS = {
   chip_base: 1,
   profit_target: 50,
   loss_cut: 200,
+  telegram_bot_token: '',
   telegram_chat_id: '',
   user_email: '',
   dry_run: false,
@@ -519,6 +520,7 @@ $('#btnSettings').addEventListener('click', () => {
   $('#inputChipBase').value = s.chip_base;
   $('#inputProfitTarget').value = s.profit_target;
   $('#inputLossCut').value = s.loss_cut;
+  if ($('#inputTelegramToken')) $('#inputTelegramToken').value = s.telegram_bot_token || '';
   $('#inputTelegramChat').value = s.telegram_chat_id || '';
   $('#inputUserEmail').value = s.user_email || '';
   $('#inputDryRun').checked = !!s.dry_run;
@@ -538,6 +540,7 @@ $('#btnSaveSettings').addEventListener('click', async () => {
     chip_base: parseFloat($('#inputChipBase').value) || 1,
     profit_target: parseFloat($('#inputProfitTarget').value) || 50,
     loss_cut: parseFloat($('#inputLossCut').value) || 200,
+    telegram_bot_token: ($('#inputTelegramToken') ? $('#inputTelegramToken').value.trim() : ''),
     telegram_chat_id: $('#inputTelegramChat').value.trim(),
     user_email: $('#inputUserEmail').value.trim(),
     dry_run: $('#inputDryRun').checked,
