@@ -196,8 +196,10 @@ class MaruBatsuBetSession:
         """利確 or 損切り条件をチェック (進行中セット含む)"""
         cp = self.effective_profit()
         if cp >= self.profit_stop:
+            logger.info(f"利確条件到達: effective_profit={cp} >= profit_stop={self.profit_stop}")
             return True
         if cp <= -self.loss_cut:
+            logger.info(f"損切条件到達: effective_profit={cp} <= -loss_cut={-self.loss_cut}")
             return True
         return False
 

@@ -587,6 +587,7 @@ def _run_bet_session_inner(config: dict, stop_event: threading.Event, skip_event
     loss_cut_chips = max(1, int(round(loss_cut_dollars / max(chip_base, 0.01))))
 
     send_log(f"Start mode: {'RESUME' if resume else 'RESET'} (dry_run={dry_run})")
+    send_log(f"Config: chip_base=${chip_base} profit_target=${profit_target_dollars} (={profit_stop_chips}chips) loss_cut=${loss_cut_dollars} (={loss_cut_chips}chips)")
 
     if resume and not supabase_state and resume_results:
         built_state = _build_session_state_from_results(
