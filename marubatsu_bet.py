@@ -210,16 +210,13 @@ class MaruBatsuBetSession:
         money = cp * self.chip_base
         balance = self.executor.get_balance() if not self.dry_run else 0
 
-        emoji = "🎉" if reason == "利確" else "🛑"
+        is_profit = reason == "利確"
+        emoji = "🎉" if is_profit else "🛑"
+        label = "PROFIT TARGET" if is_profit else "LOSS CUT"
         msg = (
-            f"{emoji} {reason}! Session #{self.session_count}\n"
-            f"━━━━━━━━━━━━━━━\n"
-            f"損益: {cp:+d} chip (${money:+.2f})\n"
-            f"セット数: {len(self.tracker.sets)}\n"
-            f"成績: {self.total_wins}勝 {self.total_losses}敗 {self.total_ties}Tie\n"
-            f"残高: ${balance:.2f}\n"
-            f"━━━━━━━━━━━━━━━\n"
-            f"リセットして再開します..."
+            f"{emoji} {label} | Session #{self.session_count}\n"
+            f"P&L: ${money:+.2f} | {self.total_wins}W / {self.total_losses}L\n"
+            f"Balance: ${balance:.2f}"
         )
         logger.info(msg)
         self.notifier.send(msg)
@@ -358,10 +355,8 @@ class MaruBatsuBetSession:
             turns_display += "_" * remaining
 
         self.notifier.send(
-            f"{'〇 的中!' if won else '✕ ハズレ'} Turn {turn_num}/7\n"
-            f"結果: {result.upper()} (BET: {side.upper()} ${bet_amount:.0f})\n"
-            f"{turns_display}\n"
-            f"残高: ${balance:.2f}"
+            f"{'WIN' if won else 'LOSE'} | {result.upper()} | ${bet_amount:.0f}\n"
+            f"Balance: ${balance:.2f}"
         )
 
         # セット確定
@@ -389,19 +384,9 @@ class MaruBatsuBetSession:
         money_cum = new_set.cumulative_profit * self.chip_base
 
         msg = (
-            f"📋 Set #{new_set.set_index} 確定\n"
-            f"━━━━━━━━━━━━━━━\n"
-            f"{marks}\n"
-            f"{outcome} ({new_set.wins}勝 {new_set.losses}敗)\n"
-            f"\n"
-            f"セット損益: {new_set.set_profit:+d} chip (${money_set:+.2f})\n"
-            f"累計損益: {new_set.cumulative_profit:+d} chip (${money_cum:+.2f})\n"
-            f"OS: {new_set.overshoot}\n"
-            f"\n"
-            f"次BET: SEQ[{new_set.next_unit_idx}] = {SEQ[new_set.next_unit_idx]} chip "
-            f"(${SEQ[new_set.next_unit_idx] * self.chip_base:.2f})\n"
-            f"残高: ${balance:.2f}\n"
-            f"━━━━━━━━━━━━━━━"
+            f"Round #{new_set.set_index} complete\n"
+            f"{new_set.wins}W / {new_set.losses}L | P&L: ${money_set:+.2f}\n"
+            f"Total: ${money_cum:+.2f} | Balance: ${balance:.2f}"
         )
         self.notifier.send(msg)
         logger.info(
