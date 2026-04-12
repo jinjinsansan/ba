@@ -548,6 +548,8 @@ def _run_bet_session_inner(config: dict, stop_event: threading.Event, skip_event
     dry_run = config.get("dry_run", False)
     resume = config.get("resume", False)
     user_email = (config.get("user_email") or "").strip()
+    telegram_bot_token = (config.get("telegram_bot_token") or "").strip()
+    telegram_chat_id = (config.get("telegram_chat_id") or "").strip()
     table_filter = config.get("table_filter", {})
     logger.info(f"Table filter: {table_filter}")
     send_log(f"Table filter: {table_filter}")
@@ -607,10 +609,42 @@ def _run_bet_session_inner(config: dict, stop_event: threading.Event, skip_event
     if dry_run:
         user_notifier = UserNotifier("", "")
     else:
-        user_notifier = UserNotifier()  # reads TELEGRAM_BOT_TOKEN / TELEGRAM_CHAT_ID from env
+        if telegram_bot_token or telegram_chat_id:
+            user_notifier = UserNotifier(telegram_bot_token, telegram_chat_id)
+        else:
+            user_notifier = UserNotifier()  # reads TELEGRAM_BOT_TOKEN / TELEGRAM_CHAT_ID from env
     composite = CompositeNotifier(public=None, admin=admin_notifier, user=user_notifier)
     # Legacy alias: existing code uses `notifier` with .send(), .notify_*() — use UserNotifier
     notifier = user_notifier
+
+    daily_date = datetime.now().strftime("%Y-%m-%d")
+    daily_profit = 0.0
+    daily_sessions = 0
+    daily_profit_sessions = 0
+    daily_loss_sessions = 0
+
+    def _flush_daily_summary(force: bool = False, table_name: str = ""):
+        nonlocal daily_date, daily_profit, daily_sessions, daily_profit_sessions, daily_loss_sessions
+        today = datetime.now().strftime("%Y-%m-%d")
+        if not force and today == daily_date:
+            return
+        if daily_sessions > 0 or abs(daily_profit) >= 0.01:
+            try:
+                composite.on_daily_summary(
+                    daily_date,
+                    daily_sessions,
+                    daily_profit_sessions,
+                    daily_loss_sessions,
+                    daily_profit,
+                    table_name,
+                )
+            except Exception as e:
+                logger.warning(f"Daily summary notify failed: {e}")
+        daily_date = today
+        daily_profit = 0.0
+        daily_sessions = 0
+        daily_profit_sessions = 0
+        daily_loss_sessions = 0
 
     def pick_table():
         """Verification modeなら固定テーブル、それ以外は通常選定"""
@@ -1983,6 +2017,7 @@ def _run_bet_session_inner(config: dict, stop_event: threading.Event, skip_event
                         round_profit = rr_ba * (0.95 if side == "banker" else 1.0)
                     else:
                         round_profit = -rr_ba
+                    daily_profit += round_profit
                     money_pnl += round_profit
 
                     send_result(rr_res, rr_won, rr_ba, bal, len(turns), turns_disp, cp, cm, round_profit)
@@ -2006,6 +2041,7 @@ def _run_bet_session_inner(config: dict, stop_event: threading.Event, skip_event
                         "session_count": counter_session.session_count,
                     })
                     _schedule_session_state_sync(user_email, counter_session, user_id, session_api_key)
+                    _flush_daily_summary(table_name=current_name or "")
 
                     if rr_res != "tie":
                         send_action(f"{'WIN' if rr_won else 'LOSE'} {side.upper()} ${rr_ba:.0f}. Balance: ${bal:.2f}")
@@ -2115,6 +2151,7 @@ def _run_bet_session_inner(config: dict, stop_event: threading.Event, skip_event
                 else:
                     flat_ties += 1
                 flat_total_bets += 1
+                daily_profit += round_profit
                 money_pnl += round_profit
 
                 bal = float(result_info.get("balance", 0) or 0)
@@ -2134,6 +2171,7 @@ def _run_bet_session_inner(config: dict, stop_event: threading.Event, skip_event
                     "balance": bal, "turns_display": "", "running": True,
                     "session_count": 0,
                 })
+                _flush_daily_summary(table_name=current_name or "")
                 if chip_fail_streak >= 2:
                     send_log("[counter] ⚠️ 部分BETが連続 → 退室して再探索")
                     try:
@@ -2209,6 +2247,27 @@ def _run_bet_session_inner(config: dict, stop_event: threading.Event, skip_event
                 cp = counter_session.effective_profit()
                 is_profit = cp >= 0
                 reason = "利確" if is_profit else "損切り"
+                money = cp * chip_base
+                daily_sessions += 1
+                if is_profit:
+                    daily_profit_sessions += 1
+                else:
+                    daily_loss_sessions += 1
+                try:
+                    sess_num = counter_session.session_count + 1
+                    hands_count = counter_session.total_bets
+                    if is_profit:
+                        composite.on_profit_target(
+                            user_label, sess_num, money, hands_count, daily_profit,
+                            verification_mode, current_name or ""
+                        )
+                    else:
+                        composite.on_loss_cut(
+                            user_label, sess_num, money, hands_count, daily_profit,
+                            verification_mode, current_name or ""
+                        )
+                except Exception as e:
+                    logger.warning(f"Reset notify failed (counter): {e}")
                 counter_session.reset_session(reason)
                 money_pnl = 0.0
 
@@ -2235,6 +2294,11 @@ def _run_bet_session_inner(config: dict, stop_event: threading.Event, skip_event
         except Exception:
             pass
         send_action("Stopped.")
+        _flush_daily_summary(force=True, table_name=current_name or "")
+        try:
+            composite.on_shutdown(user_label, "Normal stop")
+        except Exception:
+            pass
         _active_session = None
         return
 
@@ -3524,6 +3588,7 @@ def _run_bet_session_inner(config: dict, stop_event: threading.Event, skip_event
                     round_profit = ba  # Player win returns 1x bet
                 else:
                     round_profit = -ba
+                daily_profit += round_profit
 
                 if res == "tie":
                     send_action(f"Tie — BET returned. Balance: ${bal:.2f}")
@@ -3616,14 +3681,19 @@ def _run_bet_session_inner(config: dict, stop_event: threading.Event, skip_event
             })
             send_action(f"{reason_en} HIT! {'+$' if money >= 0 else '-$'}{abs(money):.0f} locked in -- new session starting")
             send_log(f"[{reason_en}] Session ended at {'+$' if money >= 0 else '-$'}{abs(money):.0f}")
+            daily_sessions += 1
+            if is_win:
+                daily_profit_sessions += 1
+            else:
+                daily_loss_sessions += 1
             # Admin + Public broadcast
             try:
                 hands_count = session.total_bets
                 sess_num = session.session_count + 1
                 if is_win:
-                    composite.on_profit_target(user_label, sess_num, money, hands_count, money, verification_mode)
+                    composite.on_profit_target(user_label, sess_num, money, hands_count, daily_profit, verification_mode, target_name or "")
                 else:
-                    composite.on_loss_cut(user_label, sess_num, money, hands_count, money, verification_mode)
+                    composite.on_loss_cut(user_label, sess_num, money, hands_count, daily_profit, verification_mode, target_name or "")
             except Exception as e:
                 logger.warning(f"Reset notify failed: {e}")
             session.reset_session("利確" if is_win else "損切り")
@@ -3650,6 +3720,7 @@ def _run_bet_session_inner(config: dict, stop_event: threading.Event, skip_event
         # Periodic status
         bal = executor.get_balance() if not dry_run else 0
         send_status(session, bal)
+        _flush_daily_summary(table_name=target_name or "")
         _schedule_session_state_sync(user_email, session, user_id, session_api_key)
 
         # ── Syncモード(+sync_pause): 動的規則性監視（毎ハンドチェック）──
@@ -3826,6 +3897,7 @@ def _run_bet_session_inner(config: dict, stop_event: threading.Event, skip_event
     send_action("Closing browser...")
     scraper.stop()
     send_action("Stopped.")
+    _flush_daily_summary(force=True, table_name=target_name or "")
     try:
         composite.on_shutdown(user_label, "Normal stop")
     except Exception:

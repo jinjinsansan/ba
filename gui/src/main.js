@@ -314,6 +314,12 @@ function _doStartPython(config) {
   // LAPLACE_USE_REMOTE, LAPLACE_FORCE_DRYRUN, credentials, etc.
   const envFile = loadDotEnv();
   const childEnv = { ...process.env, ...envFile, PYTHONIOENCODING: 'utf-8' };
+  if (config && Object.prototype.hasOwnProperty.call(config, 'telegram_bot_token')) {
+    childEnv.TELEGRAM_BOT_TOKEN = (config.telegram_bot_token || '').trim();
+  }
+  if (config && Object.prototype.hasOwnProperty.call(config, 'telegram_chat_id')) {
+    childEnv.TELEGRAM_CHAT_ID = (config.telegram_chat_id || '').trim();
+  }
 
   pythonProcess = spawn(engine.exe, engine.args, {
     cwd: engine.cwd,
@@ -464,7 +470,11 @@ ipcMain.handle('send-command', (event, cmd) => {
 
 ipcMain.handle('get-env', () => {
   const env = loadDotEnv();
-  return { stake_username: env.STAKE_USERNAME || '', account_email: env.LAPLACE_ACCOUNT_EMAIL || '' };
+  return {
+    stake_username: env.STAKE_USERNAME || '',
+    account_email: env.LAPLACE_ACCOUNT_EMAIL || '',
+    laplace_api_key: env.LAPLACE_API_KEY || '',
+  };
 });
 
 ipcMain.handle('check-license', async (_, email) => {
