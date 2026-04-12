@@ -1867,11 +1867,62 @@ def _run_bet_session_inner(config: dict, stop_event: threading.Event, skip_event
             # ── run_round() で BET→結果→GUI送信を一体処理 ──
             # counter_session が None (flat mode) の場合は簡易セッションを使う
             if counter_session is not None:
+                from marubatsu_strategy import SEQ as _SEQ
                 send_log(f"[counter] BET {side.upper()} (〇✖ SEQ[{counter_session.tracker.current_unit_idx}])")
                 round_result = counter_session.run_round(
                     lambda: not stop_event.is_set(),
                     side=side,
                 )
+
+                # ── GUI送信 (他モードと同じ send_result + status) ──
+                rr_res = round_result.get("result")
+                rr_won = round_result.get("won")
+                rr_ba = round_result.get("bet_amount", 0)
+                if rr_res:
+                    bal = executor.get_balance() if not dry_run else 0
+                    turns = counter_session.tracker.current_turns
+                    turns_disp = "".join("O" if t == "O" else "X" for t in turns)
+                    cp = counter_session.tracker.cumulative_profit
+                    cm = cp * chip_base
+
+                    # round_profit in dollars
+                    if rr_res == "tie":
+                        round_profit = 0.0
+                    elif rr_won:
+                        round_profit = rr_ba * (0.95 if side == "banker" else 1.0)
+                    else:
+                        round_profit = -rr_ba
+                    money_pnl += round_profit
+
+                    send_result(rr_res, rr_won, rr_ba, bal, len(turns), turns_disp, cp, cm, round_profit)
+
+                    send_msg({
+                        "type": "status",
+                        "wins": counter_session.total_wins,
+                        "losses": counter_session.total_losses,
+                        "ties": counter_session.total_ties,
+                        "total_bets": counter_session.total_bets,
+                        "cumulative_profit": cp,
+                        "cumulative_money": cm,
+                        "sets": len(counter_session.tracker.sets),
+                        "current_turn": len(turns),
+                        "current_unit": _SEQ[counter_session.tracker.current_unit_idx],
+                        "current_unit_idx": counter_session.tracker.current_unit_idx,
+                        "overshoot": counter_session.tracker.prev_overshoot,
+                        "balance": bal,
+                        "turns_display": turns_disp,
+                        "running": True,
+                        "session_count": counter_session.session_count,
+                    })
+
+                    if rr_res != "tie":
+                        send_action(f"{'WIN' if rr_won else 'LOSE'} {side.upper()} ${rr_ba:.0f}. Balance: ${bal:.2f}")
+
+                # Set complete
+                if round_result.get("completed_set"):
+                    s = round_result["completed_set"]
+                    send_set_complete(s, chip_base)
+                    send_shoe_history(counter_session.tracker.sets, chip_base)
             else:
                 # flat mode: 直接BET
                 send_log(f"[counter] BET {side.upper()} ${FLAT_BET_AMOUNT:.0f} (flat)")
