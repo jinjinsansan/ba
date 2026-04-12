@@ -13,6 +13,7 @@ Camoufoxを使用してCloudflare Turnstileを回避する。
 import json
 import os
 import re
+import shutil
 import time
 import logging
 import threading
@@ -79,6 +80,94 @@ class BaccaratScraper:
 
         # 後方互換用
         self._target_table_id: str = ""
+        self._profile_state_path = config.AUTH_STATE_DIR / "camoufox_profile_state.json"
+        self._profile_dir = config.AUTH_STATE_DIR / "camoufox_profile"
+
+    def _load_profile_state(self) -> dict:
+        try:
+            if self._profile_state_path.exists():
+                with open(self._profile_state_path, "r", encoding="utf-8") as f:
+                    s = json.load(f)
+                    return s if isinstance(s, dict) else {}
+        except Exception:
+            pass
+        return {}
+
+    def _save_profile_state(self, state: dict) -> None:
+        try:
+            with open(self._profile_state_path, "w", encoding="utf-8") as f:
+                json.dump(state, f, ensure_ascii=False)
+        except Exception:
+            pass
+
+    def _rotate_profile_dir(self, reason: str) -> None:
+        ts = datetime.now(JST).strftime("%Y%m%d_%H%M%S")
+        backup = config.AUTH_STATE_DIR / f"camoufox_profile_broken_{ts}"
+        try:
+            if self._profile_dir.exists():
+                logger.warning(f"Camoufoxプロファイルを退避: {self._profile_dir} -> {backup} (reason={reason})")
+                try:
+                    self._profile_dir.rename(backup)
+                except Exception:
+                    shutil.move(str(self._profile_dir), str(backup))
+            self._profile_dir.mkdir(parents=True, exist_ok=True)
+        except Exception as e:
+            logger.warning(f"プロファイル退避に失敗（続行）: {e}")
+
+    def _repair_profile_dir(self) -> None:
+        self._profile_dir.mkdir(parents=True, exist_ok=True)
+
+        # Crash/kill の残骸を掃除（Windows: parent.lock, Linux: .parentlock）
+        for lock_name in ("parent.lock", ".parentlock", "lock"):
+            try:
+                p = self._profile_dir / lock_name
+                if p.exists():
+                    p.unlink()
+                    logger.warning(f"プロファイル lock 削除: {p}")
+            except Exception:
+                pass
+
+        # キャッシュ起因のクラッシュを避ける（セッション情報は残す）
+        for d in ("cache2", "startupCache", "sessionstore-backups"):
+            try:
+                dp = self._profile_dir / d
+                if dp.exists() and dp.is_dir():
+                    shutil.rmtree(dp, ignore_errors=True)
+                    logger.warning(f"プロファイル cache クリア: {dp}")
+            except Exception:
+                pass
+
+    def _prepare_profile_for_launch(self) -> None:
+        state = self._load_profile_state()
+        now = time.time()
+        crash_streak = int(state.get("crash_streak", 0) or 0)
+
+        # 前回「booting=true」のままなら、異常終了（クラッシュ/kill/電源断）とみなす
+        if state.get("booting") is True:
+            last_ts = float(state.get("boot_ts", 0) or 0)
+            if last_ts and (now - last_ts) < 20 * 60:
+                crash_streak += 1
+
+        # 連続クラッシュ時はプロファイル腐敗を疑ってローテーション
+        if crash_streak >= 3:
+            self._rotate_profile_dir(reason=f"crash_streak={crash_streak}")
+            crash_streak = 0
+        else:
+            self._repair_profile_dir()
+
+        state.update({"booting": True, "boot_ts": now, "crash_streak": crash_streak})
+        self._save_profile_state(state)
+
+    def _mark_launch_success(self) -> None:
+        state = self._load_profile_state()
+        state.update({"booting": False, "crash_streak": 0, "last_success_ts": time.time()})
+        self._save_profile_state(state)
+
+    def _mark_launch_failed(self) -> None:
+        state = self._load_profile_state()
+        crash_streak = int(state.get("crash_streak", 0) or 0) + 1
+        state.update({"booting": False, "crash_streak": crash_streak, "last_fail_ts": time.time()})
+        self._save_profile_state(state)
 
     @staticmethod
     def _resolve_executable_path() -> str | None:
@@ -96,49 +185,56 @@ class BaccaratScraper:
 
     def start(self):
         """ブラウザ起動 → ログイン → WS傍受設定 → ロビーに移動"""
-        logger.info(f"Camoufox起動中... (profile={config.PROFILE_NAME})")
-        exe_path = self._resolve_executable_path()
+        self._prepare_profile_for_launch()
+        try:
+            logger.info(f"Camoufox起動中... (profile={config.PROFILE_NAME})")
+            exe_path = self._resolve_executable_path()
 
-        # Use persistent context so cookies + localStorage survive restarts
-        profile_dir = str(config.AUTH_STATE_DIR / "camoufox_profile")
-        launch_opts = {
-            "headless": config.HEADLESS,
-            "persistent_context": True,
-            "user_data_dir": profile_dir,
-        }
-        if exe_path:
-            launch_opts["executable_path"] = exe_path
-        self._camoufox_ctx = Camoufox(**launch_opts)
-        # persistent_context returns BrowserContext directly (not Browser)
-        ctx = self._camoufox_ctx.__enter__()
-        self.browser = ctx
-        # Reuse existing page or create new one
-        if ctx.pages:
-            self.page = ctx.pages[0]
-        else:
-            self.page = ctx.new_page()
+            # Use persistent context so cookies + localStorage survive restarts
+            profile_dir = str(self._profile_dir)
+            launch_opts = {
+                "headless": config.HEADLESS,
+                "persistent_context": True,
+                "user_data_dir": profile_dir,
+            }
+            if exe_path:
+                launch_opts["executable_path"] = exe_path
+            self._camoufox_ctx = Camoufox(**launch_opts)
+            # persistent_context returns BrowserContext directly (not Browser)
+            ctx = self._camoufox_ctx.__enter__()
+            self.browser = ctx
+            # Reuse existing page or create new one
+            if ctx.pages:
+                self.page = ctx.pages[0]
+            else:
+                self.page = ctx.new_page()
 
-        # Cookie復元
-        self._restore_cookies()
+            # Cookie復元
+            self._restore_cookies()
 
-        # ログイン
-        self._login()
+            # ログイン
+            self._login()
 
-        # ★ ロビーナビゲーション前にWSリスナーを登録
-        # ロビーページロード時にEvolution WSが接続されるため、先に登録する必要がある
-        self._register_ws_listener()
+            # ★ ロビーナビゲーション前にWSリスナーを登録
+            # ロビーページロード時にEvolution WSが接続されるため、先に登録する必要がある
+            self._register_ws_listener()
 
-        # バカラロビーに移動（テーブルに入らない）
-        self._navigate_to_lobby()
+            # バカラロビーに移動（テーブルに入らない）
+            self._navigate_to_lobby()
 
-        # ロビー遷移後にEvolutionが再ログインを要求する場合がある
-        # "This game is not available in demo mode" → ログインモーダルが再表示される
-        if not self._is_logged_in():
-            logger.warning("ロビー遷移後にログアウト検出 — 再ログイン試行")
-            self._login_from_lobby()
+            # ロビー遷移後にEvolutionが再ログインを要求する場合がある
+            # "This game is not available in demo mode" → ログインモーダルが再表示される
+            if not self._is_logged_in():
+                logger.warning("ロビー遷移後にログアウト検出 — 再ログイン試行")
+                self._login_from_lobby()
 
-        # EvolutionロビーWS接続を待機（未接続ならリロードして再試行）
-        self.setup_ws_intercept()
+            # EvolutionロビーWS接続を待機（未接続ならリロードして再試行）
+            self.setup_ws_intercept()
+
+            self._mark_launch_success()
+        except Exception:
+            self._mark_launch_failed()
+            raise
 
     def rebuild_page(self) -> bool:
         """ページを完全に破棄して新規ページを作成する (Lv4a nuclear recovery)
@@ -571,33 +667,30 @@ class BaccaratScraper:
         logger.info("バカラロビーに移動中...")
         lobby_url = config.BACCARAT_LOBBY_URL
 
-        # 方法1: SPA内ナビゲーション (セッション維持)
+        # 方法1: page.goto (安定優先)
         try:
-            current_url = self.page.url or ""
-            if "stake.com" in current_url:
-                # 同一オリジンならSPA遷移
-                self.page.evaluate(f'() => {{ window.location.href = "{lobby_url}"; }}')
-                logger.info("SPA内ナビゲーション実行")
-                # ページ遷移完了を待機
-                for _nav_wait in range(30):
-                    time.sleep(1)
-                    try:
-                        url = self.page.url or ""
-                        if "baccarat" in url.lower() or "evolution" in url.lower():
-                            logger.info(f"ロビー到着確認 ({_nav_wait+1}秒)")
-                            break
-                    except Exception:
-                        pass
-                time.sleep(5)
-            else:
-                raise ValueError("Not on stake.com, falling back to goto")
-        except Exception as e:
-            logger.warning(f"SPA遷移失敗 ({e}) — page.goto()にフォールバック")
             self.page.goto(
                 lobby_url,
                 wait_until="domcontentloaded",
                 timeout=90000,
             )
+            time.sleep(8)
+        except Exception as e:
+            # 方法2: SPA内ナビゲーション (セッション維持)
+            logger.warning(f"page.goto失敗 ({e}) — SPA遷移を試行")
+            current_url = ""
+            try:
+                current_url = self.page.url or ""
+            except Exception:
+                pass
+            if "stake.com" not in current_url:
+                raise
+            self.page.evaluate(f'() => {{ window.location.href = "{lobby_url}"; }}')
+            logger.info("SPA内ナビゲーション実行")
+            try:
+                self.page.wait_for_load_state("domcontentloaded", timeout=90000)
+            except Exception as _we:
+                logger.warning(f"SPA遷移後のload待機に失敗（続行）: {_we}")
             time.sleep(8)
 
         # Cookieバナーがあれば閉じる
@@ -609,8 +702,15 @@ class BaccaratScraper:
         except Exception:
             pass
 
-        self.page.screenshot(path=str(config.SCREENSHOTS_DIR / "baccarat_lobby.png"))
-        logger.info(f"バカラロビー到着 — タイトル: {self.page.title()}")
+        try:
+            self.page.screenshot(path=str(config.SCREENSHOTS_DIR / "baccarat_lobby.png"))
+        except Exception as e:
+            logger.warning(f"ロビー到着スクショ失敗（続行）: {e}")
+        try:
+            title = self.page.title()
+        except Exception as e:
+            title = f"<title-failed: {e}>"
+        logger.info(f"バカラロビー到着 — タイトル: {title}")
 
     def _register_ws_listener(self):
         """WebSocketリスナーを登録（ナビゲーション前に呼ぶこと）"""
@@ -1227,4 +1327,10 @@ class BaccaratScraper:
                 self._camoufox_ctx = None
         except Exception as e:
             logger.error(f"停止エラー: {e}")
+        try:
+            state = self._load_profile_state()
+            state.update({"booting": False, "last_stop_ts": time.time()})
+            self._save_profile_state(state)
+        except Exception:
+            pass
         logger.info("スクレイパー停止")

@@ -13,10 +13,21 @@ Flow:
 import json
 import sys
 import os
+import faulthandler
 import threading
 import time
 import logging
 import io
+
+# Write fatal (native) crashes to a file so we can diagnose "traceback無しで突然死" を拾う
+try:
+    _base = os.path.dirname(os.path.abspath(__file__))
+    _fh_dir = os.path.join(_base, "auth_state")
+    os.makedirs(_fh_dir, exist_ok=True)
+    _fh_path = os.path.join(_fh_dir, "faulthandler.log")
+    faulthandler.enable(open(_fh_path, "a", buffering=1), all_threads=True)
+except Exception:
+    pass
 
 # ---- Force stdio to UTF-8 (MUST run before any send_log/send_msg) -------
 # PyInstaller-bundled Python on a Japanese Windows install defaults to
@@ -2367,7 +2378,7 @@ def _run_bet_session_inner(config: dict, stop_event: threading.Event, skip_event
         # 進むが、pattern_test では \$1 固定 BET 以外を絶対に許さない。
         # \$50 の本気 BET 事故を防ぐため、ここで即 continue する。
         if _effective_mode_box[0] == "pattern_test":
-            send_log("[pattern-test] ⚠️ パターン分岐外 — \$50 BET 事故防止のため SKIP (1ハンド観戦)")
+            send_log("[pattern-test] ⚠️ パターン分岐外 — $50 BET 事故防止のため SKIP (1ハンド観戦)")
             obs = observe_one_hand_no_bet()
             continue
 
