@@ -2858,8 +2858,35 @@ def _run_bet_session_inner(config: dict, stop_event: threading.Event, skip_event
                 if not observe_until_1_drop(target_tid, target_name):
                     break
                 if not executor.enter_table(target_tid, target_name):
-                    send_action("New table entry failed — stopping")
-                    break
+                    send_action("New table entry failed — recovering...")
+                    send_log("[1-drop] New table entry failed → full_recovery")
+                    fr = full_recovery()
+                    if not fr:
+                        send_action("Full recovery failed — stopping")
+                        break
+                    target_tid, target_name = fr
+                    if not observe_until_1_drop(target_tid, target_name):
+                        break
+                    _entry_ok = False
+                    for _r in range(3):
+                        send_action(f"Entering {target_name} (attempt {_r+1}/3)...")
+                        if executor.enter_table(target_tid, target_name):
+                            _entry_ok = True
+                            break
+                        time.sleep(5)
+                    if not _entry_ok:
+                        send_action("Entry still failing — restarting browser...")
+                        fr = restart_browser("enter_table failed after full_recovery")
+                        if not fr:
+                            break
+                        target_tid, target_name = fr
+                        if not observe_until_1_drop(target_tid, target_name):
+                            break
+                        if not executor.enter_table(target_tid, target_name):
+                            send_action("Entry failed after browser restart — re-selecting")
+                            target_tid = None
+                            target_name = None
+                            continue
                 _awaiting_2nd_drop = (_effective_mode_box[0] == "1drop")  # 新テーブル再入場 → 2落ち確認必須
             continue
 

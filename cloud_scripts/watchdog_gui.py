@@ -12,7 +12,7 @@ STALE_SECONDS = 3 * 60
 RESTART_COOLDOWN = 60
 NOFRAME_WINDOW = 5 * 60
 NOFRAME_LIMIT = 3
-BROWSER_CLOSED_LIMIT = 1
+BROWSER_CLOSED_LIMIT = 3
 
 
 def is_process_running() -> bool:
@@ -141,17 +141,17 @@ def main():
         if (not running) or stale:
             if now - last_restart >= RESTART_COOLDOWN:
                 if not running:
-                    print("[watchdog] gui down — restarting gui")
+                    print("[watchdog] gui down - restarting gui")
                     stop_camoufox()
                     stop_agent()
                     start_gui()
                 elif stale:
                     if find_agent_pids():
-                        print("[watchdog] log stale — restarting agent")
+                        print("[watchdog] log stale - restarting agent")
                         stop_camoufox()
                         stop_agent()
                     else:
-                        print("[watchdog] log stale + no agent — restarting gui")
+                        print("[watchdog] log stale + no agent - restarting gui")
                         stop_camoufox()
                         stop_gui()
                         time.sleep(3)
@@ -159,11 +159,11 @@ def main():
                 last_restart = now
         elif hard_restart and now - last_restart >= RESTART_COOLDOWN:
             if find_agent_pids():
-                print("[watchdog] recovery loop/browser closed — restarting agent")
+                print("[watchdog] recovery loop/browser closed - restarting agent")
                 stop_camoufox()
                 stop_agent()
             else:
-                print("[watchdog] recovery loop + no agent — restarting gui")
+                print("[watchdog] recovery loop + no agent - restarting gui")
                 stop_camoufox()
                 stop_gui()
                 time.sleep(3)
