@@ -568,6 +568,7 @@ def _run_bet_session_inner(config: dict, stop_event: threading.Event, skip_event
     session_api_key = (config.get("site_api_key") or _SESSION_API_KEY).strip()
     supabase_state = None
     supabase_missing = False
+    supabase_built = False
     resume_results = config.get("resume_results") if resume else None
     if resume:
         if user_email and session_api_key:
@@ -593,6 +594,7 @@ def _run_bet_session_inner(config: dict, stop_event: threading.Event, skip_event
         )
         if built_state:
             supabase_state = built_state
+            supabase_built = True
             send_log("[session] Supabase session built from GUI results")
 
     mode = "DRY RUN" if dry_run else "LIVE"
@@ -1635,6 +1637,9 @@ def _run_bet_session_inner(config: dict, stop_event: threading.Event, skip_event
         if counter_session is not None and supabase_state:
             if _apply_session_state(counter_session, supabase_state):
                 send_log("[counter] Supabase session restored")
+                if supabase_built or supabase_missing:
+                    if _backfill_session_state(user_email, counter_session, user_id, session_api_key):
+                        send_log("[counter] Supabase session saved from GUI results")
         elif counter_session is not None and supabase_missing:
             if _backfill_session_state(user_email, counter_session, user_id, session_api_key):
                 send_log("[counter] Supabase session backfilled from local state")
@@ -2234,6 +2239,9 @@ def _run_bet_session_inner(config: dict, stop_event: threading.Event, skip_event
             return
     if supabase_state and _apply_session_state(session, supabase_state):
         send_log("[session] Supabase session restored")
+        if supabase_built or supabase_missing:
+            if _backfill_session_state(user_email, session, user_id, session_api_key):
+                send_log("[session] Supabase session saved from GUI results")
     elif supabase_missing:
         if _backfill_session_state(user_email, session, user_id, session_api_key):
             send_log("[session] Supabase session backfilled from local/VPS state")
