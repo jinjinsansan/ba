@@ -1452,13 +1452,15 @@ def _run_bet_session_inner(config: dict, stop_event: threading.Event, skip_event
                 return None
             best: tuple[str, str, float] | None = None
             for tid, cfg in cfgs.items():
+                tname = cfg.get("title", tid)
+                if is_table_in_cooldown(tname):
+                    continue
                 raw = scraper.get_raw_history(tid)
                 results = raw_history_to_results(raw)
                 cols = compute_column_lengths(results)
                 if not is_tereko_state(cols):
                     continue
                 rate = short_rate(cols, ENTRY_WINDOW)
-                tname = cfg.get("title", tid)
                 if best is None or rate > best[2]:
                     best = (tid, tname, rate)
             return best
@@ -1544,6 +1546,7 @@ def _run_bet_session_inner(config: dict, stop_event: threading.Event, skip_event
                     send_log(f"[counter] 入室失敗: {current_name} → 退避して再探索")
                     entry_fail_streak += 1
                     try:
+                        mark_table_exited(current_name)
                         executor.exit_table()
                     except Exception:
                         pass
@@ -1569,6 +1572,7 @@ def _run_bet_session_inner(config: dict, stop_event: threading.Event, skip_event
                 if not last_bead:
                     send_log(f"[counter] ⚠️ 入室直後のビーズロード空 → 新シュー/シャッフル疑い → 退室")
                     try:
+                        mark_table_exited(current_name)
                         executor.exit_table()
                     except Exception:
                         pass
@@ -1580,6 +1584,7 @@ def _run_bet_session_inner(config: dict, stop_event: threading.Event, skip_event
                 if not is_tereko_state(in_cols):
                     send_log(f"[counter] ⚠️ 入室後確認: テレコ条件未達(short={short_rate(in_cols, ENTRY_WINDOW):.0%}) → 退室")
                     try:
+                        mark_table_exited(current_name)
                         executor.exit_table()
                     except Exception:
                         pass
@@ -1593,6 +1598,7 @@ def _run_bet_session_inner(config: dict, stop_event: threading.Event, skip_event
             if not executor.wait_for_betting_phase(timeout=180, skip_round=False):
                 send_log("[counter] ⚠️ BETフェーズ待ちタイムアウト → 退室して再探索")
                 try:
+                    mark_table_exited(current_name)
                     executor.exit_table()
                 except Exception:
                     pass
@@ -1605,6 +1611,7 @@ def _run_bet_session_inner(config: dict, stop_event: threading.Event, skip_event
                 if executor.is_shuffle_state():
                     send_log("[counter] ⚠️ シャッフル状態検出 → 退室")
                     try:
+                        mark_table_exited(current_name)
                         executor.exit_table()
                     except Exception:
                         pass
@@ -1618,6 +1625,7 @@ def _run_bet_session_inner(config: dict, stop_event: threading.Event, skip_event
                 if current_tid in signals:
                     send_log("[counter] ⚠️ 新シュー検出 → 退室")
                     try:
+                        mark_table_exited(current_name)
                         executor.exit_table()
                     except Exception:
                         pass
@@ -1635,6 +1643,7 @@ def _run_bet_session_inner(config: dict, stop_event: threading.Event, skip_event
                 if not _b:
                     send_log("[counter] ⚠️ ビーズロード空 (新シュー/シャッフル) → 退室")
                     try:
+                        mark_table_exited(current_name)
                         executor.exit_table()
                     except Exception:
                         pass
@@ -1644,6 +1653,7 @@ def _run_bet_session_inner(config: dict, stop_event: threading.Event, skip_event
                 if last_bead and len(_b) < len(last_bead):
                     send_log("[counter] ⚠️ ビーズロードが短くリセット → 新シュー疑いで退室")
                     try:
+                        mark_table_exited(current_name)
                         executor.exit_table()
                     except Exception:
                         pass
@@ -1686,6 +1696,7 @@ def _run_bet_session_inner(config: dict, stop_event: threading.Event, skip_event
                         send_log("[counter] ⚠️ シャッフル検出(ベット後) → UNDOして退室")
                         executor.cancel_bet()
                         try:
+                            mark_table_exited(current_name)
                             executor.exit_table()
                         except Exception:
                             pass
@@ -1700,6 +1711,7 @@ def _run_bet_session_inner(config: dict, stop_event: threading.Event, skip_event
                         send_log("[counter] ⚠️ 新シュー検出(ベット後) → UNDOして退室")
                         executor.cancel_bet()
                         try:
+                            mark_table_exited(current_name)
                             executor.exit_table()
                         except Exception:
                             pass
@@ -1714,6 +1726,7 @@ def _run_bet_session_inner(config: dict, stop_event: threading.Event, skip_event
                         send_log("[counter] ⚠️ ビーズロードリセット検出(ベット後) → UNDOして退室")
                         executor.cancel_bet()
                         try:
+                            mark_table_exited(current_name)
                             executor.exit_table()
                         except Exception:
                             pass
@@ -1729,6 +1742,7 @@ def _run_bet_session_inner(config: dict, stop_event: threading.Event, skip_event
                 send_log("[counter] ⚠️ 結果取得失敗/不明 → 退室して再探索")
                 result_timeout_streak += 1
                 try:
+                    mark_table_exited(current_name)
                     executor.exit_table()
                 except Exception:
                     pass
@@ -1766,6 +1780,7 @@ def _run_bet_session_inner(config: dict, stop_event: threading.Event, skip_event
                 send_log(f"[counter] 退室: {current_name} ({exit_reason})")
                 send_action(f"Exiting: {exit_reason}")
                 try:
+                    mark_table_exited(current_name)
                     executor.exit_table()
                 except Exception:
                     pass
