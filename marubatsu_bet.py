@@ -188,7 +188,7 @@ class MaruBatsuBetSession:
 
     # === メインBETループ ===
 
-    def run_round(self, running_flag) -> dict:
+    def run_round(self, running_flag, side: str = "player") -> dict:
         """1ラウンド分のBET→結果取得→〇❌記録を実行。
 
         Returns: {
@@ -228,8 +228,9 @@ class MaruBatsuBetSession:
                 )
                 return {"action": "exit"}
 
-        # BET実行 (常にPlayer)
-        side = "player"
+        # BET実行 (デフォルトはPlayer)
+        if side not in ("player", "banker"):
+            side = "player"
         unit_idx = self.tracker.current_unit_idx
         unit = SEQ[unit_idx]
         turn_num = len(self.tracker.current_turns) + 1
@@ -246,12 +247,12 @@ class MaruBatsuBetSession:
                 logger.warning(f"部分BET検出: 計画${bet_amount:.0f} → 実際${actual_total:.2f}")
                 bet_amount = actual_total
             else:
-                # BET完全失敗 — 観戦モードでターンを記録してシーケンスを維持
-                logger.warning("BET完全失敗 — 観戦モードで結果を記録してシーケンス維持")
+                # BET完全失敗 — 観戦モード（Player固定のロジックのみシーケンス維持）
+                logger.warning("BET完全失敗 — 観戦モード")
                 result_info = self.executor.wait_for_result(timeout=90, bet_amount=0)
                 if result_info and result_info.get("result") not in (None, "unknown"):
                     obs_result = result_info["result"]
-                    if obs_result != "tie":
+                    if side == "player" and obs_result != "tie":
                         completed_set = self.tracker.add_result(obs_result)
                         self._save_state()
                         logger.info(f"観戦記録: {obs_result.upper()} (BET $0)")
@@ -291,14 +292,16 @@ class MaruBatsuBetSession:
                 "should_reset": False,
             }
 
-        # 〇❌に記録
-        won = (result == "player")
+        # 〇❌に記録 (勝敗ベース)
+        won = (result == side)
         if won:
             self.total_wins += 1
         else:
             self.total_losses += 1
 
-        completed_set = self.tracker.add_result(result)
+        # NOTE: Tracker は Player=〇 / Banker=✕ のマッピングだが、counter用途では
+        # 〇=勝ち / ✕=負け として使いたい。そのため勝敗で player/banker を擬似入力する。
+        completed_set = self.tracker.add_result("player" if won else "banker")
 
         mark = "〇" if won else "✕"
         logger.info(
@@ -314,7 +317,7 @@ class MaruBatsuBetSession:
 
         self.notifier.send(
             f"{'〇 的中!' if won else '✕ ハズレ'} Turn {turn_num}/7\n"
-            f"結果: {result.upper()} (BET: Player ${bet_amount:.0f})\n"
+            f"結果: {result.upper()} (BET: {side.upper()} ${bet_amount:.0f})\n"
             f"{turns_display}\n"
             f"残高: ${balance:.2f}"
         )

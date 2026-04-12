@@ -237,44 +237,67 @@ class BetExecutor:
         try:
             evo = self._get_evo_locator()
 
-            # SESSION EXPIRED / セッション切れ / EV.5 検出 → 即座にFalse (再入場必須)
-            for expired_text in ["SESSION", "EXPIRED", "TIMED OUT", "RECONNECT",
-                                 "EV.5", "authentication failed", "Error Code"]:
+            def _vis(locator, ms: int) -> bool:
                 try:
-                    el = evo.get_by_text(expired_text, exact=False).first
-                    if el.is_visible(timeout=300):
-                        logger.warning(f"セッション切れ検出: '{expired_text}' — 再入場が必要")
-                        # OKやCLOSEボタンがあれば押す
-                        for btn_text in ["OK", "CLOSE", "BACK", "LOBBY"]:
-                            try:
-                                btn = evo.get_by_text(btn_text, exact=False).first
-                                if btn.is_visible(timeout=300):
-                                    btn.click(timeout=2000, force=True)
-                                    time.sleep(2)
-                                    break
-                            except Exception:
-                                pass
-                        self._error_dialog_count = 0
-                        self._last_error_type = "session_expired"
-                        return False
+                    return locator.first.is_visible(timeout=ms)
+                except Exception:
+                    return False
+
+            def _click(locator, ms: int):
+                try:
+                    locator.first.click(timeout=ms, force=True)
                 except Exception:
                     pass
 
+            # SESSION EXPIRED / セッション切れ / EV.5 検出 → 即座にFalse (再入場必須)
+            # NOTE: evo は Frame のことがあるため get_by_text は使わない（環境により未提供）。
+            expired_any = evo.locator(
+                'text=/SESSION\\s*EXPIRED|TIMED\\s*OUT|RECONNECT|EV\\.5|AUTHENTICATION\\s*FAILED|ERROR\\s*CODE/i'
+            )
+            if _vis(expired_any, 300):
+                logger.warning("セッション切れ検出 — 再入場が必要")
+                # OK / CLOSE / BACK TO LOBBY などが押せるなら押す
+                for btn_sel in (
+                    'text=/BACK\\s*TO\\s*LOBBY/i',
+                    'text=/TRY\\s*AGAIN/i',
+                    'text=/OK/i',
+                    'text=/CLOSE/i',
+                    'text=/BACK/i',
+                    'text=/LOBBY/i',
+                ):
+                    btn = evo.locator(btn_sel)
+                    if _vis(btn, 200):
+                        _click(btn, 2000)
+                        time.sleep(2)
+                        break
+                self._error_dialog_count = 0
+                self._last_error_type = "session_expired"
+                return False
+
             # TRY AGAIN ダイアログ
-            try_again = evo.get_by_text("TRY AGAIN", exact=False).first
-            if try_again.is_visible(timeout=500):
+            back_to_lobby = evo.locator('text=/BACK\\s*TO\\s*LOBBY/i')
+            if _vis(back_to_lobby, 300):
+                logger.warning("エラーダイアログ検出 → BACK TO LOBBY")
+                _click(back_to_lobby, 3000)
+                time.sleep(3)
+                self._error_dialog_count = 0
+                self._last_error_type = "try_again_failed"
+                return False
+
+            try_again = evo.locator('text=/TRY\\s*AGAIN/i')
+            if _vis(try_again, 500):
                 self._error_dialog_count += 1
                 if self._error_dialog_count <= 2:
                     logger.warning(f"エラーダイアログ検出 → TRY AGAIN ({self._error_dialog_count}/2)")
-                    try_again.click(timeout=3000, force=True)
+                    _click(try_again, 3000)
                     time.sleep(5)
                     self._last_error_type = "try_again"
                     return True
                 else:
                     logger.warning("TRY AGAIN 3回失敗 → BACK TO LOBBY")
                     try:
-                        back = evo.get_by_text("BACK", exact=False).first
-                        back.click(timeout=3000, force=True)
+                        back = evo.locator('text=/BACK\\s*TO\\s*LOBBY|BACK/i')
+                        _click(back, 3000)
                         time.sleep(3)
                     except Exception:
                         pass

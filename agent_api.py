@@ -277,6 +277,10 @@ def run_bet_session(config: dict, stop_event: threading.Event, skip_event: threa
     try:
         return _run_bet_session_inner(config, stop_event, skip_event)
     except Exception as _err:
+        try:
+            stop_event.set()
+        except Exception:
+            pass
         tb = _tb.format_exc()
         try:
             send_log(f"FATAL: BET session crashed: {_err}")
@@ -653,8 +657,8 @@ def _run_bet_session_inner(config: dict, stop_event: threading.Event, skip_event
                 dynamic_threshold = max(ENTRY_THRESHOLD - 10, 60)  # 60
             force_pick = elapsed_wait >= 180  # 3分経過で強制ピック
 
-            # === Casino detour: 60秒ごとに別ゲームへ寄り道 ===
-            if time.time() - last_detour > 60 and elapsed_wait > 60:
+            # === Casino detour: 不安定化要因になりうるためデフォルト無効 ===
+            if ENABLE_CASINO_DETOUR and time.time() - last_detour > 60 and elapsed_wait > 60:
                 send_log(f"[Sync] ⏱️ 60秒経過 → casino detour で iframe維持")
                 if casino_detour(reason="ロビー待機中"):
                     last_detour = time.time()
@@ -874,8 +878,8 @@ def _run_bet_session_inner(config: dict, stop_event: threading.Event, skip_event
             else:
                 dynamic_threshold = max(ENTRY_THRESHOLD - 10, 60)
 
-            # === Casino detour (60秒ごと) ===
-            if time.time() - last_detour > 60 and elapsed_wait > 60:
+            # === Casino detour: 不安定化要因になりうるためデフォルト無効 ===
+            if ENABLE_CASINO_DETOUR and time.time() - last_detour > 60 and elapsed_wait > 60:
                 send_log("[Pattern] ⏱️ 60秒経過 → casino detour で iframe維持")
                 if casino_detour(reason="Pattern待機中"):
                     last_detour = time.time()
@@ -1115,21 +1119,24 @@ def _run_bet_session_inner(config: dict, stop_event: threading.Event, skip_event
             if iframe_alive:
                 send_log(f"[recovery] ✅ iframe 健全性 OK ({_hr})")
             else:
-                send_log(f"[recovery] ⚠️ Evolution iframe 不健全 ({_hr}) → ルーレット経由で復活試行")
-                send_action("Evolution iframe unhealthy — trying roulette detour")
-                # 3つの Evolution game URL を順番に試行
-                for revival_url in EVOLUTION_GAME_URLS:
-                    game_name = revival_url.split('/')[-1]
-                    send_log(f"[recovery] 復活試行: {game_name}")
-                    if casino_detour(reason=f"iframe復活({game_name})", target_url=revival_url):
-                        time.sleep(3)
-                        h, hr = _iframe_healthy()
-                        if h:
-                            send_log(f"[recovery] ✅ {game_name} 経由で iframe 復活 ({hr})")
-                            iframe_alive = True
-                            break
-                        else:
-                            send_log(f"[recovery] ⚠️ {game_name} 経由でも不健全 ({hr}) — 次を試す")
+                if ENABLE_CASINO_DETOUR:
+                    send_log(f"[recovery] ⚠️ Evolution iframe 不健全 ({_hr}) → detourで復活試行")
+                    send_action("Evolution iframe unhealthy — trying detour")
+                    # Evolution game URL を順番に試行
+                    for revival_url in EVOLUTION_GAME_URLS:
+                        game_name = revival_url.split('/')[-1]
+                        send_log(f"[recovery] 復活試行: {game_name}")
+                        if casino_detour(reason=f"iframe復活({game_name})", target_url=revival_url):
+                            time.sleep(3)
+                            h, hr = _iframe_healthy()
+                            if h:
+                                send_log(f"[recovery] ✅ {game_name} 経由で iframe 復活 ({hr})")
+                                iframe_alive = True
+                                break
+                            else:
+                                send_log(f"[recovery] ⚠️ {game_name} 経由でも不健全 ({hr}) — 次を試す")
+                else:
+                    send_log(f"[recovery] ⚠️ Evolution iframe 不健全 ({_hr}) → detour無効のためLv4aへ")
 
                 # === casino_detour 失敗 → Lv4a (Page rebuild) を強制実行 ===
                 if not iframe_alive:
@@ -1159,18 +1166,19 @@ def _run_bet_session_inner(config: dict, stop_event: threading.Event, skip_event
                                     send_log(f"[recovery-lv4a] ✅ rebuild 後に iframe 健全 ({lv4a_hr})")
                                     iframe_alive = True
                                 else:
-                                    # rebuild 後でも不健全 → もう一度 casino_detour
-                                    send_log(f"[recovery-lv4a] ⚠️ rebuild 後も不健全 ({lv4a_hr}) — もう一度 detour 試行")
-                                    for revival_url in EVOLUTION_GAME_URLS:
-                                        if stop_event.is_set():
-                                            return None
-                                        if casino_detour(reason="lv4a後detour", target_url=revival_url):
-                                            time.sleep(3)
-                                            redet_h, redet_hr = _iframe_healthy()
-                                            if redet_h:
-                                                send_log(f"[recovery-lv4a] ✅ rebuild + detour で iframe 健全 ({redet_hr})")
-                                                iframe_alive = True
-                                                break
+                                    if ENABLE_CASINO_DETOUR:
+                                        # rebuild 後でも不健全 → もう一度 casino_detour
+                                        send_log(f"[recovery-lv4a] ⚠️ rebuild 後も不健全 ({lv4a_hr}) — detour 試行")
+                                        for revival_url in EVOLUTION_GAME_URLS:
+                                            if stop_event.is_set():
+                                                return None
+                                            if casino_detour(reason="lv4a後detour", target_url=revival_url):
+                                                time.sleep(3)
+                                                redet_h, redet_hr = _iframe_healthy()
+                                                if redet_h:
+                                                    send_log(f"[recovery-lv4a] ✅ rebuild + detour で iframe 健全 ({redet_hr})")
+                                                    iframe_alive = True
+                                                    break
                             except Exception as _gse:
                                 send_log(f"[recovery-lv4a] lobby goto 例外: {_gse}")
                     except Exception as _re:
@@ -1362,6 +1370,402 @@ def _run_bet_session_inner(config: dict, stop_event: threading.Event, skip_event
     humanizer = Humanizer(cfg.HUMANIZE_CONFIG)
     executor_config = {"demo_mode": dry_run}
     executor = BetExecutor(scraper.page, scraper.game_ws, executor_config, humanizer=humanizer)
+
+    # === Counter mode (テレコ逆張り) ===
+    if _effective_mode_box[0] in ("counter", "counter_flat"):
+        from counter_logic import (
+            compute_column_lengths,
+            decide_counter_bet,
+            is_tereko_state,
+            short_rate,
+            should_exit,
+            ENTRY_WINDOW,
+            FLAT_BET_AMOUNT,
+            SEARCH_INTERVAL,
+        )
+        from regularity_monitor import raw_history_to_results
+
+        is_flat = (_effective_mode_box[0] == "counter_flat")
+        counter_session = None
+        if not is_flat:
+            try:
+                from marubatsu_bet import MaruBatsuBetSession
+                counter_session = MaruBatsuBetSession(
+                    executor=executor,
+                    notifier=notifier,
+                    chip_base=chip_base,
+                    loss_cut=loss_cut_chips,
+                    profit_stop=profit_stop_chips,
+                    dry_run=dry_run,
+                    resume=resume,
+                )
+            except Exception as e:
+                send_log(f"[counter] FATAL: MaruBatsuBetSession init failed: {e}")
+                return
+        # For live config updates UI -> engine
+        _active_session = counter_session
+
+        entry_fail_streak = 0
+        result_timeout_streak = 0
+        no_configs_streak = 0
+
+        def _restart_counter_browser(reason: str) -> bool:
+            nonlocal scraper, executor, counter_session, entry_fail_streak, result_timeout_streak, no_configs_streak, last_bead
+            send_action(f"🔁 Browser restart: {reason}")
+            send_log(f"[counter] browser restart: {reason}")
+            try:
+                scraper.stop()
+            except Exception:
+                pass
+            time.sleep(2)
+            scraper = BaccaratScraper()
+            scraper.table_name = "all"
+            try:
+                scraper.start()
+            except Exception as e:
+                send_log(f"[counter] Browser launch failed: {e}")
+                return False
+            try:
+                scraper.setup_ws_intercept()
+            except Exception:
+                pass
+            time.sleep(12)
+            executor = BetExecutor(scraper.page, scraper.game_ws, executor_config, humanizer=humanizer)
+            try:
+                if counter_session is not None:
+                    counter_session.executor = executor
+            except Exception:
+                pass
+            entry_fail_streak = 0
+            result_timeout_streak = 0
+            no_configs_streak = 0
+            last_bead = ""
+            return True
+
+        def _get_table_title(tid: str) -> str:
+            cfgs = scraper.get_all_table_configs()
+            return (cfgs.get(tid, {}) or {}).get("title", tid)
+
+        def _find_best_tereko_table() -> tuple[str, str, float] | None:
+            cfgs = scraper.get_all_table_configs()
+            if not cfgs:
+                return None
+            best: tuple[str, str, float] | None = None
+            for tid, cfg in cfgs.items():
+                raw = scraper.get_raw_history(tid)
+                results = raw_history_to_results(raw)
+                cols = compute_column_lengths(results)
+                if not is_tereko_state(cols):
+                    continue
+                rate = short_rate(cols, ENTRY_WINDOW)
+                tname = cfg.get("title", tid)
+                if best is None or rate > best[2]:
+                    best = (tid, tname, rate)
+            return best
+
+        def _last_non_tie_from_seq(seq: str) -> str | None:
+            for ch in reversed(seq):
+                if ch in ("P", "B"):
+                    return ch
+            return None
+
+        def _wait_bead_change(prev_bead: str, timeout_sec: float = 180.0) -> tuple[str, str] | None:
+            deadline = time.time() + timeout_sec
+            while time.time() < deadline and not stop_event.is_set():
+                # Auto-dismiss TRY AGAIN/BACK TO LOBBY overlays.
+                if not executor.check_and_dismiss_error():
+                    return None
+                bead = executor.read_bead_road() or ""
+                if bead and bead != prev_bead:
+                    last = None
+                    for ch in reversed(bead):
+                        if ch in ("P", "B", "T"):
+                            last = ch
+                            break
+                    if last:
+                        return bead, last
+                time.sleep(0.5)
+            return None
+
+        # State
+        current_tid: str | None = None
+        current_name: str | None = None
+        current_short_rate: float = 0.0
+        last_non_tie: str | None = None  # 'P' or 'B'
+        columns_since_entry: list[int] = []
+        current_col_len = 0
+        current_col_side: str | None = None  # 'P' or 'B'
+        last_bead = ""
+
+        # Money PNL (GUI smooth update uses round_profit)
+        money_pnl = 0.0
+        flat_total_bets = 0
+        flat_wins = 0
+        flat_losses = 0
+        flat_ties = 0
+
+        send_action("Counter mode starting...")
+        send_log(f"[counter] mode={_effective_mode_box[0]} entry={int(ENTRY_WINDOW)}cols short>={int(100*0.85)}%")
+
+        while not stop_event.is_set():
+            # Table selection / entry
+            if current_tid is None:
+                send_log("[counter] テレコテーブル検索中...")
+                # Lobby WS health
+                if not scraper.get_all_table_configs():
+                    no_configs_streak += 1
+                    if no_configs_streak >= 3:
+                        send_log("[counter] ⚠️ ロビーWSにテーブル情報なし → 再接続")
+                        try:
+                            scraper.setup_ws_intercept()
+                        except Exception:
+                            pass
+                        no_configs_streak = 0
+                    if stop_event.wait(3):
+                        break
+                    continue
+                no_configs_streak = 0
+                best = _find_best_tereko_table()
+                if not best:
+                    send_log(f"[counter] テレコテーブルなし。{SEARCH_INTERVAL}秒待機")
+                    if stop_event.wait(SEARCH_INTERVAL):
+                        break
+                    continue
+                current_tid, current_name, current_short_rate = best
+                columns_since_entry = []
+                current_col_len = 0
+                current_col_side = None
+                last_non_tie = None
+                last_bead = ""
+
+                send_log(f"[counter] 入室: {current_name} (短列率{current_short_rate:.0%})")
+                send_action(f"Entering {current_name}...")
+                if not executor.enter_table(current_tid, current_name):
+                    send_log(f"[counter] 入室失敗: {current_name} → 退避して再探索")
+                    entry_fail_streak += 1
+                    try:
+                        executor.exit_table()
+                    except Exception:
+                        pass
+                    if entry_fail_streak >= 3:
+                        _restart_counter_browser("enter_table failed x3")
+                    current_tid = None
+                    current_name = None
+                    continue
+
+                entry_fail_streak = 0
+                # Seed last_non_tie from current bead road
+                last_bead = executor.read_bead_road() or ""
+                last_non_tie = _last_non_tie_from_seq(last_bead)
+                continue
+
+            # Wait for betting phase (no blocking on result detection)
+            if not executor.wait_for_betting_phase(timeout=180, skip_round=False):
+                send_log("[counter] ⚠️ BETフェーズ待ちタイムアウト → 退室して再探索")
+                try:
+                    executor.exit_table()
+                except Exception:
+                    pass
+                current_tid = None
+                current_name = None
+                continue
+
+            # Decide counter bet side based on previous non-tie
+            side = decide_counter_bet(last_non_tie)
+            bet_amount = FLAT_BET_AMOUNT if is_flat else float(counter_session.get_bet_amount())  # type: ignore[union-attr]
+            placed = False
+
+            if side is None:
+                send_log("[counter] SKIP (前手なし)")
+            else:
+                send_log(f"[counter] BET {side.upper()} ${bet_amount:.0f}")
+                placed = executor.place_bet(side, bet_amount, strict=True)
+                if not placed:
+                    send_log("[counter] BET失敗 (strict) → 継続")
+
+            # Wait for next result via bead-road diff (works even if BET無し)
+            prev = last_bead
+            upd = _wait_bead_change(prev, timeout_sec=220.0)
+            if not upd:
+                send_log("[counter] ⚠️ 結果待ちタイムアウト → 退室して再探索")
+                result_timeout_streak += 1
+                try:
+                    executor.exit_table()
+                except Exception:
+                    pass
+                if result_timeout_streak >= 2:
+                    _restart_counter_browser("bead wait timeout x2")
+                    result_timeout_streak = 0
+                current_tid = None
+                current_name = None
+                continue
+            result_timeout_streak = 0
+
+            last_bead, hand = upd  # hand: 'P'/'B'/'T'
+            if hand in ("P", "B"):
+                # update last_non_tie
+                last_non_tie = hand
+
+                # update column state (since entry)
+                if hand == current_col_side:
+                    current_col_len += 1
+                else:
+                    if current_col_side is not None and current_col_len > 0:
+                        columns_since_entry.append(current_col_len)
+                    current_col_side = hand
+                    current_col_len = 1
+
+            # Exit check (after result)
+            exit_reason = should_exit(columns_since_entry, current_col_len)
+            if exit_reason:
+                send_log(f"[counter] 退室: {current_name} ({exit_reason})")
+                send_action(f"Exiting: {exit_reason}")
+                try:
+                    executor.exit_table()
+                except Exception:
+                    pass
+                current_tid = None
+                current_name = None
+                continue
+
+            # If no bet placed, loop continues after updating state
+            if not placed or side is None:
+                continue
+
+            # Determine win/loss/tie and update GUI/〇✖ session
+            result = "tie" if hand == "T" else ("player" if hand == "P" else "banker")
+            won: bool | None
+            round_profit = 0.0
+            if result == "tie":
+                won = None
+            else:
+                won = (result == side)
+                if won:
+                    round_profit = bet_amount * (0.95 if side == "banker" else 1.0)
+                else:
+                    round_profit = -bet_amount
+
+            money_pnl += round_profit
+
+            # Update marubatsu progression (counter mode only)
+            completed_set = None
+            if counter_session is not None:
+                # tie does not affect progression
+                if won is True:
+                    counter_session.total_bets += 1
+                    counter_session.total_wins += 1
+                    completed_set = counter_session.tracker.add_result("player")
+                elif won is False:
+                    counter_session.total_bets += 1
+                    counter_session.total_losses += 1
+                    completed_set = counter_session.tracker.add_result("banker")
+                else:
+                    counter_session.total_bets += 1
+                    counter_session.total_ties += 1
+                # Override money pnl for UI reconciliation
+                try:
+                    counter_session._money_pnl_override = money_pnl  # type: ignore[attr-defined]
+                    counter_session._save_state()
+                except Exception:
+                    pass
+            else:
+                # flat stats
+                flat_total_bets += 1
+                if won is True:
+                    flat_wins += 1
+                elif won is False:
+                    flat_losses += 1
+                else:
+                    flat_ties += 1
+
+            # Emit round_result for GUI smooth PNL updates
+            try:
+                bal = executor.get_balance() if not dry_run else 0.0
+            except Exception:
+                bal = 0.0
+
+            turns = []
+            overshoot = 0
+            cumulative_profit = 0
+            current_turn = 0
+            current_unit = 1
+            current_unit_idx = 0
+            if counter_session is not None:
+                turns = counter_session.tracker.current_turns
+                overshoot = counter_session.tracker.prev_overshoot
+                cumulative_profit = counter_session.tracker.cumulative_profit
+                current_turn = len(turns)
+                from marubatsu_strategy import SEQ as _SEQ
+                current_unit_idx = counter_session.tracker.current_unit_idx
+                current_unit = _SEQ[current_unit_idx]
+
+            turns_display = "".join("O" if t == "O" else "X" for t in turns)
+
+            send_result(
+                result=result,
+                won=won,
+                bet_amount=bet_amount,
+                balance=bal,
+                turn=current_turn,
+                turns_display=turns_display,
+                cumulative_profit=cumulative_profit,
+                cumulative_money=money_pnl,
+                round_profit_dollars=round_profit,
+            )
+
+            # Also send status (wins/losses/wr + OS tag)
+            send_msg({
+                "type": "status",
+                "wins": flat_wins if counter_session is None else counter_session.total_wins,
+                "losses": flat_losses if counter_session is None else counter_session.total_losses,
+                "ties": flat_ties if counter_session is None else counter_session.total_ties,
+                "total_bets": flat_total_bets if counter_session is None else counter_session.total_bets,
+                "cumulative_profit": cumulative_profit,
+                "cumulative_money": money_pnl,
+                "sets": 0 if counter_session is None else len(counter_session.tracker.sets),
+                "current_turn": current_turn,
+                "current_unit": current_unit,
+                "current_unit_idx": current_unit_idx,
+                "overshoot": overshoot,
+                "balance": bal,
+                "turns_display": turns_display,
+                "running": True,
+                "session_count": 0 if counter_session is None else counter_session.session_count,
+            })
+
+            # Set complete
+            if completed_set is not None:
+                send_set_complete(completed_set, chip_base)
+                send_shoe_history(counter_session.tracker.sets, chip_base)  # type: ignore[union-attr]
+
+            # Profit/Loss reset (money-based)
+            if money_pnl >= profit_target_dollars or money_pnl <= -loss_cut_dollars:
+                is_profit = money_pnl >= profit_target_dollars
+                reason_en = "PROFIT TARGET" if is_profit else "LOSS CUT"
+                send_msg({"type": "session_reset", "is_profit": is_profit, "amount": money_pnl, "reason": reason_en})
+                send_log(f"[{reason_en}] Session ended at ${money_pnl:+.2f}")
+                money_pnl = 0.0
+                if counter_session is not None:
+                    counter_session.reset_session("利確" if is_profit else "損切り")
+                    try:
+                        counter_session._money_pnl_override = 0.0  # type: ignore[attr-defined]
+                        counter_session._save_state()
+                    except Exception:
+                        pass
+
+        # === Shutdown (counter mode) ===
+        send_action("Stopping...")
+        try:
+            executor.exit_table()
+        except Exception:
+            pass
+        try:
+            scraper.stop()
+        except Exception:
+            pass
+        send_action("Stopped.")
+        _active_session = None
+        return
 
     def _make_local_session():
         # Lazy import — only when running in local fallback mode.
@@ -1661,6 +2065,8 @@ def _run_bet_session_inner(config: dict, stop_event: threading.Event, skip_event
         return True
 
     # Evolution game URLs (Evolution iframe を実際にロードするゲームページ)
+    # NOTE: detour は不安定化要因になることがあるため、デフォルト無効。
+    ENABLE_CASINO_DETOUR = os.getenv("LAPLACE_ENABLE_CASINO_DETOUR", "0").strip() in ("1", "true", "True", "yes")
     EVOLUTION_GAME_URLS = [
         "https://stake.com/casino/games/evolution-european-roulette",
         "https://stake.com/casino/games/evolution-lightning-roulette",
@@ -1682,7 +2088,8 @@ def _run_bet_session_inner(config: dict, stop_event: threading.Event, skip_event
         import random as _rand_d
         if target_url is None:
             # ランダム detour: 通常運用 (人間らしさ重視)
-            detour_targets = list(EVOLUTION_GAME_URLS) + ["https://stake.com/casino"]
+            # /casino は Evolution iframe がロードされず復旧に寄与しないため除外
+            detour_targets = list(EVOLUTION_GAME_URLS)
             target_url = _rand_d.choice(detour_targets)
         send_action(f"🎰 Casino detour: {reason}")
         send_log(f"[detour] 寄り道開始 → {target_url}")
@@ -1716,11 +2123,12 @@ def _run_bet_session_inner(config: dict, stop_event: threading.Event, skip_event
             return False
 
     while not stop_event.is_set() and round_count < MAX_ROUNDS:
-        # ── A0. SESSION EXPIRED 即時検知 ──
+        # ── A0. エラーダイアログ即時検知 (TRY AGAIN / BACK TO LOBBY / SESSION EXPIRED) ──
+        # NOTE: in_table でなくても iframe 内オーバーレイは出るため、常にチェックする。
         try:
-            if executor.in_table and not executor.check_and_dismiss_error():
+            if not executor.check_and_dismiss_error():
                 err = executor.get_last_error_type()
-                send_action("⚠️ Session expired — auto recovery")
+                send_action("⚠️ Error dialog — auto recovery")
                 send_log(f"[session] error={err} → full_recovery")
                 try:
                     executor.exit_table()
@@ -2070,7 +2478,7 @@ def _run_bet_session_inner(config: dict, stop_event: threading.Event, skip_event
 
         # ── Syncモード: 入場後の規則性再確認（DOM読み取り）──
         # ロビーWSとテーブル内DOMの不整合を検出、条件未達なら即退避
-        if _awaiting_sync_confirm:
+        if _awaiting_sync_confirm and executor.in_table:
             from regularity_monitor import evaluate_table, ENTRY_THRESHOLD, MIN_HANDS_FOR_ENTRY
             send_action("🔍 Sync: 入場後の規則性を再確認中...")
             send_log("[Sync-Entry] ビーズロードから規則性を再計算")
@@ -2108,12 +2516,22 @@ def _run_bet_session_inner(config: dict, stop_event: threading.Event, skip_event
                             scraper._shoe_epochs[target_tid] = int(time.time())
                         send_action(f"🚪 {target_name} に入場中...")
                         if not executor.enter_table(target_tid, target_name):
+                            send_log("[Sync-Entry] ⚠️ 入場失敗 → full_recovery")
                             fr = full_recovery()
                             if not fr:
                                 break
                             target_tid, target_name = fr
                             if not executor.enter_table(target_tid, target_name):
-                                break
+                                send_log("[Sync-Entry] ⚠️ full_recovery後も入場失敗 → restart_browser")
+                                fr2 = restart_browser("Sync-Entry enter_table failed after full_recovery")
+                                if not fr2:
+                                    break
+                                target_tid, target_name = fr2
+                                if not executor.enter_table(target_tid, target_name):
+                                    send_log("[Sync-Entry] ❌ restart後も入場失敗 → テーブル再選定へ")
+                                    target_tid = None
+                                    target_name = None
+                                    continue
                         _awaiting_sync_confirm = True  # 新しいテーブルでも再確認
                         continue
                     else:
@@ -2148,12 +2566,22 @@ def _run_bet_session_inner(config: dict, stop_event: threading.Event, skip_event
                         scraper._shoe_epochs[target_tid] = int(time.time())
                     send_action(f"🚪 {target_name} に入場中...")
                     if not executor.enter_table(target_tid, target_name):
+                        send_log("[Sync-Entry] ⚠️ 入場失敗 → full_recovery")
                         fr = full_recovery()
                         if not fr:
                             break
                         target_tid, target_name = fr
                         if not executor.enter_table(target_tid, target_name):
-                            break
+                            send_log("[Sync-Entry] ⚠️ full_recovery後も入場失敗 → restart_browser")
+                            fr2 = restart_browser("Sync-Entry enter_table failed after full_recovery")
+                            if not fr2:
+                                break
+                            target_tid, target_name = fr2
+                            if not executor.enter_table(target_tid, target_name):
+                                send_log("[Sync-Entry] ❌ restart後も入場失敗 → テーブル再選定へ")
+                                target_tid = None
+                                target_name = None
+                                continue
                     _awaiting_sync_confirm = True
                     continue
             except Exception as e:
@@ -2662,9 +3090,8 @@ def _run_bet_session_inner(config: dict, stop_event: threading.Event, skip_event
                 logger.warning(f"Public notify failed: {e}")
 
             # ── A. 30分タイマー: set 完了 + 30分経過で casino detour ──
-            # iframe 劣化対策。set 完了直後 = BET ウィンドウ外なので安全
-            # 30分予防は casino_detour で軽量化 (full_recovery より速い)
-            if time.time() - _last_recovery_time > PROACTIVE_RECOVERY_INTERVAL:
+            # detour は不安定化要因になりうるためデフォルト無効
+            if ENABLE_CASINO_DETOUR and time.time() - _last_recovery_time > PROACTIVE_RECOVERY_INTERVAL:
                 elapsed_min = (time.time() - _last_recovery_time) / 60
                 send_log(f"[proactive-detour] 30分経過 ({elapsed_min:.0f}分) → casino detour")
                 # 一旦テーブルを抜けてから detour
@@ -2900,6 +3327,12 @@ def _run_bet_session_inner(config: dict, stop_event: threading.Event, skip_event
                 _deferred_exit_reason = None
 
     # === Shutdown ===
+    # Ensure any heartbeat threads (and external watchdog stale detection) won't be kept alive
+    # after the bet loop has ended for any reason.
+    try:
+        stop_event.set()
+    except Exception:
+        pass
     send_action("Stopping...")
     summary = session.get_summary()
     balance = executor.get_balance() if not dry_run else 0
@@ -2987,7 +3420,7 @@ def main():
 
                 elif msg_type == "change_mode":
                     new_mode = msg.get("mode", "1drop")
-                    if new_mode in ("normal", "1drop", "mix", "sync", "sync_pause", "pattern", "pattern_test"):
+                    if new_mode in ("normal", "1drop", "mix", "sync", "sync_pause", "pattern", "pattern_test", "counter", "counter_flat"):
                         _bet_mode_box[0] = new_mode
                         _effective_mode_box[0] = "normal" if new_mode == "mix" else new_mode
                         send_log(f"BET mode changed to: {new_mode} (effective: {_effective_mode_box[0]})")
