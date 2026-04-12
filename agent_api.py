@@ -1581,7 +1581,17 @@ def _run_bet_session_inner(config: dict, stop_event: threading.Event, skip_event
                 send_log(f"[counter] BET {side.upper()} ${bet_amount:.0f}")
                 placed = executor.place_bet(side, bet_amount, strict=True)
                 if not placed:
-                    send_log("[counter] BET失敗 (strict) → 継続")
+                    # strict は「確認できないとFalse」なので、実際に置けているかDOMで確認する
+                    try:
+                        actual_total = executor._get_total_bet()
+                    except Exception:
+                        actual_total = 0.0
+                    if actual_total and actual_total > 0.5:
+                        send_log(f"[counter] ✅ 部分/未確認BET検出: 計画${bet_amount:.0f} → 実際${actual_total:.2f}")
+                        bet_amount = float(actual_total)
+                        placed = True
+                    else:
+                        send_log("[counter] BET失敗 (strict) → 継続")
 
             # Wait for next result via bead-road diff (works even if BET無し)
             prev = last_bead
