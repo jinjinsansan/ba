@@ -5,6 +5,143 @@ const $$ = (sel) => document.querySelectorAll(sel);
 
 let isRunning = false;
 let logVisible = true;
+let guiVariant = 'dev';
+
+const I18N = {
+  dev: {
+    update_open: 'ダウンロードページを開く',
+    update_available: '新バージョン {version} をダウンロード中...',
+    update_downloading: 'ダウンロード中... {percent}%',
+    setup_subtitle: 'ライセンス認証',
+    setup_account_email: 'bafather.uk アカウントメール',
+    setup_stake_email: 'Stake.com メール',
+    setup_stake_pass: 'Stake.com パスワード',
+    setup_email_placeholder: 'example@email.com',
+    setup_stake_email_placeholder: 'stake@email.com',
+    setup_activate: '認証する',
+    setup_verifying: 'ライセンス確認中...',
+    setup_no_account: 'アカウントがない場合は',
+    setup_required: '全て入力してください。',
+    action_initializing: '初期化中...',
+    stat_balance: '残高',
+    stat_session: 'セッション損益',
+    stat_bets: 'BET数',
+    stat_winrate: '勝率',
+    laplace_panel_title: 'ラプラスパネル',
+    laplace_panel_badge: '開発',
+    laplace_unit_idx: '現在ユニットIdx',
+    laplace_unit: '現在ユニット($)',
+    laplace_set: '現在セット',
+    laplace_turn: 'セット内ターン',
+    laplace_set_profit: 'セット損益',
+    laplace_cum_profit: '累計損益',
+    laplace_overshoot: 'オーバーシュート',
+    laplace_total_bets: '総BET数',
+    laplace_set_history: 'セット履歴 (7ハンド)',
+    daily_total: 'デイリー損益',
+    live_feed: 'ライブフィード',
+    recent_hands: '直近ハンド',
+    btn_start: '開始',
+    btn_stop: '停止',
+    btn_skip: '次テーブル',
+    btn_settings: '設定',
+    continue_title: '前回セッション検出',
+    continue_desc: '前回のセッションが見つかりました。開始方法を選択してください。',
+    continue_btn: '続きから再開',
+    reset_btn: 'リセット (デイリー維持)',
+    log_toggle: 'ログ ▲',
+    settings_title: '設定',
+    settings_base_bet: '基本BET ($)',
+    settings_profit_target: '利確目標 ($)',
+    settings_loss_cut: '損切り ($)',
+    settings_telegram: 'Telegram チャットID',
+    settings_telegram_placeholder: '任意',
+    settings_account_email: 'アカウントメール',
+    settings_email_placeholder: 'your@email.com',
+    settings_dry_run: 'テストモード (実BETなし)',
+    settings_bet_mode: 'BETモード',
+    settings_save: '保存',
+    mode_1drop: '1-ドロップ (観察→入室)',
+    mode_normal: '通常 (同一テーブル)',
+    mode_mix: 'ミックス (OS≥20で1-ドロップ)',
+    mode_sync: '同期 (上位テーブル監視)',
+    mode_sync_pause: '同期+停止 (BBで停止/P再開)',
+    mode_pattern: 'パターン (Strategy A)',
+    mode_pattern_test: 'パターンテスト ($1固定)',
+    mode_counter: 'カウンター (逆張り)',
+    mode_counter_flat: 'カウンターFlat ($1固定)',
+    log_bot_starting: 'ボット起動中...',
+    log_bot_started: 'ボット起動完了。',
+    log_start_failed: '起動失敗: {error}',
+    log_bot_stopped: '停止しました。',
+    log_skip_requested: 'テーブル移動を要求しました。',
+    log_skip_failed: '移動失敗: {error}',
+    log_settings_saved: '設定保存: 基本${base} 目標${profit} 損切り${loss}',
+    log_live_update_sent: 'ライブ更新送信 (利確/損切 + モード: {mode})',
+    log_live_update_failed: 'ライブ更新失敗: {error}',
+    action_ready: '準備完了。STARTで開始',
+    log_ready: 'LAPLACE準備完了。初期化済み。',
+    log_pnl_synced: 'VPSからセッションPNLを同期: ${amount}',
+    toast_profit: '利確確定。新セッション開始。',
+    toast_loss: '損切り確定。新セッション開始。',
+    reset_profit: '利確達成',
+    reset_loss: '損切り',
+  },
+};
+
+function t(key, fallback = '') {
+  const map = I18N[guiVariant] || {};
+  return map[key] || fallback || key;
+}
+
+function format(template, values) {
+  if (!template) return '';
+  return Object.entries(values || {}).reduce(
+    (acc, [k, v]) => acc.replace(new RegExp(`\\{${k}\\}`, 'g'), v),
+    template
+  );
+}
+
+function applyTranslations() {
+  document.querySelectorAll('[data-i18n]').forEach((el) => {
+    const key = el.dataset.i18n;
+    const value = (I18N[guiVariant] || {})[key];
+    if (value) el.textContent = value;
+  });
+  document.querySelectorAll('[data-i18n-placeholder]').forEach((el) => {
+    const key = el.dataset.i18nPlaceholder;
+    const value = (I18N[guiVariant] || {})[key];
+    if (value) el.setAttribute('placeholder', value);
+  });
+  const header = $('#devSetsHeader');
+  if (header) {
+    if (guiVariant === 'dev') {
+      header.innerHTML = '<span>セット</span><span>結果</span><span>勝敗/損益</span>';
+    } else {
+      header.innerHTML = '<span>SET</span><span>RESULTS</span><span>W/L & P/L</span>';
+    }
+  }
+  const logToggle = $('#logToggle');
+  if (logToggle) {
+    logToggle.innerHTML = getLogToggleText(logVisible);
+  }
+}
+
+function applyVariant() {
+  document.documentElement.dataset.variant = guiVariant;
+  if (guiVariant === 'dev') {
+    localStorage.setItem('valhalla_dev_mode', '1');
+  }
+  if (guiVariant === 'user') {
+    document.querySelectorAll('.dev-only').forEach(el => el.remove());
+  }
+  applyDevMode();
+}
+
+function getLogToggleText(open) {
+  const label = guiVariant === 'dev' ? 'ログ' : 'CONSOLE';
+  return `${label} ${open ? '&#x25B2;' : '&#x25BC;'}`;
+}
 
 // --- Title Bar ---
 $('#btnMinimize').addEventListener('click', () => window.valhalla.windowMinimize());
@@ -28,6 +165,10 @@ function showMain() {
 
 async function initLicense() {
   const env = await window.valhalla.getEnv();
+  guiVariant = (env.gui_variant || 'dev').toLowerCase();
+  document.documentElement.lang = guiVariant === 'dev' ? 'ja' : 'en';
+  applyVariant();
+  applyTranslations();
   const email = env.account_email;
 
   if (!email) {
@@ -51,7 +192,7 @@ $('#btnActivate').addEventListener('click', async () => {
 
   if (!email || !stakeUser || !stakePass) {
     $('#setupError').style.display = 'block';
-    $('#setupError').textContent = 'All fields are required.';
+    $('#setupError').textContent = t('setup_required', 'All fields are required.');
     return;
   }
 
@@ -85,11 +226,17 @@ window.valhalla.onUpdateStatus((data) => {
   const btn = $('#btnInstallUpdate');
   if (data.status === 'available') {
     banner.style.display = 'flex';
-    text.textContent = `新バージョン ${data.version} をダウンロード中...`;
+    text.textContent = format(
+      t('update_available', `Downloading new version ${data.version}...`),
+      { version: data.version }
+    );
     btn.style.display = 'none';
   } else if (data.status === 'downloading') {
     banner.style.display = 'flex';
-    text.textContent = `ダウンロード中... ${data.percent}%`;
+    text.textContent = format(
+      t('update_downloading', `Downloading... ${data.percent}%`),
+      { percent: data.percent }
+    );
     btn.style.display = 'none';
   }
 });
@@ -135,12 +282,12 @@ $('#btnStart').addEventListener('click', async () => {
   config.resume_results = Array.isArray(results) ? results.slice() : [];
   _startedAt = Date.now();
   setRunning(true);
-  addLog('Bot starting...', 'info');
+  addLog(t('log_bot_starting', 'Bot starting...'), 'info');
   try {
     await window.valhalla.startBot(config);
-    addLog('Bot started.', 'info');
+    addLog(t('log_bot_started', 'Bot started.'), 'info');
   } catch (e) {
-    addLog(`Start failed: ${e.message || e}`, 'lose');
+    addLog(format(t('log_start_failed', 'Start failed: {error}'), { error: e.message || e }), 'lose');
     setRunning(false);
   }
 });
@@ -184,7 +331,7 @@ function restoreSessionState() {
 $('#btnStop').addEventListener('click', async () => {
   await window.valhalla.stopBot();
   setRunning(false);
-  addLog('Bot stopped.', 'info');
+  addLog(t('log_bot_stopped', 'Bot stopped.'), 'info');
 });
 
 function setRunning(running) {
@@ -199,9 +346,9 @@ $('#btnSkip').addEventListener('click', async () => {
   if (!isRunning) return;
   try {
     await window.valhalla.sendCommand({ type: 'skip_table' });
-    addLog('Skip table requested. Searching for new table...', 'info');
+    addLog(t('log_skip_requested', 'Skip table requested. Searching for new table...'), 'info');
   } catch (e) {
-    addLog(`Skip failed: ${e.message || e}`, 'lose');
+    addLog(format(t('log_skip_failed', 'Skip failed: {error}'), { error: e.message || e }), 'lose');
   }
 });
 
@@ -459,22 +606,26 @@ function initToggle(toggleId, trackId) {
 
 // Tab switching
 function initModalTabs() {
+  const botBtn = $('#tabBotBtn');
+  const tableBtn = $('#tabTableBtn');
+  if (!botBtn || !tableBtn) return;
   function switchTab(active) {
     $$('.modal-tab').forEach(t => t.classList.remove('active'));
     $$('.tab-content').forEach(c => c.classList.add('hidden'));
     if (active === 'bot') {
-      $('#tabBotBtn').classList.add('active');
+      botBtn.classList.add('active');
       $('#tabBotContent').classList.remove('hidden');
     } else {
-      $('#tabTableBtn').classList.add('active');
+      tableBtn.classList.add('active');
       $('#tabTableContent').classList.remove('hidden');
     }
   }
-  $('#tabBotBtn').addEventListener('click', () => switchTab('bot'));
-  $('#tabTableBtn').addEventListener('click', () => switchTab('table'));
+  botBtn.addEventListener('click', () => switchTab('bot'));
+  tableBtn.addEventListener('click', () => switchTab('table'));
 }
 
 function initTableFilterControls() {
+  if (!$('#btnSaveTable')) return;
   initStepper('ppDec', 'ppInc', 'ppValue', 1, 50, 1);
   initStepper('rwDec', 'rwInc', 'rwValue', 10, 300, 10);
   initStepper('mnDec', 'mnInc', 'mnValue', 5, 40, 5);
@@ -515,26 +666,28 @@ function applyTableFilterToUI(f) {
 $('#btnSettings').addEventListener('click', () => {
   $('#settingsModal').classList.remove('hidden');
   const s = loadSettings();
-  $('#inputLicense').value = s.license_key || '';
-  $('#inputChipBase').value = s.chip_base;
-  $('#inputProfitTarget').value = s.profit_target;
-  $('#inputLossCut').value = s.loss_cut;
-  $('#inputTelegramChat').value = s.telegram_chat_id || '';
-  $('#inputUserEmail').value = s.user_email || '';
-  $('#inputDryRun').checked = !!s.dry_run;
-  $('#inputBetMode').value = s.bet_mode || '1drop';
-  // Load table filter into UI
-  applyTableFilterToUI(loadTableFilter());
-  // Reset to BOT tab
-  $$('.modal-tab').forEach(t => t.classList.remove('active'));
-  $$('.tab-content').forEach(c => c.classList.add('hidden'));
-  $('#tabBotBtn').classList.add('active');
-  $('#tabBotContent').classList.remove('hidden');
+  const chipBaseEl = $('#inputChipBase');
+  if (chipBaseEl) chipBaseEl.value = s.chip_base;
+  const ptEl = $('#inputProfitTarget');
+  if (ptEl) ptEl.value = s.profit_target;
+  const lcEl = $('#inputLossCut');
+  if (lcEl) lcEl.value = s.loss_cut;
+  const tgEl = $('#inputTelegramChat');
+  if (tgEl) tgEl.value = s.telegram_chat_id || '';
+  const mailEl = $('#inputUserEmail');
+  if (mailEl) mailEl.value = s.user_email || '';
+  const dryEl = $('#inputDryRun');
+  if (dryEl) dryEl.checked = !!s.dry_run;
+  const modeEl = $('#inputBetMode');
+  if (modeEl) modeEl.value = s.bet_mode || '1drop';
+  const tabContent = $('#tabBotContent');
+  if (tabContent) tabContent.classList.remove('hidden');
 });
 $('#settingsClose').addEventListener('click', () => $('#settingsModal').classList.add('hidden'));
 $('#btnSaveSettings').addEventListener('click', async () => {
+  const licenseInput = $('#inputLicense');
   const settings = {
-    license_key: $('#inputLicense').value.trim(),
+    license_key: licenseInput ? licenseInput.value.trim() : '',
     chip_base: parseFloat($('#inputChipBase').value) || 1,
     profit_target: parseFloat($('#inputProfitTarget').value) || 50,
     loss_cut: parseFloat($('#inputLossCut').value) || 200,
@@ -545,7 +698,13 @@ $('#btnSaveSettings').addEventListener('click', async () => {
   };
   localStorage.setItem('valhalla_settings', JSON.stringify(settings));
   $('#settingsModal').classList.add('hidden');
-  addLog(`Settings saved. Base:$${settings.chip_base} Target:$${settings.profit_target} LossCut:$${settings.loss_cut}`, 'info');
+  addLog(
+    format(
+      t('log_settings_saved', 'Settings saved. Base:${base} Target:${profit} LossCut:${loss}'),
+      { base: settings.chip_base, profit: settings.profit_target, loss: settings.loss_cut }
+    ),
+    'info'
+  );
 
   // Live-update profit_target & loss_cut if session is running
   if (isRunning) {
@@ -562,9 +721,9 @@ $('#btnSaveSettings').addEventListener('click', async () => {
         type: 'change_mode',
         mode: settings.bet_mode,
       });
-      addLog(`Live config update sent (profit/loss + mode: ${settings.bet_mode}).`, 'info');
+      addLog(format(t('log_live_update_sent', 'Live config update sent (profit/loss + mode: {mode}).'), { mode: settings.bet_mode }), 'info');
     } catch (e) {
-      addLog(`Live update failed: ${e.message || e}`, 'lose');
+      addLog(format(t('log_live_update_failed', 'Live update failed: {error}'), { error: e.message || e }), 'lose');
     }
   }
 });
@@ -579,58 +738,14 @@ function loadSettings() {
 }
 
 // --- Developer Mode ---
-const DEV_PASSWORD = 'laplace1749';
-
 function isDevMode() {
-  return localStorage.getItem('valhalla_dev_mode') === '1';
-}
-
-function setDevMode(on) {
-  if (on) localStorage.setItem('valhalla_dev_mode', '1');
-  else localStorage.removeItem('valhalla_dev_mode');
-  applyDevMode();
+  return guiVariant === 'dev';
 }
 
 function applyDevMode() {
-  const on = isDevMode();
   const panel = $('#devPanel');
-  const status = $('#devModeStatus');
-  if (panel) panel.classList.toggle('hidden', !on);
-  if (status) status.textContent = `Developer Mode: ${on ? 'ON (click to disable)' : 'OFF'}`;
+  if (panel) panel.classList.toggle('hidden', !isDevMode());
 }
-
-$('#devModeLink').addEventListener('click', () => {
-  if (isDevMode()) {
-    setDevMode(false);
-    addLog('Developer Mode disabled.', 'info');
-  } else {
-    $('#settingsModal').classList.add('hidden');
-    $('#devModeModal').classList.remove('hidden');
-    $('#inputDevPassword').value = '';
-    $('#inputDevPassword').focus();
-  }
-});
-
-$('#devModeClose').addEventListener('click', () => {
-  $('#devModeModal').classList.add('hidden');
-});
-
-$('#btnDevAuth').addEventListener('click', () => {
-  const pw = $('#inputDevPassword').value;
-  if (pw === DEV_PASSWORD) {
-    setDevMode(true);
-    $('#devModeModal').classList.add('hidden');
-    addLog('Developer Mode UNLOCKED.', 'win');
-  } else {
-    addLog('Invalid password.', 'lose');
-    $('#inputDevPassword').value = '';
-    $('#inputDevPassword').focus();
-  }
-});
-
-$('#inputDevPassword').addEventListener('keypress', (e) => {
-  if (e.key === 'Enter') $('#btnDevAuth').click();
-});
 
 function updateDevPanel(msg) {
   if (!isDevMode()) return;
@@ -648,19 +763,23 @@ function renderDevSets(sets) {
   const el = $('#devSets');
   if (!el) return;
   if (!sets || sets.length === 0) {
-    el.innerHTML = '<div style="color:var(--text-dim); padding:4px 12px;">No completed sets yet</div>';
+    el.innerHTML = `<div style="color:var(--text-dim); padding:4px 12px;">${guiVariant === 'dev' ? 'まだセットがありません' : 'No completed sets yet'}</div>`;
     return;
   }
   let html = '';
   for (const s of sets) {
-    const marks = (s.results || '').split('').map(c =>
-      c === 'O' ? '<span class="set-mark-o">O</span>' : '<span class="set-mark-x">X</span>'
-    ).join('');
+    const marks = (s.results || '').split('').map(c => {
+      if (c === 'O') return `<span class="set-mark-o">${guiVariant === 'dev' ? '〇' : 'O'}</span>`;
+      return `<span class="set-mark-x">${guiVariant === 'dev' ? '✕' : 'X'}</span>`;
+    }).join('');
     const sign = s.set_profit >= 0 ? '+' : '';
     const os = (typeof s.overshoot === 'number') ? s.overshoot : '-';
     const slashedCls = s.slashed ? ' slashed' : '';
     const slashMark = s.slashed ? ' <span class="scissors">&#9986;</span>' : '';
-    html += `<div class="set-line${slashedCls}"><span class="set-index">#${s.set_index}</span>${marks}<span class="set-meta">${s.wins}W/${s.losses}L ${sign}${s.set_profit} OS:${os}${slashMark}</span></div>`;
+    const wl = guiVariant === 'dev'
+      ? `${s.wins}勝/${s.losses}敗`
+      : `${s.wins}W/${s.losses}L`;
+    html += `<div class="set-line${slashedCls}"><span class="set-index">#${s.set_index}</span><span class="set-marks">${marks}</span><span class="set-meta">${wl} ${sign}${s.set_profit} OS:${os}${slashMark}</span></div>`;
   }
   el.innerHTML = html;
 }
@@ -669,15 +788,24 @@ function renderDevSets(sets) {
 $('#logToggle').addEventListener('click', () => {
   logVisible = !logVisible;
   $('#logPanel').classList.toggle('hidden', !logVisible);
-  $('#logToggle').innerHTML = logVisible ? 'CONSOLE &#x25B2;' : 'CONSOLE &#x25BC;';
+  $('#logToggle').innerHTML = getLogToggleText(logVisible);
 });
 
 function addLog(text, type = '') {
   const el = $('#logContent');
+  if (!text || shouldIgnoreLog(text)) return;
   const t = new Date().toLocaleTimeString();
   const cls = type ? ` class="log-${type}"` : '';
   el.innerHTML += `<span${cls}>[${t}] ${esc(text)}</span>\n`;
   el.scrollTop = el.scrollHeight;
+}
+
+function shouldIgnoreLog(text) {
+  const line = text.trim();
+  if (!line) return true;
+  if (line.includes('[hb]')) return true;
+  if (line.toLowerCase().includes('debug')) return true;
+  return false;
 }
 
 function esc(text) {
@@ -707,7 +835,7 @@ function showResetToast(title, amount, isProfit) {
   toast.innerHTML = `
     <div class="toast-title">${title}</div>
     <div class="toast-amount">${amount}</div>
-    <div class="toast-sub">${isProfit ? 'Locked in. New session.' : 'Stopped loss. New session.'}</div>
+    <div class="toast-sub">${isProfit ? t('toast_profit', 'Locked in. New session.') : t('toast_loss', 'Stopped loss. New session.')}</div>
   `;
   setTimeout(() => { toast.className = 'reset-toast ' + (isProfit ? 'profit' : 'losscut'); }, 3500);
 }
@@ -746,7 +874,7 @@ function renderFeed() {
 function renderRecent() {
   const grid = $('#recentGrid');
   if (results.length === 0) {
-    grid.innerHTML = '<div class="shoe-empty">Waiting for results...</div>';
+    grid.innerHTML = `<div class="shoe-empty">${guiVariant === 'dev' ? '結果待ち...' : 'Waiting for results...'}</div>`;
     return;
   }
   const last = results.slice(-MAX_RECENT);
@@ -808,7 +936,7 @@ function renderDailyPnl() {
 
   const keys = Object.keys(data).sort().slice(-14);
   if (keys.length === 0) {
-    row.innerHTML = '<div class="daily-empty">No history yet</div>';
+    row.innerHTML = `<div class="daily-empty">${guiVariant === 'dev' ? '履歴なし' : 'No history yet'}</div>`;
     return;
   }
   let html = '';
@@ -837,7 +965,7 @@ window.valhalla.onAgentMessage((msg) => {
       const r = msg.result;
       const won = msg.won;
       if (r === 'tie') {
-        setAction('Tie -- BET returned');
+        setAction(guiVariant === 'dev' ? 'タイ — BET返却' : 'Tie -- BET returned');
         addResult('T');
       } else if (won === true) {
         flashScreen('win');
@@ -904,7 +1032,9 @@ window.valhalla.onAgentMessage((msg) => {
     }
 
     case 'status': {
-      $('#betCount').textContent = `${msg.wins || 0}W / ${msg.losses || 0}L`;
+      const winLabel = guiVariant === 'dev' ? '勝' : 'W';
+      const lossLabel = guiVariant === 'dev' ? '敗' : 'L';
+      $('#betCount').textContent = `${msg.wins || 0}${winLabel} / ${msg.losses || 0}${lossLabel}`;
       const totalBets = (msg.wins || 0) + (msg.losses || 0);
       if (totalBets > 0) {
         const wr = ((msg.wins || 0) / totalBets * 100).toFixed(1);
@@ -933,7 +1063,13 @@ window.valhalla.onAgentMessage((msg) => {
           _lastCumulativeMoney = msg.cumulative_money;
           _pnlSynced = true;
           updateSessionDisplay();
-          addLog(`Session P&L synced from VPS: $${sessionTotal >= 0 ? '+' : ''}${sessionTotal.toFixed(2)}`, 'info');
+          addLog(
+            format(
+              t('log_pnl_synced', 'Session P&L synced from VPS: ${amount}'),
+              { amount: `$${sessionTotal >= 0 ? '+' : ''}${sessionTotal.toFixed(2)}` }
+            ),
+            'info'
+          );
         } else {
           // ドリフト検知 (override せず警告のみ)
           const diff = Math.abs(sessionTotal - msg.cumulative_money);
@@ -952,7 +1088,9 @@ window.valhalla.onAgentMessage((msg) => {
     case 'session_reset': {
       const amt = msg.amount || 0;
       const isProfit = msg.is_profit;
-      const title = isProfit ? 'PROFIT TARGET HIT' : 'LOSS CUT';
+      const title = isProfit
+        ? t('reset_profit', 'PROFIT TARGET HIT')
+        : t('reset_loss', 'LOSS CUT');
       const sign = amt >= 0 ? '+' : '-';
       showResetToast(title, `${sign}$${Math.abs(amt).toFixed(0)}`, isProfit);
       flashScreen(isProfit ? 'profit' : 'losscut');
@@ -966,7 +1104,7 @@ window.valhalla.onAgentMessage((msg) => {
     }
 
     case 'error':
-      addLog(`Error: ${msg.message}`, 'lose');
+      addLog(guiVariant === 'dev' ? `エラー: ${msg.message}` : `Error: ${msg.message}`, 'lose');
       break;
 
     case 'stopped':
@@ -976,8 +1114,8 @@ window.valhalla.onAgentMessage((msg) => {
         break;
       }
       setRunning(false);
-      setAction('Stopped');
-      addLog('Bot stopped.');
+      setAction(guiVariant === 'dev' ? '停止しました' : 'Stopped');
+      addLog(t('log_bot_stopped', 'Bot stopped.'));
       syncGuiStateToServer(); // 停止時に即時保存
       break;
 
@@ -986,8 +1124,8 @@ window.valhalla.onAgentMessage((msg) => {
       // ボタン状態 (START disabled / STOP enabled) を再同期
       _startedAt = Date.now();
       setRunning(true);
-      setAction('Running (auto-restarted)');
-      addLog('🔄 Bot auto-restarted', 'info');
+      setAction(guiVariant === 'dev' ? '自動再起動中' : 'Running (auto-restarted)');
+      addLog(guiVariant === 'dev' ? '🔄 自動再起動しました' : '🔄 Bot auto-restarted', 'info');
       break;
 
     case 'log':
@@ -1018,8 +1156,8 @@ _lastCumulativeMoney = 0;
 results.length = 0;
 setRunning(false);
 updateSessionDisplay();
-setAction('Ready. Press START to begin.');
-addLog('LAPLACE ready. All data cleared.', 'info');
+setAction(t('action_ready', 'Ready. Press START to begin.'));
+addLog(t('log_ready', 'LAPLACE ready. All data cleared.'), 'info');
 renderDailyPnl();
 renderFeed();
 renderRecent();
