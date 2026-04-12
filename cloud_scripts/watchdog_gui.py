@@ -72,6 +72,15 @@ def stop_agent():
             stderr=subprocess.DEVNULL,
         )
 
+def stop_camoufox():
+    # Kill browser processes too; agent-only restart is insufficient when the browser is zombied.
+    for img in ("camoufox.exe", "firefox.exe"):
+        subprocess.call(
+            ["taskkill", "/F", "/T", "/IM", img],
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+        )
+
 
 def stop_gui():
     subprocess.call(
@@ -133,14 +142,17 @@ def main():
             if now - last_restart >= RESTART_COOLDOWN:
                 if not running:
                     print("[watchdog] gui down — restarting gui")
+                    stop_camoufox()
                     stop_agent()
                     start_gui()
                 elif stale:
                     if find_agent_pids():
                         print("[watchdog] log stale — restarting agent")
+                        stop_camoufox()
                         stop_agent()
                     else:
                         print("[watchdog] log stale + no agent — restarting gui")
+                        stop_camoufox()
                         stop_gui()
                         time.sleep(3)
                         start_gui()
@@ -148,9 +160,11 @@ def main():
         elif hard_restart and now - last_restart >= RESTART_COOLDOWN:
             if find_agent_pids():
                 print("[watchdog] recovery loop/browser closed — restarting agent")
+                stop_camoufox()
                 stop_agent()
             else:
                 print("[watchdog] recovery loop + no agent — restarting gui")
+                stop_camoufox()
                 stop_gui()
                 time.sleep(3)
                 start_gui()
