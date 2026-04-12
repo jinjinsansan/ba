@@ -107,6 +107,7 @@ $('#btnStart').addEventListener('click', async () => {
   const config = {
     ...loadSettings(),
     site_api_key: LAPLACE_API_KEY,
+    resume_results: (typeof results !== 'undefined' && Array.isArray(results)) ? results.slice() : [],
     table_filter: loadTableFilter(),
     recommended_tables: getEnabledRecommendedTables(),
   };
