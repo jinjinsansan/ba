@@ -679,6 +679,20 @@ class BetExecutor:
         logger.error(f"チップ${chip_value}選択失敗")
         return False
 
+    def cancel_bet(self) -> bool:
+        """BET直後のUNDOを試みる。成功したらTrue。"""
+        try:
+            evo = self._get_evo_locator()
+            undo = evo.locator('[data-role="undo-button"]').first
+            if undo.is_visible(timeout=300):
+                undo.click(timeout=1000, force=True)
+                time.sleep(0.2)
+                logger.info("UNDOクリックでBET取消")
+                return True
+        except Exception:
+            pass
+        return False
+
     def _select_chip_value(self, amount: float) -> int:
         chips = [1, 2, 5, 25, 100, 500]
         selected = chips[0]

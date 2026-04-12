@@ -1600,6 +1600,62 @@ def _run_bet_session_inner(config: dict, stop_event: threading.Event, skip_event
                 current_name = None
                 continue
 
+            # シャッフル/新シュー検出 → 即退室
+            try:
+                if executor.is_shuffle_state():
+                    send_log("[counter] ⚠️ シャッフル状態検出 → 退室")
+                    try:
+                        executor.exit_table()
+                    except Exception:
+                        pass
+                    current_tid = None
+                    current_name = None
+                    continue
+            except Exception:
+                pass
+            try:
+                signals = scraper.get_new_shoe_signals()
+                if current_tid in signals:
+                    send_log("[counter] ⚠️ 新シュー検出 → 退室")
+                    try:
+                        executor.exit_table()
+                    except Exception:
+                        pass
+                    current_tid = None
+                    current_name = None
+                    continue
+            except Exception:
+                pass
+
+            # Sync last result from bead road (防止: ビーズロード更新遅延で逆張り方向がズレる)
+            try:
+                if not executor.check_and_dismiss_error():
+                    raise RuntimeError("error dialog")
+                _b = executor.read_bead_road() or ""
+                if not _b:
+                    send_log("[counter] ⚠️ ビーズロード空 (新シュー/シャッフル) → 退室")
+                    try:
+                        executor.exit_table()
+                    except Exception:
+                        pass
+                    current_tid = None
+                    current_name = None
+                    continue
+                if last_bead and len(_b) < len(last_bead):
+                    send_log("[counter] ⚠️ ビーズロードが短くリセット → 新シュー疑いで退室")
+                    try:
+                        executor.exit_table()
+                    except Exception:
+                        pass
+                    current_tid = None
+                    current_name = None
+                    continue
+                if _b and _b != last_bead:
+                    last_bead = _b
+                    last_non_tie = _last_non_tie_from_seq(last_bead) or last_non_tie
+            except Exception:
+                pass
+
             # Decide counter bet side based on previous non-tie
             side = decide_counter_bet(last_non_tie)
             bet_amount = FLAT_BET_AMOUNT if is_flat else float(counter_session.get_bet_amount())  # type: ignore[union-attr]
@@ -1623,30 +1679,79 @@ def _run_bet_session_inner(config: dict, stop_event: threading.Event, skip_event
                     else:
                         send_log("[counter] BET失敗 (strict) → 継続")
 
-            # Wait for next result via bead-road diff (works even if BET無し)
-            prev = last_bead
-            upd = _wait_bead_change(prev, timeout_sec=220.0)
-            if not upd:
-                send_log("[counter] ⚠️ 結果待ちタイムアウト → 退室して再探索")
+            # シャッフル/新シューが見えたら BET を取り消して退室
+            if placed:
+                try:
+                    if executor.is_shuffle_state():
+                        send_log("[counter] ⚠️ シャッフル検出(ベット後) → UNDOして退室")
+                        executor.cancel_bet()
+                        try:
+                            executor.exit_table()
+                        except Exception:
+                            pass
+                        current_tid = None
+                        current_name = None
+                        continue
+                except Exception:
+                    pass
+                try:
+                    signals = scraper.get_new_shoe_signals()
+                    if current_tid in signals:
+                        send_log("[counter] ⚠️ 新シュー検出(ベット後) → UNDOして退室")
+                        executor.cancel_bet()
+                        try:
+                            executor.exit_table()
+                        except Exception:
+                            pass
+                        current_tid = None
+                        current_name = None
+                        continue
+                except Exception:
+                    pass
+                try:
+                    _b2 = executor.read_bead_road() or ""
+                    if not _b2 or (last_bead and len(_b2) < len(last_bead)):
+                        send_log("[counter] ⚠️ ビーズロードリセット検出(ベット後) → UNDOして退室")
+                        executor.cancel_bet()
+                        try:
+                            executor.exit_table()
+                        except Exception:
+                            pass
+                        current_tid = None
+                        current_name = None
+                        continue
+                except Exception:
+                    pass
+
+            # Wait for the round result (重要: ここを誤ると同一BETフェーズで2回BET→UNDOが発生する)
+            result_info = executor.wait_for_result(timeout=90, bet_amount=0)
+            if not result_info or result_info.get("result") in (None, "unknown"):
+                send_log("[counter] ⚠️ 結果取得失敗/不明 → 退室して再探索")
                 result_timeout_streak += 1
                 try:
                     executor.exit_table()
                 except Exception:
                     pass
                 if result_timeout_streak >= 2:
-                    _restart_counter_browser("bead wait timeout x2")
+                    _restart_counter_browser("result unknown x2")
                     result_timeout_streak = 0
                 current_tid = None
                 current_name = None
                 continue
             result_timeout_streak = 0
 
-            last_bead, hand = upd  # hand: 'P'/'B'/'T'
-            if hand in ("P", "B"):
-                # update last_non_tie
-                last_non_tie = hand
+            result = result_info["result"]  # player/banker/tie
+            balance = float(result_info.get("balance", 0.0) or 0.0)
 
-                # update column state (since entry)
+            # Refresh bead snapshot for next decision
+            try:
+                last_bead = executor.read_bead_road() or last_bead
+            except Exception:
+                pass
+
+            hand = "T" if result == "tie" else ("P" if result == "player" else "B")
+            if hand in ("P", "B"):
+                last_non_tie = hand
                 if hand == current_col_side:
                     current_col_len += 1
                 else:
@@ -1673,7 +1778,6 @@ def _run_bet_session_inner(config: dict, stop_event: threading.Event, skip_event
                 continue
 
             # Determine win/loss/tie and update GUI/〇✖ session
-            result = "tie" if hand == "T" else ("player" if hand == "P" else "banker")
             won: bool | None
             round_profit = 0.0
             if result == "tie":
@@ -1719,10 +1823,7 @@ def _run_bet_session_inner(config: dict, stop_event: threading.Event, skip_event
                     flat_ties += 1
 
             # Emit round_result for GUI smooth PNL updates
-            try:
-                bal = executor.get_balance() if not dry_run else 0.0
-            except Exception:
-                bal = 0.0
+            bal = balance if balance else (executor.get_balance() if not dry_run else 0.0)
 
             turns = []
             overshoot = 0
