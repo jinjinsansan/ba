@@ -1940,7 +1940,7 @@ def _run_bet_session_inner(config: dict, stop_event: threading.Event, skip_event
                 send_log("[counter] SKIP (前手なし)")
             else:
                 send_log(f"[counter] BET {side.upper()} ${bet_amount:.0f}")
-                placed = executor.place_bet(side, bet_amount, strict=True)
+                placed = executor.place_bet(side, bet_amount, strict=False)
                 if not placed:
                     # strict は「確認できないとFalse」なので、実際に置けているかDOMで確認する
                     try:
@@ -1952,7 +1952,7 @@ def _run_bet_session_inner(config: dict, stop_event: threading.Event, skip_event
                         bet_amount = float(actual_total)
                         placed = True
                     else:
-                        send_log("[counter] BET失敗 (strict) → 継続")
+                        send_log("[counter] BET失敗 → 継続")
 
             # シャッフル/新シューが見えたら BET を取り消して退室
             if placed:
@@ -2002,7 +2002,7 @@ def _run_bet_session_inner(config: dict, stop_event: threading.Event, skip_event
                     pass
 
             # Wait for the round result (重要: ここを誤ると同一BETフェーズで2回BET→UNDOが発生する)
-            result_info = executor.wait_for_result(timeout=90, bet_amount=bet_amount if placed else 0)
+            result_info = executor.wait_for_result(timeout=90, bet_amount=bet_amount if side else 0)
             if not result_info or result_info.get("result") in (None, "unknown"):
                 # Fallback: bead-road diff (短時間だけ)
                 send_log("[counter] ⚠️ 結果不明 → bead-road fallback")
