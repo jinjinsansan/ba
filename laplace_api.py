@@ -83,6 +83,10 @@ class UpdateConfigRequest(BaseModel):
     loss_cut: Optional[int] = None
 
 
+class RestoreSessionRequest(BaseModel):
+    state: dict
+
+
 class ResultRequest(BaseModel):
     result: str = Field(..., description="player | banker | tie")
 
@@ -601,6 +605,41 @@ class LaplaceSession:
             json.dumps(state, indent=2, ensure_ascii=False), encoding="utf-8"
         )
 
+    def apply_state(self, state: dict) -> None:
+        if not isinstance(state, dict):
+            return
+        chip_base = state.get("chip_base")
+        if isinstance(chip_base, (int, float)) and chip_base > 0:
+            self.chip_base = float(chip_base)
+            self.tracker.chip_base = float(chip_base)
+        profit_stop = state.get("profit_stop")
+        if isinstance(profit_stop, (int, float)) and profit_stop > 0:
+            self.profit_stop = int(profit_stop)
+        loss_cut = state.get("loss_cut")
+        if isinstance(loss_cut, (int, float)) and loss_cut > 0:
+            self.loss_cut = int(loss_cut)
+        self.tracker.sets.clear()
+        for sd in state.get("sets", []):
+            try:
+                self.tracker.sets.append(SetData(**sd))
+            except Exception:
+                pass
+        turns = state.get("current_turns")
+        if turns is None:
+            turns_display = state.get("turns_display", "")
+            if isinstance(turns_display, str):
+                turns = list(turns_display)
+        self.tracker.current_turns = list(turns) if isinstance(turns, list) else []
+        self.tracker.total_o = state.get("total_o", 0) or 0
+        self.tracker.total_x = state.get("total_x", 0) or 0
+        self.session_count = state.get("session_count", 0) or 0
+        self.total_bets = state.get("total_bets", 0) or 0
+        self.total_wins = state.get("total_wins", 0) or 0
+        self.total_losses = state.get("total_losses", 0) or 0
+        self.total_ties = state.get("total_ties", 0) or 0
+        self.created_at = state.get("created_at", self.created_at)
+        self.updated_at = state.get("updated_at", self.updated_at)
+
     @classmethod
     def load(cls, user_id: str) -> Optional["LaplaceSession"]:
         safe = "".join(c for c in user_id if c.isalnum() or c in ("-", "_")) or "default"
@@ -997,6 +1036,28 @@ async def update_session(
             sess.loss_cut = req.loss_cut
         sess.save()
         return {"updated": True, "state": sess.to_state()}
+
+
+@app.post("/api/sessions/{user_id}/restore")
+async def restore_session(
+    user_id: str,
+    req: RestoreSessionRequest,
+    ctx: UserContext = Depends(verify_api_key),
+):
+    require_user_scope(ctx, user_id)
+    with _sessions_lock:
+        sess = get_or_load(user_id)
+        if sess is None:
+            sess = LaplaceSession(
+                user_id=user_id,
+                chip_base=req.state.get("chip_base", DEFAULT_CHIP_BASE),
+                profit_stop=req.state.get("profit_stop", DEFAULT_PROFIT_STOP),
+                loss_cut=req.state.get("loss_cut", DEFAULT_LOSS_CUT),
+            )
+        sess.apply_state(req.state)
+        sess.save()
+        _SESSIONS[user_id] = sess
+        return {"restored": True, "state": sess.to_state()}
 
 
 @app.post("/api/sessions/{user_id}/decide")

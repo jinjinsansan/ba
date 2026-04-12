@@ -95,6 +95,7 @@ CREATE TABLE billing (
   grace_deadline TIMESTAMPTZ,
   bot_config JSONB DEFAULT '{}'::jsonb,
   gui_state JSONB DEFAULT '{}'::jsonb,
+  session_state JSONB DEFAULT '{}'::jsonb,
   recommended_tables JSONB DEFAULT '[]'::jsonb,
   updated_at TIMESTAMPTZ DEFAULT NOW()
 );
@@ -102,6 +103,7 @@ CREATE TABLE billing (
 -- Migration (既存DBに追加する場合):
 -- ALTER TABLE billing ADD COLUMN IF NOT EXISTS bot_config JSONB DEFAULT '{}'::jsonb;
 -- ALTER TABLE billing ADD COLUMN IF NOT EXISTS gui_state JSONB DEFAULT '{}'::jsonb;
+-- ALTER TABLE billing ADD COLUMN IF NOT EXISTS session_state JSONB DEFAULT '{}'::jsonb;
 -- ALTER TABLE billing ADD COLUMN IF NOT EXISTS recommended_tables JSONB DEFAULT '[]'::jsonb;
 
 ALTER TABLE billing ENABLE ROW LEVEL SECURITY;

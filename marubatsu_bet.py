@@ -79,8 +79,11 @@ class MaruBatsuBetSession:
 
     # === 状態保存/復元 ===
 
-    def _save_state(self):
-        state = {
+    def to_state_dict(self) -> dict:
+        return {
+            "chip_base": self.chip_base,
+            "profit_stop": self.profit_stop,
+            "loss_cut": self.loss_cut,
             "sets": [
                 {
                     "set_index": s.set_index,
@@ -105,6 +108,43 @@ class MaruBatsuBetSession:
             "total_losses": self.total_losses,
             "total_ties": self.total_ties,
         }
+
+    def apply_state_dict(self, state: dict) -> None:
+        if not isinstance(state, dict):
+            return
+        chip_base = state.get("chip_base")
+        if isinstance(chip_base, (int, float)) and chip_base > 0:
+            self.chip_base = float(chip_base)
+            self.tracker.chip_base = float(chip_base)
+        profit_stop = state.get("profit_stop")
+        if isinstance(profit_stop, (int, float)) and profit_stop > 0:
+            self.profit_stop = int(profit_stop)
+        loss_cut = state.get("loss_cut")
+        if isinstance(loss_cut, (int, float)) and loss_cut > 0:
+            self.loss_cut = int(loss_cut)
+        self.tracker.sets.clear()
+        for sd in state.get("sets", []):
+            try:
+                self.tracker.sets.append(SetData(**sd))
+            except Exception:
+                pass
+        turns = state.get("current_turns")
+        if turns is None:
+            turns_display = state.get("turns_display", "")
+            if isinstance(turns_display, str):
+                turns = list(turns_display)
+        self.tracker.current_turns = list(turns) if isinstance(turns, list) else []
+        self.tracker.total_o = state.get("total_o", 0) or 0
+        self.tracker.total_x = state.get("total_x", 0) or 0
+        self.session_count = state.get("session_count", 0) or 0
+        self.total_bets = state.get("total_bets", 0) or 0
+        self.total_wins = state.get("total_wins", 0) or 0
+        self.total_losses = state.get("total_losses", 0) or 0
+        self.total_ties = state.get("total_ties", 0) or 0
+        self._save_state()
+
+    def _save_state(self):
+        state = self.to_state_dict()
         self.state_path.write_text(json.dumps(state, indent=2, ensure_ascii=False), encoding="utf-8")
 
     def _load_state(self):

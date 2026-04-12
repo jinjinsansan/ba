@@ -18,6 +18,10 @@ import threading
 import time
 import logging
 import io
+from datetime import datetime
+import urllib.request
+import urllib.error
+import urllib.parse
 
 # Write fatal (native) crashes to a file so we can diagnose "traceback無しで突然死" を拾う
 try:
@@ -215,6 +219,109 @@ def send_status(session, balance: float = 0):
     })
 
 
+# ======== Supabase session-state sync ========
+
+_SESSION_SITE_URL = os.getenv("LAPLACE_SITE_URL", "https://bafather.uk").rstrip("/")
+_SESSION_API_KEY = os.getenv("LAPLACE_SITE_API_KEY", "").strip() or os.getenv("LAPLACE_API_KEY", "").strip()
+_SESSION_SYNC_INTERVAL = 5.0
+_session_sync_inflight = False
+_session_sync_last = 0.0
+
+
+def _extract_session_state(session) -> dict | None:
+    if session is None:
+        return None
+    if hasattr(session, "to_state_dict"):
+        try:
+            return session.to_state_dict()
+        except Exception:
+            return None
+    if hasattr(session, "get_state_dict"):
+        try:
+            return session.get_state_dict()
+        except Exception:
+            return None
+    return None
+
+
+def _load_session_state_from_server(email: str) -> dict | None:
+    if not email or not _SESSION_API_KEY:
+        return None
+    qs = urllib.parse.urlencode({"email": email, "api_key": _SESSION_API_KEY})
+    url = f"{_SESSION_SITE_URL}/api/session-state?{qs}"
+    try:
+        with urllib.request.urlopen(url, timeout=10) as resp:
+            data = json.loads(resp.read())
+            state = data.get("session_state")
+            return state if isinstance(state, dict) and state else None
+    except Exception:
+        return None
+
+
+def _post_session_state_to_server(email: str, state: dict) -> None:
+    if not email or not _SESSION_API_KEY or not state:
+        return
+    payload = json.dumps({"email": email, "api_key": _SESSION_API_KEY, "session_state": state}).encode("utf-8")
+    url = f"{_SESSION_SITE_URL}/api/session-state"
+    req = urllib.request.Request(
+        url,
+        data=payload,
+        headers={"Content-Type": "application/json", "User-Agent": "LAPLACE-engine/1.0"},
+        method="POST",
+    )
+    try:
+        with urllib.request.urlopen(req, timeout=10):
+            pass
+    except Exception:
+        pass
+
+
+def _schedule_session_state_sync(email: str, session, user_id: str = "") -> None:
+    global _session_sync_inflight, _session_sync_last
+    if not email or not _SESSION_API_KEY:
+        return
+    now = time.time()
+    if now - _session_sync_last < _SESSION_SYNC_INTERVAL:
+        return
+    if _session_sync_inflight:
+        return
+    state = _extract_session_state(session)
+    if not state:
+        return
+    if user_id:
+        state["user_id"] = user_id
+    state["updated_at"] = datetime.utcnow().isoformat() + "Z"
+    _session_sync_last = now
+    _session_sync_inflight = True
+
+    def _worker():
+        global _session_sync_inflight
+        try:
+            _post_session_state_to_server(email, state)
+        finally:
+            _session_sync_inflight = False
+
+    threading.Thread(target=_worker, daemon=True).start()
+
+
+def _apply_session_state(session, state: dict) -> bool:
+    if not state or session is None:
+        return False
+    if hasattr(session, "apply_state_dict"):
+        try:
+            session.apply_state_dict(state)
+            return True
+        except Exception:
+            return False
+    if hasattr(session, "restore_state"):
+        try:
+            session.restore_state(state)
+            return True
+        except Exception:
+            return False
+    return False
+
+
 # ======== Heartbeat (watchdog stale-log prevention) ========
 
 def start_heartbeat(stop_event: threading.Event, mode_box: list[str]):
@@ -344,6 +451,7 @@ def _run_bet_session_inner(config: dict, stop_event: threading.Event, skip_event
     loss_cut_dollars = config.get("loss_cut", 200)
     dry_run = config.get("dry_run", False)
     resume = config.get("resume", False)
+    user_email = (config.get("user_email") or "").strip()
     table_filter = config.get("table_filter", {})
     logger.info(f"Table filter: {table_filter}")
     send_log(f"Table filter: {table_filter}")
@@ -360,6 +468,8 @@ def _run_bet_session_inner(config: dict, stop_event: threading.Event, skip_event
     )
     fixed_table_name = os.getenv("LAPLACE_FIXED_TABLE", "Japanese Speed Baccarat A")
     user_label = os.getenv("LAPLACE_USER", "anon")
+    user_id = os.getenv("LAPLACE_USER", "dev-machine")
+    supabase_state = _load_session_state_from_server(user_email) if resume else None
 
     # Convert dollar amounts to chip units
     profit_stop_chips = max(1, int(round(profit_target_dollars / max(chip_base, 0.01))))
@@ -1354,7 +1464,7 @@ def _run_bet_session_inner(config: dict, stop_event: threading.Event, skip_event
     time.sleep(12)  # configs/histories/playersCount の初期ロード待機
 
     _selector_client = None
-    _user_id = os.getenv("LAPLACE_USER", "dev-machine")
+    _user_id = user_id
     if use_remote:
         # All scoring / exclusion / threshold logic runs on the VPS.
         # This client never ships table_selector.py.
@@ -1404,6 +1514,9 @@ def _run_bet_session_inner(config: dict, stop_event: threading.Event, skip_event
                 return
         # For live config updates UI -> engine
         _active_session = counter_session
+        if counter_session is not None and supabase_state:
+            if _apply_session_state(counter_session, supabase_state):
+                send_log("[counter] Supabase session restored")
 
         entry_fail_streak = 0
         result_timeout_streak = 0
@@ -1914,6 +2027,8 @@ def _run_bet_session_inner(config: dict, stop_event: threading.Event, skip_event
                 "running": True,
                 "session_count": 0 if counter_session is None else counter_session.session_count,
             })
+            if counter_session is not None:
+                _schedule_session_state_sync(user_email, counter_session, user_id)
 
             # Set complete
             if completed_set is not None:
@@ -1989,6 +2104,8 @@ def _run_bet_session_inner(config: dict, stop_event: threading.Event, skip_event
         except ImportError as imp_err:
             send_log(f"FATAL: local mode requires marubatsu_bet/marubatsu_strategy ({imp_err}). Set LAPLACE_USE_REMOTE=1 to use the VPS API instead.")
             return
+    if supabase_state and _apply_session_state(session, supabase_state):
+        send_log("[session] Supabase session restored")
     _active_session = session
 
     def restart_browser(reason: str) -> tuple[str, str] | None:
@@ -3353,6 +3470,7 @@ def _run_bet_session_inner(config: dict, stop_event: threading.Event, skip_event
         # Periodic status
         bal = executor.get_balance() if not dry_run else 0
         send_status(session, bal)
+        _schedule_session_state_sync(user_email, session, user_id)
 
         # ── Syncモード(+sync_pause): 動的規則性監視（毎ハンドチェック）──
         # シュー切替は一瞬で起きるため即検出が必要

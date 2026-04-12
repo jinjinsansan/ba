@@ -179,6 +179,13 @@ class LaplaceClient:
             body["loss_cut"] = loss_cut
         return self._request("PATCH", f"/api/sessions/{user_id}", json=body)
 
+    def restore_session(self, user_id: str, state: dict) -> dict:
+        return self._request(
+            "POST",
+            f"/api/sessions/{user_id}/restore",
+            json={"state": state},
+        )
+
     def decide(self, user_id: str) -> dict:
         # BETウィンドウ内で完了させるため短いタイムアウト (5秒)
         saved = self.timeout
@@ -321,6 +328,7 @@ class RemoteLaplaceSession:
         self.total_wins = 0
         self.total_losses = 0
         self.total_ties = 0
+        self._last_state: dict = {}
 
         # Create / resume remote session
         try:
@@ -346,6 +354,8 @@ class RemoteLaplaceSession:
         )
 
     def _apply_state(self, state: dict) -> None:
+        if isinstance(state, dict):
+            self._last_state = dict(state)
         self.tracker.apply_state(state)
         self.session_count = state.get("session_count", 0)
         self.total_bets = state.get("total_bets", 0)
@@ -357,6 +367,13 @@ class RemoteLaplaceSession:
         self.loss_cut = state.get("loss_cut", self.loss_cut)
         self.chip_base = state.get("chip_base", self.chip_base)
         self.tracker.chip_base = self.chip_base
+
+    def get_state_dict(self) -> dict:
+        return dict(self._last_state) if isinstance(self._last_state, dict) else {}
+
+    def restore_state(self, state: dict) -> None:
+        resp = self.client.restore_session(self.user_id, state)
+        self._apply_state(resp["state"])
 
     # --- Config live update ---
 
