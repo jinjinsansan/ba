@@ -214,6 +214,42 @@ def send_status(session, balance: float = 0):
         "session_count": s["session_count"],
     })
 
+
+# ======== Heartbeat (watchdog stale-log prevention) ========
+
+def start_heartbeat(stop_event: threading.Event, mode_box: list[str]):
+    """Write a periodic heartbeat to agent.log so external watchdogs don't
+    treat 'quiet but healthy' periods as a freeze."""
+    FILE_INTERVAL = 60
+    GUI_INTERVAL = 300
+    log_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "agent.log")
+
+    def _runner():
+        last_gui = 0.0
+        while not stop_event.is_set():
+            try:
+                # Ensure file mtime keeps moving even if the logger is quiet.
+                try:
+                    os.utime(log_path, None)
+                except Exception:
+                    pass
+                logger.info(f"[hb] alive mode={mode_box[0]}")
+                now = time.time()
+                if now - last_gui >= GUI_INTERVAL:
+                    send_log(f"[hb] alive mode={mode_box[0]}")
+                    last_gui = now
+            except Exception:
+                pass
+            # Sleep in small chunks so STOP reacts quickly
+            for _ in range(FILE_INTERVAL):
+                if stop_event.is_set():
+                    break
+                time.sleep(1)
+
+    t = threading.Thread(target=_runner, daemon=True)
+    t.start()
+    return t
+
 def send_shoe_history(sets: list, chip_base: float):
     """Send all completed sets for shoe display"""
     data = []
@@ -267,6 +303,7 @@ def _run_bet_session_inner(config: dict, stop_event: threading.Event, skip_event
     _bet_mode_box[0] = config.get("bet_mode", "1drop")
     _effective_mode_box[0] = "normal" if _bet_mode_box[0] == "mix" else _bet_mode_box[0]
     send_log(f"BET mode: {_bet_mode_box[0]} (effective: {_effective_mode_box[0]})")
+    start_heartbeat(stop_event, _effective_mode_box)
     import config as cfg
     # Headless is determined by env (VPS sets LAPLACE_HEADLESS=1) or config.ini; default False
     if os.getenv("LAPLACE_HEADLESS", "").strip() in ("1", "true", "True", "yes"):

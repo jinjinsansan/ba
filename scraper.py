@@ -83,6 +83,8 @@ class BaccaratScraper:
         self._target_table_id: str = ""
         self._profile_state_path = config.AUTH_STATE_DIR / "camoufox_profile_state.json"
         self._profile_dir = config.AUTH_STATE_DIR / "camoufox_profile"
+        self._evo_lobby_frame_samples = 0
+        self._evo_lobby_json_fail_samples = 0
 
     def _load_profile_state(self) -> dict:
         try:
@@ -230,15 +232,15 @@ class BaccaratScraper:
             else:
                 self.page = ctx.new_page()
 
+            # WSは Stake の最初のページロード中に張られることがあるため、
+            # login/goto の前に必ずリスナー登録して取りこぼしを防ぐ
+            self._register_ws_listener()
+
             # Cookie復元
             self._restore_cookies()
 
             # ログイン
             self._login()
-
-            # ★ ロビーナビゲーション前にWSリスナーを登録
-            # ロビーページロード時にEvolution WSが接続されるため、先に登録する必要がある
-            self._register_ws_listener()
 
             # バカラロビーに移動（テーブルに入らない）
             self._navigate_to_lobby()
@@ -737,6 +739,21 @@ class BaccaratScraper:
         """WebSocketリスナーを登録（ナビゲーション前に呼ぶこと）"""
         logger.info("WebSocket傍受を設定中...")
 
+        def _payload_to_str(data) -> str:
+            try:
+                if isinstance(data, dict) and "payload" in data:
+                    data = data.get("payload")
+                # Playwright's framereceived/framesent passes WebSocketFrame (has .payload)
+                if hasattr(data, "payload"):
+                    data = getattr(data, "payload")
+                if isinstance(data, bytes):
+                    return data.decode("utf-8", "ignore")
+                if isinstance(data, str):
+                    return data
+                return str(data)
+            except Exception:
+                return str(data)
+
         def on_ws(ws: WebSocket):
             url = ws.url
             # EvolutionロビーWSのみ対象 (chat/tableは除外)
@@ -753,12 +770,14 @@ class BaccaratScraper:
                 self._evo_ws_connected = True
 
                 def on_message(data):
-                    payload = data.get("payload", data) if isinstance(data, dict) else data
-                    self._handle_evo_lobby_message(str(payload))
+                    payload = _payload_to_str(data)
+                    if self._evo_lobby_frame_samples < 2:
+                        self._evo_lobby_frame_samples += 1
+                        logger.info(f"[evo-lobby] frame sample: {payload[:120]}")
+                    self._handle_evo_lobby_message(payload)
 
                 def on_sent(data):
-                    payload = data.get("payload", data) if isinstance(data, dict) else data
-                    text = str(payload)[:200]
+                    text = _payload_to_str(data)[:200]
                     logger.debug(f"WS送信: {text}")
 
                 def on_close():
@@ -773,7 +792,7 @@ class BaccaratScraper:
                 # ゲーム内WS — game_wsモニターにメッセージ転送 + サイレンス判定更新
                 def _forward_to_game_ws(data):
                     self._last_ws_message_time = time.time()
-                    raw = data if isinstance(data, str) else str(data)
+                    raw = _payload_to_str(data)
                     self.game_ws.on_ws_message(raw)
 
                 ws.on("framesent", _forward_to_game_ws)
@@ -783,7 +802,7 @@ class BaccaratScraper:
                 # 全ての非ロビーWSにもリスナーを登録 (stake.com等)
                 def _forward_any_ws(data, ws_url=url):
                     self._last_ws_message_time = time.time()
-                    raw = data if isinstance(data, str) else str(data)
+                    raw = _payload_to_str(data)
                     # BET/BALANCE/SETTLED関連のメッセージのみ転送
                     if any(k in raw for k in ["CLIENT_BET", "CLIENT_BALANCE", "SETTLED", "MULTIPLIER"]):
                         logger.info(f"非EvoWS転送 ({ws_url[:40]}): {raw[:100]}")
@@ -801,31 +820,36 @@ class BaccaratScraper:
         start()内で _register_ws_listener() → _navigate_to_lobby() の順で
         呼ばれるため、ここでは接続待機のみ行う。
         """
-        # ロビーWSが接続されるまで待つ（最大30秒）
-        for _ in range(30):
-            if self._evo_ws_connected:
-                logger.info("EvolutionロビーWS接続確認 ✅")
-                break
-            time.sleep(1)
-        else:
-            logger.warning("EvolutionロビーWSが検出されませんでした — ページをリロードして再試行")
-            try:
-                self.page.reload(wait_until="domcontentloaded", timeout=120000)
-            except Exception:
-                logger.warning("リロードタイムアウト — ロビーに再遷移")
-                try:
-                    self.page.goto(config.BACCARAT_LOBBY_URL, wait_until="domcontentloaded", timeout=120000)
-                except Exception:
-                    pass
-            time.sleep(10)
-            # リロード後にもう一度待機
-            for _ in range(30):
-                if self._evo_ws_connected:
-                    logger.info("EvolutionロビーWS接続確認（リロード後）✅")
-                    break
+        def _wait_for_configs(timeout_sec: int) -> bool:
+            deadline = time.time() + timeout_sec
+            while time.time() < deadline:
+                if self._evo_table_configs:
+                    return True
                 time.sleep(1)
-            else:
-                logger.error("EvolutionロビーWSが接続できませんでした")
+            return False
+
+        # まずは自然に configs/histories が流れてくるのを待つ
+        if _wait_for_configs(40):
+            logger.info("EvolutionロビーWS: configs受信確認 ✅")
+            return
+
+        # configsが来ない＝WS取りこぼし or SPA状態不整合。強制リロードでWS張り直し。
+        logger.warning("EvolutionロビーWS: configs未受信 — ページをリロードして再試行")
+        try:
+            self.page.reload(wait_until="domcontentloaded", timeout=120000)
+        except Exception:
+            logger.warning("リロードタイムアウト — ロビーに再遷移")
+            try:
+                self.page.goto(config.BACCARAT_LOBBY_URL, wait_until="domcontentloaded", timeout=120000)
+            except Exception:
+                pass
+        time.sleep(10)
+
+        if _wait_for_configs(40):
+            logger.info("EvolutionロビーWS: configs受信確認（リロード後）✅")
+            return
+
+        logger.error("EvolutionロビーWS: configsが受信できませんでした（ブロック/通信不良の可能性）")
 
     def _handle_evo_lobby_message(self, payload: str):
         """EvolutionロビーWSメッセージを処理"""
@@ -834,9 +858,53 @@ class BaccaratScraper:
             if not isinstance(payload, str) or len(payload) < 10:
                 return
 
-            data = json.loads(payload)
-            msg_type = data.get("type", "")
-            args = data.get("args", {})
+            # Evolution lobby can be either plain JSON:
+            #   {"type":"lobby.configs","args":{...}}
+            # or socket.io framed:
+            #   42["lobby.configs",{...}]
+            msg_type = ""
+            args = {}
+            try:
+                data = json.loads(payload)
+                if isinstance(data, dict):
+                    msg_type = data.get("type", "")
+                    args = data.get("args", {}) or {}
+                else:
+                    return
+            except json.JSONDecodeError:
+                # socket.io frame: leading digits then JSON array/object
+                p = payload
+                if p.startswith("42"):
+                    try:
+                        arr = json.loads(p[2:])
+                        if isinstance(arr, list) and len(arr) >= 2 and isinstance(arr[0], str):
+                            msg_type = arr[0]
+                            args = arr[1] if isinstance(arr[1], dict) else {}
+                        else:
+                            return
+                    except Exception:
+                        pass
+                if not msg_type:
+                    # strip leading digits until first '{'/'['
+                    i = 0
+                    while i < len(p) and p[i].isdigit():
+                        i += 1
+                    if i > 0 and i < len(p) and p[i] in "{[":
+                        try:
+                            arr = json.loads(p[i:])
+                            if isinstance(arr, list) and len(arr) >= 2 and isinstance(arr[0], str):
+                                msg_type = arr[0]
+                                args = arr[1] if isinstance(arr[1], dict) else {}
+                            elif isinstance(arr, dict):
+                                msg_type = arr.get("type", "")
+                                args = arr.get("args", {}) or {}
+                        except Exception:
+                            pass
+                if not msg_type:
+                    if self._evo_lobby_json_fail_samples < 2:
+                        self._evo_lobby_json_fail_samples += 1
+                        logger.warning(f"[evo-lobby] non-json frame (head): {payload[:120]}")
+                    return
 
             if msg_type == "lobby.configs":
                 self._process_configs(args)
@@ -849,8 +917,6 @@ class BaccaratScraper:
             elif msg_type == "lobby.playersCount":
                 self._process_players_count(args)
 
-        except json.JSONDecodeError:
-            pass
         except Exception as e:
             logger.debug(f"EvolutionロビーWS解析エラー: {e}")
 
