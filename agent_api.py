@@ -2084,6 +2084,18 @@ def _run_bet_session_inner(config: dict, stop_event: threading.Event, skip_event
 
         # === Shutdown (counter mode) ===
         send_action("Stopping...")
+        # Supabase にセッション状態を保存 (STOP時に必ず実行)
+        if counter_session is not None:
+            try:
+                counter_session._save_state()
+                send_log("[counter] ローカル状態保存完了")
+            except Exception:
+                pass
+            try:
+                _schedule_session_state_sync(user_email, counter_session, user_id, session_api_key)
+                send_log("[counter] Supabase セッション保存完了")
+            except Exception as e:
+                send_log(f"[counter] Supabase 保存失敗: {e}")
         try:
             executor.exit_table()
         except Exception:
