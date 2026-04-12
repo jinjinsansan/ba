@@ -244,10 +244,11 @@ def _extract_session_state(session) -> dict | None:
     return None
 
 
-def _load_session_state_from_server(email: str) -> dict | None:
-    if not email or not _SESSION_API_KEY:
+def _load_session_state_from_server(email: str, api_key: str = "") -> dict | None:
+    key = api_key or _SESSION_API_KEY
+    if not email or not key:
         return None
-    qs = urllib.parse.urlencode({"email": email, "api_key": _SESSION_API_KEY})
+    qs = urllib.parse.urlencode({"email": email, "api_key": key})
     url = f"{_SESSION_SITE_URL}/api/session-state?{qs}"
     try:
         with urllib.request.urlopen(url, timeout=10) as resp:
@@ -258,10 +259,11 @@ def _load_session_state_from_server(email: str) -> dict | None:
         return None
 
 
-def _post_session_state_to_server(email: str, state: dict) -> None:
-    if not email or not _SESSION_API_KEY or not state:
+def _post_session_state_to_server(email: str, state: dict, api_key: str = "") -> None:
+    key = api_key or _SESSION_API_KEY
+    if not email or not key or not state:
         return
-    payload = json.dumps({"email": email, "api_key": _SESSION_API_KEY, "session_state": state}).encode("utf-8")
+    payload = json.dumps({"email": email, "api_key": key, "session_state": state}).encode("utf-8")
     url = f"{_SESSION_SITE_URL}/api/session-state"
     req = urllib.request.Request(
         url,
@@ -276,9 +278,10 @@ def _post_session_state_to_server(email: str, state: dict) -> None:
         pass
 
 
-def _schedule_session_state_sync(email: str, session, user_id: str = "") -> None:
+def _schedule_session_state_sync(email: str, session, user_id: str = "", api_key: str = "") -> None:
     global _session_sync_inflight, _session_sync_last
-    if not email or not _SESSION_API_KEY:
+    key = api_key or _SESSION_API_KEY
+    if not email or not key:
         return
     now = time.time()
     if now - _session_sync_last < _SESSION_SYNC_INTERVAL:
@@ -297,7 +300,7 @@ def _schedule_session_state_sync(email: str, session, user_id: str = "") -> None
     def _worker():
         global _session_sync_inflight
         try:
-            _post_session_state_to_server(email, state)
+            _post_session_state_to_server(email, state, key)
         finally:
             _session_sync_inflight = False
 
@@ -469,7 +472,17 @@ def _run_bet_session_inner(config: dict, stop_event: threading.Event, skip_event
     fixed_table_name = os.getenv("LAPLACE_FIXED_TABLE", "Japanese Speed Baccarat A")
     user_label = os.getenv("LAPLACE_USER", "anon")
     user_id = os.getenv("LAPLACE_USER", "dev-machine")
-    supabase_state = _load_session_state_from_server(user_email) if resume else None
+    session_api_key = (config.get("site_api_key") or _SESSION_API_KEY).strip()
+    supabase_state = None
+    if resume:
+        if user_email and session_api_key:
+            supabase_state = _load_session_state_from_server(user_email, session_api_key)
+            if supabase_state:
+                send_log("[session] Supabase session loaded")
+            else:
+                send_log("[session] Supabase session not found/empty")
+        else:
+            send_log("[session] Supabase session skipped (missing user_email or site_api_key)")
 
     # Convert dollar amounts to chip units
     profit_stop_chips = max(1, int(round(profit_target_dollars / max(chip_base, 0.01))))
@@ -2035,7 +2048,7 @@ def _run_bet_session_inner(config: dict, stop_event: threading.Event, skip_event
                 "session_count": 0 if counter_session is None else counter_session.session_count,
             })
             if counter_session is not None:
-                _schedule_session_state_sync(user_email, counter_session, user_id)
+                _schedule_session_state_sync(user_email, counter_session, user_id, session_api_key)
 
             # Set complete
             if completed_set is not None:
@@ -3477,7 +3490,7 @@ def _run_bet_session_inner(config: dict, stop_event: threading.Event, skip_event
         # Periodic status
         bal = executor.get_balance() if not dry_run else 0
         send_status(session, bal)
-        _schedule_session_state_sync(user_email, session, user_id)
+        _schedule_session_state_sync(user_email, session, user_id, session_api_key)
 
         # ── Syncモード(+sync_pause): 動的規則性監視（毎ハンドチェック）──
         # シュー切替は一瞬で起きるため即検出が必要

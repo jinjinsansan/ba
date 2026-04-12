@@ -106,6 +106,7 @@ $('#btnStart').addEventListener('click', async () => {
   await fetchRecommendedTables();
   const config = {
     ...loadSettings(),
+    site_api_key: LAPLACE_API_KEY,
     table_filter: loadTableFilter(),
     recommended_tables: getEnabledRecommendedTables(),
   };
