@@ -1852,6 +1852,36 @@ def _run_bet_session_inner(config: dict, stop_event: threading.Event, skip_event
                     continue
                 continue
 
+            # ── BET前にビーズロードを再確認 (新シュー検出) ──
+            try:
+                _pre_bead = executor.read_bead_road() or ""
+                if _pre_bead and last_bead and len(_pre_bead) < len(last_bead):
+                    # ビーズロードが短くなった → 新シュー
+                    send_log("[counter] ⚠️ 新シュー検出 (bead shorter) → last_non_tie リセット → 退室")
+                    last_non_tie = None
+                    last_bead = _pre_bead
+                    try:
+                        mark_table_exited(current_name)
+                        executor.exit_table()
+                    except Exception:
+                        pass
+                    current_tid = None
+                    current_name = None
+                    continue
+                if not _pre_bead:
+                    send_log("[counter] ⚠️ ビーズロード空 → シャッフル中 → 退室")
+                    try:
+                        mark_table_exited(current_name)
+                        executor.exit_table()
+                    except Exception:
+                        pass
+                    current_tid = None
+                    current_name = None
+                    continue
+                last_bead = _pre_bead
+            except Exception:
+                pass
+
             # ── 逆張り側の決定 ──
             side = decide_counter_bet(last_non_tie)
             if side is None:
