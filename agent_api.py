@@ -1852,76 +1852,98 @@ def _run_bet_session_inner(config: dict, stop_event: threading.Event, skip_event
                     continue
                 continue
 
-            # Pre-bet checks (run before BET phase to avoid latency)
-            in_betting = False
-            try:
-                in_betting = bool(executor.game_ws and executor.game_ws.status == "Betting")
-            except Exception:
-                in_betting = False
-            if not in_betting:
-                # シャッフル/新シュー検出 → 即退室
-                try:
-                    if executor.is_shuffle_state():
-                        send_log("[counter] ⚠️ シャッフル状態検出 → 退室")
-                        try:
-                            mark_table_exited(current_name)
-                            executor.exit_table()
-                        except Exception:
-                            pass
-                        current_tid = None
-                        current_name = None
-                        continue
-                except Exception:
-                    pass
-                try:
-                    signals = scraper.get_new_shoe_signals()
-                    if current_tid in signals:
-                        send_log("[counter] ⚠️ 新シュー検出 → 退室")
-                        try:
-                            mark_table_exited(current_name)
-                            executor.exit_table()
-                        except Exception:
-                            pass
-                        current_tid = None
-                        current_name = None
-                        continue
-                except Exception:
-                    pass
+            # ── 逆張り側の決定 ──
+            side = decide_counter_bet(last_non_tie)
+            if side is None:
+                # 前手がない → 1ラウンド観測のみ (run_round は使わない)
+                send_log("[counter] SKIP (前手なし) → 観測待ち")
+                fallback = _wait_bead_change(last_bead, timeout_sec=120.0)
+                if fallback:
+                    last_bead, hand_fb = fallback
+                    if hand_fb in ("P", "B"):
+                        last_non_tie = hand_fb
+                continue
 
-                # Sync last result from bead road (防止: ビーズロード更新遅延で逆張り方向がズレる)
-                try:
-                    if not executor.check_and_dismiss_error():
-                        raise RuntimeError("error dialog")
-                    _b = executor.read_bead_road() or ""
-                    if not _b:
-                        send_log("[counter] ⚠️ ビーズロード空 (新シュー/シャッフル) → 退室")
-                        try:
-                            mark_table_exited(current_name)
-                            executor.exit_table()
-                        except Exception:
-                            pass
-                        current_tid = None
-                        current_name = None
-                        continue
-                    if last_bead and len(_b) < len(last_bead):
-                        send_log("[counter] ⚠️ ビーズロードが短くリセット → 新シュー疑いで退室")
-                        try:
-                            mark_table_exited(current_name)
-                            executor.exit_table()
-                        except Exception:
-                            pass
-                        current_tid = None
-                        current_name = None
-                        continue
-                    if _b and _b != last_bead:
-                        last_bead = _b
-                        last_non_tie = _last_non_tie_from_seq(last_bead) or last_non_tie
-                except Exception:
-                    pass
+            # ── run_round() で BET→結果→GUI送信を一体処理 ──
+            # counter_session が None (flat mode) の場合は簡易セッションを使う
+            if counter_session is not None:
+                send_log(f"[counter] BET {side.upper()} (〇✖ SEQ[{counter_session.tracker.current_unit_idx}])")
+                round_result = counter_session.run_round(
+                    lambda: not stop_event.is_set(),
+                    side=side,
+                )
+            else:
+                # flat mode: 直接BET
+                send_log(f"[counter] BET {side.upper()} ${FLAT_BET_AMOUNT:.0f} (flat)")
+                if not executor.wait_for_betting_phase(timeout=120, skip_round=False):
+                    send_log("[counter] ⚠️ BETフェーズ待ちタイムアウト → 退室")
+                    try:
+                        mark_table_exited(current_name)
+                        executor.exit_table()
+                    except Exception:
+                        pass
+                    current_tid = None
+                    current_name = None
+                    continue
 
-            # Wait for betting phase (no blocking on result detection)
-            if not executor.wait_for_betting_phase(timeout=180, skip_round=False):
-                send_log("[counter] ⚠️ BETフェーズ待ちタイムアウト → 退室して再探索")
+                placed = executor.place_bet(side, FLAT_BET_AMOUNT)
+                if not placed:
+                    actual = executor._get_total_bet()
+                    if not actual or actual < 0.5:
+                        send_log("[counter] BET失敗 → 継続")
+                        continue
+
+                result_info = executor.wait_for_result(timeout=90, bet_amount=FLAT_BET_AMOUNT)
+                if not result_info or result_info.get("result") in (None, "unknown"):
+                    send_log("[counter] ⚠️ 結果不明 → 退室")
+                    try:
+                        mark_table_exited(current_name)
+                        executor.exit_table()
+                    except Exception:
+                        pass
+                    current_tid = None
+                    current_name = None
+                    continue
+
+                result = result_info["result"]
+                won = None if result == "tie" else (result == side)
+                round_profit = 0.0
+                if won is True:
+                    round_profit = FLAT_BET_AMOUNT * (0.95 if side == "banker" else 1.0)
+                    flat_wins += 1
+                elif won is False:
+                    round_profit = -FLAT_BET_AMOUNT
+                    flat_losses += 1
+                else:
+                    flat_ties += 1
+                flat_total_bets += 1
+                money_pnl += round_profit
+
+                bal = float(result_info.get("balance", 0) or 0)
+                send_result(
+                    result=result, won=won, bet_amount=FLAT_BET_AMOUNT,
+                    balance=bal, turn=0, turns_display="",
+                    cumulative_profit=0, cumulative_money=money_pnl,
+                    round_profit_dollars=round_profit,
+                )
+                send_msg({
+                    "type": "status",
+                    "wins": flat_wins, "losses": flat_losses, "ties": flat_ties,
+                    "total_bets": flat_total_bets,
+                    "cumulative_profit": 0, "cumulative_money": money_pnl,
+                    "sets": 0, "current_turn": 0, "current_unit": 1,
+                    "current_unit_idx": 0, "overshoot": 0,
+                    "balance": bal, "turns_display": "", "running": True,
+                    "session_count": 0,
+                })
+                round_result = {
+                    "action": "bet", "result": result, "won": won,
+                    "bet_amount": FLAT_BET_AMOUNT,
+                }
+
+            # ── run_round / flat の結果を処理 ──
+            if round_result.get("action") == "exit":
+                send_log("[counter] ⚠️ run_round exit → 退室して再探索")
                 try:
                     mark_table_exited(current_name)
                     executor.exit_table()
@@ -1931,142 +1953,17 @@ def _run_bet_session_inner(config: dict, stop_event: threading.Event, skip_event
                 current_name = None
                 continue
 
-            # Decide counter bet side based on previous non-tie
-            side = decide_counter_bet(last_non_tie)
-            bet_amount = FLAT_BET_AMOUNT if is_flat else float(counter_session.get_bet_amount())  # type: ignore[union-attr]
-            placed = False
-
-            if side is None:
-                send_log("[counter] SKIP (前手なし)")
-            else:
-                send_log(f"[counter] BET {side.upper()} ${bet_amount:.0f}")
-                placed = executor.place_bet(side, bet_amount, strict=False)
-                if not placed:
-                    # strict は「確認できないとFalse」なので、実際に置けているかDOMで確認する
-                    try:
-                        actual_total = executor._get_total_bet()
-                    except Exception:
-                        actual_total = 0.0
-                    if actual_total and actual_total > 0.5:
-                        send_log(f"[counter] ✅ 部分/未確認BET検出: 計画${bet_amount:.0f} → 実際${actual_total:.2f}")
-                        bet_amount = float(actual_total)
-                        placed = True
-                    else:
-                        send_log("[counter] BET失敗 → 継続")
-
-            # シャッフル/新シューが見えたら BET を取り消して退室
-            if placed:
-                try:
-                    if executor.is_shuffle_state():
-                        send_log("[counter] ⚠️ シャッフル検出(ベット後) → UNDOして退室")
-                        executor.cancel_bet()
-                        try:
-                            mark_table_exited(current_name)
-                            executor.exit_table()
-                        except Exception:
-                            pass
-                        current_tid = None
-                        current_name = None
-                        continue
-                except Exception:
-                    pass
-                try:
-                    signals = scraper.get_new_shoe_signals()
-                    if current_tid in signals:
-                        send_log("[counter] ⚠️ 新シュー検出(ベット後) → UNDOして退室")
-                        executor.cancel_bet()
-                        try:
-                            mark_table_exited(current_name)
-                            executor.exit_table()
-                        except Exception:
-                            pass
-                        current_tid = None
-                        current_name = None
-                        continue
-                except Exception:
-                    pass
-                try:
-                    _b2 = executor.read_bead_road() or ""
-                    if not _b2 or (last_bead and len(_b2) < len(last_bead)):
-                        send_log("[counter] ⚠️ ビーズロードリセット検出(ベット後) → UNDOして退室")
-                        executor.cancel_bet()
-                        try:
-                            mark_table_exited(current_name)
-                            executor.exit_table()
-                        except Exception:
-                            pass
-                        current_tid = None
-                        current_name = None
-                        continue
-                except Exception:
-                    pass
-
-            # ── BET未実施の場合: 結果だけ観測して列長・退室判定を更新 ──
-            if not placed or side is None:
-                # ビーズロード変化を待って列長を更新 (BETしていないのでGUI送信しない)
-                fallback = _wait_bead_change(last_bead, timeout_sec=60.0)
-                if fallback:
-                    last_bead, hand_fb = fallback
-                    if hand_fb in ("P", "B"):
-                        last_non_tie = hand_fb
-                        if hand_fb == current_col_side:
-                            current_col_len += 1
-                        else:
-                            if current_col_side is not None and current_col_len > 0:
-                                columns_since_entry.append(current_col_len)
-                            current_col_side = hand_fb
-                            current_col_len = 1
-                    # 退室判定
-                    exit_reason = should_exit(columns_since_entry, current_col_len)
-                    if exit_reason:
-                        send_log(f"[counter] 退室: {current_name} ({exit_reason})")
-                        send_action(f"Exiting: {exit_reason}")
-                        try:
-                            mark_table_exited(current_name)
-                            executor.exit_table()
-                        except Exception:
-                            pass
-                        current_tid = None
-                        current_name = None
-                continue
-
-            # ── BET実施済み: 結果を待ってGUI更新 ──
-            result_info = executor.wait_for_result(timeout=90, bet_amount=bet_amount)
-            if not result_info or result_info.get("result") in (None, "unknown"):
-                # Fallback: bead-road diff
-                send_log("[counter] ⚠️ 結果不明 → bead-road fallback")
-                fallback = _wait_bead_change(last_bead, timeout_sec=30.0)
-                if fallback:
-                    last_bead, hand_fb = fallback
-                    result_info = {"result": {"P": "player", "B": "banker", "T": "tie"}[hand_fb], "balance": 0.0}
-                else:
-                    send_log("[counter] ⚠️ 結果取得失敗 → 退室して再探索")
-                    result_timeout_streak += 1
-                    try:
-                        mark_table_exited(current_name)
-                        executor.exit_table()
-                    except Exception:
-                        pass
-                    if result_timeout_streak >= 2:
-                        _restart_counter_browser("result unknown x2")
-                        result_timeout_streak = 0
-                    current_tid = None
-                    current_name = None
-                    continue
-            result_timeout_streak = 0
-
-            result = result_info["result"]  # player/banker/tie
-            balance = float(result_info.get("balance", 0.0) or 0.0)
-
-            # Refresh bead snapshot
+            # ビーズロード更新 & 列長追跡
             try:
-                last_bead = executor.read_bead_road() or last_bead
+                new_bead = executor.read_bead_road() or ""
+                if new_bead:
+                    last_bead = new_bead
             except Exception:
                 pass
 
-            # 列長更新
-            hand = "T" if result == "tie" else ("P" if result == "player" else "B")
-            if hand in ("P", "B"):
+            rr_result = round_result.get("result")
+            if rr_result and rr_result != "tie":
+                hand = "P" if rr_result == "player" else "B"
                 last_non_tie = hand
                 if hand == current_col_side:
                     current_col_len += 1
@@ -2075,6 +1972,8 @@ def _run_bet_session_inner(config: dict, stop_event: threading.Event, skip_event
                         columns_since_entry.append(current_col_len)
                     current_col_side = hand
                     current_col_len = 1
+            elif rr_result == "tie":
+                pass  # タイは列長に影響なし
 
             # 退室判定
             exit_reason = should_exit(columns_since_entry, current_col_len)
@@ -2088,125 +1987,19 @@ def _run_bet_session_inner(config: dict, stop_event: threading.Event, skip_event
                     pass
                 current_tid = None
                 current_name = None
-                # 退室前に結果は記録する (BETは置けていたので)
+                continue
 
-            # 勝敗判定
-            won: bool | None
-            round_profit = 0.0
-            if result == "tie":
-                won = None
-            else:
-                won = (result == side)
-                if won:
-                    round_profit = bet_amount * (0.95 if side == "banker" else 1.0)
-                else:
-                    round_profit = -bet_amount
-
-            money_pnl += round_profit
-
-            # 〇✖ progression 更新
-            completed_set = None
-            if counter_session is not None:
-                if won is True:
-                    counter_session.total_bets += 1
-                    counter_session.total_wins += 1
-                    completed_set = counter_session.tracker.add_result("player")
-                elif won is False:
-                    counter_session.total_bets += 1
-                    counter_session.total_losses += 1
-                    completed_set = counter_session.tracker.add_result("banker")
-                else:
-                    counter_session.total_bets += 1
-                    counter_session.total_ties += 1
-                try:
-                    counter_session._money_pnl_override = money_pnl  # type: ignore[attr-defined]
-                    counter_session._save_state()
-                except Exception:
-                    pass
-            else:
-                flat_total_bets += 1
-                if won is True:
-                    flat_wins += 1
-                elif won is False:
-                    flat_losses += 1
-                else:
-                    flat_ties += 1
-
-            # GUI 送信 (BET実施済みの場合のみ)
-            bal = balance if balance else (executor.get_balance() if not dry_run else 0.0)
-
-            turns = []
-            overshoot = 0
-            cumulative_profit = 0
-            current_turn = 0
-            current_unit = 1
-            current_unit_idx = 0
-            if counter_session is not None:
-                turns = counter_session.tracker.current_turns
-                overshoot = counter_session.tracker.prev_overshoot
-                cumulative_profit = counter_session.tracker.cumulative_profit
-                current_turn = len(turns)
-                from marubatsu_strategy import SEQ as _SEQ
-                current_unit_idx = counter_session.tracker.current_unit_idx
-                current_unit = _SEQ[current_unit_idx]
-
-            turns_display = "".join("O" if t == "O" else "X" for t in turns)
-
-            send_result(
-                result=result,
-                won=won,
-                bet_amount=bet_amount,
-                balance=bal,
-                turn=current_turn,
-                turns_display=turns_display,
-                cumulative_profit=cumulative_profit,
-                cumulative_money=money_pnl,
-                round_profit_dollars=round_profit,
-            )
-
-            send_msg({
-                "type": "status",
-                "wins": flat_wins if counter_session is None else counter_session.total_wins,
-                "losses": flat_losses if counter_session is None else counter_session.total_losses,
-                "ties": flat_ties if counter_session is None else counter_session.total_ties,
-                "total_bets": flat_total_bets if counter_session is None else counter_session.total_bets,
-                "cumulative_profit": cumulative_profit,
-                "cumulative_money": money_pnl,
-                "sets": 0 if counter_session is None else len(counter_session.tracker.sets),
-                "current_turn": current_turn,
-                "current_unit": current_unit,
-                "current_unit_idx": current_unit_idx,
-                "overshoot": overshoot,
-                "balance": bal,
-                "turns_display": turns_display,
-                "running": True,
-                "session_count": 0 if counter_session is None else counter_session.session_count,
-            })
+            # Supabase同期
             if counter_session is not None:
                 _schedule_session_state_sync(user_email, counter_session, user_id, session_api_key)
 
-            if completed_set is not None:
-                send_set_complete(completed_set, chip_base)
-                send_shoe_history(counter_session.tracker.sets, chip_base)  # type: ignore[union-attr]
-
-            # 利確/損切チェック
-            if money_pnl >= profit_target_dollars or money_pnl <= -loss_cut_dollars:
-                is_profit = money_pnl >= profit_target_dollars
-                reason_en = "PROFIT TARGET" if is_profit else "LOSS CUT"
-                send_msg({"type": "session_reset", "is_profit": is_profit, "amount": money_pnl, "reason": reason_en})
-                send_log(f"[{reason_en}] Session ended at ${money_pnl:+.2f}")
+            # 利確/損切チェック (counter_session使用時はrun_round内で処理済み)
+            if counter_session is not None and round_result.get("should_reset"):
+                cp = counter_session.effective_profit()
+                is_profit = cp >= 0
+                reason = "利確" if is_profit else "損切り"
+                counter_session.reset_session(reason)
                 money_pnl = 0.0
-                if counter_session is not None:
-                    counter_session.reset_session("利確" if is_profit else "損切り")
-                    try:
-                        counter_session._money_pnl_override = 0.0  # type: ignore[attr-defined]
-                        counter_session._save_state()
-                    except Exception:
-                        pass
-
-            # 退室済みなら次のテーブルへ
-            if current_tid is None:
-                continue
 
         # === Shutdown (counter mode) ===
         send_action("Stopping...")
