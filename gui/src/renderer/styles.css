@@ -288,7 +288,6 @@ html[data-variant="user"] .os-tag { display: none !important; }
 }
 .feed-dot.lose {
   border: 2px solid var(--lose); background: rgba(255,51,102,0.15); color: var(--lose);
-  box-shadow: 0 0 8px rgba(255,51,102,0.4);
 }
 .feed-dot.tie {
   border: 2px solid var(--tie); background: rgba(255,204,0,0.12); color: var(--tie);
