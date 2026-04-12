@@ -1554,8 +1554,38 @@ def _run_bet_session_inner(config: dict, stop_event: threading.Event, skip_event
                     continue
 
                 entry_fail_streak = 0
-                # Seed last_non_tie from current bead road
-                last_bead = executor.read_bead_road() or ""
+                # In-table validation: lobby histories can be stale; avoid betting on a new shoe (bead empty).
+                # Wait briefly for bead-road to appear, otherwise treat as shuffle/new-shoe and exit.
+                last_bead = ""
+                for _vb in range(10):  # up to ~5s
+                    if stop_event.is_set():
+                        break
+                    if not executor.check_and_dismiss_error():
+                        break
+                    last_bead = executor.read_bead_road() or ""
+                    if last_bead:
+                        break
+                    time.sleep(0.5)
+                if not last_bead:
+                    send_log(f"[counter] ⚠️ 入室直後のビーズロード空 → 新シュー/シャッフル疑い → 退室")
+                    try:
+                        executor.exit_table()
+                    except Exception:
+                        pass
+                    current_tid = None
+                    current_name = None
+                    continue
+                # Validate in-table tereko state using actual bead road
+                in_cols = compute_column_lengths(last_bead)
+                if not is_tereko_state(in_cols):
+                    send_log(f"[counter] ⚠️ 入室後確認: テレコ条件未達(short={short_rate(in_cols, ENTRY_WINDOW):.0%}) → 退室")
+                    try:
+                        executor.exit_table()
+                    except Exception:
+                        pass
+                    current_tid = None
+                    current_name = None
+                    continue
                 last_non_tie = _last_non_tie_from_seq(last_bead)
                 continue
 
