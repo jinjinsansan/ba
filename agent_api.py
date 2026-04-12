@@ -257,6 +257,68 @@ def _has_session_state(state: dict | None) -> bool:
     return False
 
 
+def _build_session_state_from_results(results: list, chip_base: float, profit_stop: int, loss_cut: int) -> dict | None:
+    if not results or not isinstance(results, list):
+        return None
+    try:
+        from marubatsu_strategy import MaruBatsuTracker
+    except Exception:
+        return None
+
+    tracker = MaruBatsuTracker(chip_base=chip_base)
+    total_wins = 0
+    total_losses = 0
+    total_ties = 0
+
+    for raw in results:
+        if not isinstance(raw, str):
+            continue
+        mark = raw.strip().upper()
+        if not mark:
+            continue
+        if mark in ("T", "TIE"):
+            total_ties += 1
+            continue
+        if mark in ("W", "WIN"):
+            total_wins += 1
+            tracker.add_result("player")
+            continue
+        if mark in ("L", "LOSE", "LOSS"):
+            total_losses += 1
+            tracker.add_result("banker")
+            continue
+
+    sets_payload = [
+        {
+            "set_index": s.set_index,
+            "results": s.results,
+            "wins": s.wins,
+            "losses": s.losses,
+            "overshoot": s.overshoot,
+            "slashed": s.slashed,
+            "used_unit_idx": s.used_unit_idx,
+            "next_unit_idx": s.next_unit_idx,
+            "set_profit": s.set_profit,
+            "cumulative_profit": s.cumulative_profit,
+        }
+        for s in tracker.sets
+    ]
+    return {
+        "chip_base": chip_base,
+        "profit_stop": profit_stop,
+        "loss_cut": loss_cut,
+        "sets": sets_payload,
+        "current_turns": tracker.current_turns,
+        "total_o": tracker.total_o,
+        "total_x": tracker.total_x,
+        "session_count": 0,
+        "total_bets": total_wins + total_losses + total_ties,
+        "total_wins": total_wins,
+        "total_losses": total_losses,
+        "total_ties": total_ties,
+    }
+
+
 def _load_session_state_from_server(email: str, api_key: str = "") -> dict | None:
     key = api_key or _SESSION_API_KEY
     if not email or not key:
@@ -506,6 +568,7 @@ def _run_bet_session_inner(config: dict, stop_event: threading.Event, skip_event
     session_api_key = (config.get("site_api_key") or _SESSION_API_KEY).strip()
     supabase_state = None
     supabase_missing = False
+    resume_results = config.get("resume_results") if resume else None
     if resume:
         if user_email and session_api_key:
             supabase_state = _load_session_state_from_server(user_email, session_api_key)
@@ -523,6 +586,14 @@ def _run_bet_session_inner(config: dict, stop_event: threading.Event, skip_event
     loss_cut_chips = max(1, int(round(loss_cut_dollars / max(chip_base, 0.01))))
 
     send_log(f"Start mode: {'RESUME' if resume else 'RESET'} (dry_run={dry_run})")
+
+    if resume and not supabase_state and resume_results:
+        built_state = _build_session_state_from_results(
+            resume_results, chip_base, profit_stop_chips, loss_cut_chips
+        )
+        if built_state:
+            supabase_state = built_state
+            send_log("[session] Supabase session built from GUI results")
 
     mode = "DRY RUN" if dry_run else "LIVE"
     send_action(f"Starting {mode} mode...")
