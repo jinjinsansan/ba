@@ -1726,6 +1726,73 @@ def _run_bet_session_inner(config: dict, stop_event: threading.Event, skip_event
                     continue
                 continue
 
+            # Pre-bet checks (run before BET phase to avoid latency)
+            in_betting = False
+            try:
+                in_betting = bool(executor.game_ws and executor.game_ws.status == "Betting")
+            except Exception:
+                in_betting = False
+            if not in_betting:
+                # シャッフル/新シュー検出 → 即退室
+                try:
+                    if executor.is_shuffle_state():
+                        send_log("[counter] ⚠️ シャッフル状態検出 → 退室")
+                        try:
+                            mark_table_exited(current_name)
+                            executor.exit_table()
+                        except Exception:
+                            pass
+                        current_tid = None
+                        current_name = None
+                        continue
+                except Exception:
+                    pass
+                try:
+                    signals = scraper.get_new_shoe_signals()
+                    if current_tid in signals:
+                        send_log("[counter] ⚠️ 新シュー検出 → 退室")
+                        try:
+                            mark_table_exited(current_name)
+                            executor.exit_table()
+                        except Exception:
+                            pass
+                        current_tid = None
+                        current_name = None
+                        continue
+                except Exception:
+                    pass
+
+                # Sync last result from bead road (防止: ビーズロード更新遅延で逆張り方向がズレる)
+                try:
+                    if not executor.check_and_dismiss_error():
+                        raise RuntimeError("error dialog")
+                    _b = executor.read_bead_road() or ""
+                    if not _b:
+                        send_log("[counter] ⚠️ ビーズロード空 (新シュー/シャッフル) → 退室")
+                        try:
+                            mark_table_exited(current_name)
+                            executor.exit_table()
+                        except Exception:
+                            pass
+                        current_tid = None
+                        current_name = None
+                        continue
+                    if last_bead and len(_b) < len(last_bead):
+                        send_log("[counter] ⚠️ ビーズロードが短くリセット → 新シュー疑いで退室")
+                        try:
+                            mark_table_exited(current_name)
+                            executor.exit_table()
+                        except Exception:
+                            pass
+                        current_tid = None
+                        current_name = None
+                        continue
+                    if _b and _b != last_bead:
+                        last_bead = _b
+                        last_non_tie = _last_non_tie_from_seq(last_bead) or last_non_tie
+                except Exception:
+                    pass
+
             # Wait for betting phase (no blocking on result detection)
             if not executor.wait_for_betting_phase(timeout=180, skip_round=False):
                 send_log("[counter] ⚠️ BETフェーズ待ちタイムアウト → 退室して再探索")
@@ -1737,66 +1804,6 @@ def _run_bet_session_inner(config: dict, stop_event: threading.Event, skip_event
                 current_tid = None
                 current_name = None
                 continue
-
-            # シャッフル/新シュー検出 → 即退室
-            try:
-                if executor.is_shuffle_state():
-                    send_log("[counter] ⚠️ シャッフル状態検出 → 退室")
-                    try:
-                        mark_table_exited(current_name)
-                        executor.exit_table()
-                    except Exception:
-                        pass
-                    current_tid = None
-                    current_name = None
-                    continue
-            except Exception:
-                pass
-            try:
-                signals = scraper.get_new_shoe_signals()
-                if current_tid in signals:
-                    send_log("[counter] ⚠️ 新シュー検出 → 退室")
-                    try:
-                        mark_table_exited(current_name)
-                        executor.exit_table()
-                    except Exception:
-                        pass
-                    current_tid = None
-                    current_name = None
-                    continue
-            except Exception:
-                pass
-
-            # Sync last result from bead road (防止: ビーズロード更新遅延で逆張り方向がズレる)
-            try:
-                if not executor.check_and_dismiss_error():
-                    raise RuntimeError("error dialog")
-                _b = executor.read_bead_road() or ""
-                if not _b:
-                    send_log("[counter] ⚠️ ビーズロード空 (新シュー/シャッフル) → 退室")
-                    try:
-                        mark_table_exited(current_name)
-                        executor.exit_table()
-                    except Exception:
-                        pass
-                    current_tid = None
-                    current_name = None
-                    continue
-                if last_bead and len(_b) < len(last_bead):
-                    send_log("[counter] ⚠️ ビーズロードが短くリセット → 新シュー疑いで退室")
-                    try:
-                        mark_table_exited(current_name)
-                        executor.exit_table()
-                    except Exception:
-                        pass
-                    current_tid = None
-                    current_name = None
-                    continue
-                if _b and _b != last_bead:
-                    last_bead = _b
-                    last_non_tie = _last_non_tie_from_seq(last_bead) or last_non_tie
-            except Exception:
-                pass
 
             # Decide counter bet side based on previous non-tie
             side = decide_counter_bet(last_non_tie)
