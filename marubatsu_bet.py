@@ -116,12 +116,8 @@ class MaruBatsuBetSession:
         if isinstance(chip_base, (int, float)) and chip_base > 0:
             self.chip_base = float(chip_base)
             self.tracker.chip_base = float(chip_base)
-        profit_stop = state.get("profit_stop")
-        if isinstance(profit_stop, (int, float)) and profit_stop > 0:
-            self.profit_stop = int(profit_stop)
-        loss_cut = state.get("loss_cut")
-        if isinstance(loss_cut, (int, float)) and loss_cut > 0:
-            self.loss_cut = int(loss_cut)
+        # profit_stop / loss_cut はGUI設定が常に優先。
+        # Supabase復元で上書きしない。
         self.tracker.sets.clear()
         for sd in state.get("sets", []):
             try:
