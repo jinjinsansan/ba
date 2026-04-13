@@ -657,7 +657,7 @@ const _SIG_PREFIXES = 'CDEFG';
 const _SIG_WL_PREFIXES = 'QRSTM';
 const _SIG_OS_PREFIXES = 'UVWXY';
 function _rndChar(s) { return s[Math.floor(Math.random() * s.length)]; }
-function _turnToCode(turn) { return _rndChar(_SIG_PREFIXES) + String.fromCharCode(65 + (turn % 8)); }
+function _turnToCode(turn) { return _rndChar(_SIG_PREFIXES) + String.fromCharCode(65 + Math.max(0, turn - 1)); }
 function _ratioToCode(w, l) { return _rndChar(_SIG_WL_PREFIXES) + w + _rndChar(_SIG_WL_PREFIXES) + l; }
 function _driftToCode(os) { return _rndChar(_SIG_OS_PREFIXES) + os; }
 

@@ -371,7 +371,7 @@ class MaruBatsuBetSession:
         import random as _rnd
         # Encrypted status: Turn=cycle(prefix+letter), W:L=prefix+nums, OS=prefix+num
         _cp = _rnd.choice("CDEFG")
-        _turn_letter = chr(ord('A') + pre_turn_count)  # 1-7 → B-H
+        _turn_letter = chr(ord('A') + pre_turn_count - 1)  # 1→A, 2→B, 3→C, 4→D, 5→E
         _wp = _rnd.choice("QRSTM")
         _lp = _rnd.choice("QRSTM")
         _vp = _rnd.choice("UVWXY")
