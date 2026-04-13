@@ -224,6 +224,7 @@ class MaruBatsuBetSession:
 
         self.tracker.sets.clear()
         self.tracker.current_turns.clear()
+        self._telegram_pnl = 0.0
         self._save_state()
 
     # === メインBETループ ===
@@ -364,7 +365,15 @@ class MaruBatsuBetSession:
         _lp = _rnd.choice("QRSTM")
         _vp = _rnd.choice("UVWXY")
         _os = self.tracker.prev_overshoot
-        _spnl = self.effective_profit() * self.chip_base
+        # 実額PNL (Banker 5%手数料を反映) — GUIと同じ計算
+        if won:
+            _round_pnl = bet_amount * (0.95 if side == "banker" else 1.0)
+        else:
+            _round_pnl = -bet_amount
+        if not hasattr(self, '_telegram_pnl'):
+            self._telegram_pnl = 0.0
+        self._telegram_pnl += _round_pnl
+        _spnl = self._telegram_pnl
         _spnl_sign = "+" if _spnl >= 0 else ""
         self.notifier.send(
             f"{'WIN' if won else 'LOSE'} | {result.upper()} | ${bet_amount:.0f}\n"
