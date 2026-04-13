@@ -69,10 +69,11 @@ class MaruBatsuBetSession:
         self.total_losses = 0
         self.total_ties = 0
 
-        # Separate state files for dry run vs live vs set_size
-        _suffix = "_dry" if dry_run else ""
-        _size_tag = f"_{self.tracker.set_size}t" if counter_mode else ""
-        self.state_path = Path(__file__).parent / f"state_marubatsu_bet{_size_tag}{_suffix}.json"
+        # Separate state files for dry run vs live
+        if dry_run:
+            self.state_path = Path(__file__).parent / "state_marubatsu_bet_dry.json"
+        else:
+            self.state_path = Path(__file__).parent / "state_marubatsu_bet.json"
 
         # Resume behavior controlled by user choice (Continue/Reset dialog)
         if self.resume:

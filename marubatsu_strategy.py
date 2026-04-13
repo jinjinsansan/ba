@@ -283,10 +283,10 @@ class MaruBatsuTracker:
             return f"Set #{self.current_set_index} — 待機中"
 
         marks = "".join("〇" if t == "O" else "✕" for t in self.current_turns)
-        remaining = self.set_size - len(self.current_turns)
+        remaining = 7 - len(self.current_turns)
         unit = self.seq[min(self.current_unit_idx, len(self.seq)-1)]
         return (
-            f"Set #{self.current_set_index} Turn {len(self.current_turns)}/{self.set_size}: "
+            f"Set #{self.current_set_index} Turn {len(self.current_turns)}/7: "
             f"{marks}{'_' * remaining} | BET単位:{unit} | 累計:{self.cumulative_profit:+d}"
         )
 

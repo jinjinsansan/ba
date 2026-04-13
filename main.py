@@ -178,7 +178,7 @@ def _run_table_session(
             logger.info("[DEMO] BET記録完了")
             break
 
-        result_info = executor.wait_for_result(timeout=90, bet_amount=bet_amount, bet_side=side)
+        result_info = executor.wait_for_result(timeout=90, bet_amount=bet_amount)
         if not result_info or not result_info.get("result"):
             logger.warning("結果取得失敗 → テーブル退出")
             break

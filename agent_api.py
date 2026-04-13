@@ -1996,18 +1996,6 @@ def _run_bet_session_inner(config: dict, stop_event: threading.Event, skip_event
                     current_tid = None
                     current_name = None
                     continue
-                # ① シャッフル中テーブルへの入場を防止
-                if executor.is_shuffle_state():
-                    send_log("[counter] Shuffle detected on entry — exiting")
-                    try:
-                        mark_table_exited(current_name)
-                        executor.exit_table()
-                    except Exception:
-                        pass
-                    current_tid = None
-                    current_name = None
-                    continue
-
                 # Validate in-table tereko state using actual bead road
                 in_cols = compute_column_lengths(last_bead)
                 if not is_tereko_state(in_cols):
@@ -2110,10 +2098,52 @@ def _run_bet_session_inner(config: dict, stop_event: threading.Event, skip_event
                 rr_res = round_result.get("result")
                 rr_won = round_result.get("won")
                 rr_ba = round_result.get("bet_amount", 0)
-                # run_round完了後はチップが消えているため DOM/WS確認は無意味。
-                # bet_amount>0 で返ってきた場合はBET済みと判断する。
-                bet_confirmed = rr_ba > 0
-                chip_fail_streak = 0
+                confirmed_total = 0.0
+                dom_total = 0.0
+                try:
+                    dom_total = executor._get_total_bet()
+                except Exception:
+                    pass
+                try:
+                    if executor.game_ws:
+                        confirmed = getattr(executor.game_ws, "_last_confirmed", {})
+                        if isinstance(confirmed, dict):
+                            confirmed_total = sum(
+                                v for v in confirmed.values()
+                                if isinstance(v, (int, float))
+                            )
+                except Exception:
+                    pass
+                actual_total = confirmed_total if confirmed_total > 0 else dom_total
+                bet_confirmed = bool(rr_ba and actual_total > 0)
+                partial_detected = False
+                if actual_total > 0 and rr_ba and abs(actual_total - rr_ba) > 0.5:
+                    partial_detected = True
+                    send_log(f"[counter] Partial: planned ${rr_ba:.0f} actual ${actual_total:.2f}")
+                    rr_ba = actual_total
+
+                if not bet_confirmed:
+                    chip_fail_streak += 1
+                    send_log("[counter] Unconfirmed — skipped")
+                    if chip_fail_streak >= 2:
+                        send_log(f"[counter] Chip fail x{chip_fail_streak} — exiting")
+                        try:
+                            mark_table_exited(current_name)
+                            executor.exit_table()
+                        except Exception:
+                            pass
+                        if chip_fail_streak >= 4:
+                            _restart_counter_browser("chip select failed x2 after re-entry")
+                            chip_fail_streak = 0
+                        current_tid = None
+                        current_name = None
+                        continue
+                    continue
+
+                if partial_detected:
+                    chip_fail_streak += 1
+                else:
+                    chip_fail_streak = 0
 
                 if rr_res:
                     bal = executor.get_balance() if not dry_run else 0
@@ -2171,7 +2201,19 @@ def _run_bet_session_inner(config: dict, stop_event: threading.Event, skip_event
                     send_set_complete(s, chip_base)
                     send_shoe_history(counter_session.tracker.sets, chip_base)
 
-                # partial_detected チェック削除済み (bet_confirmed簡略化に伴い不要)
+                if partial_detected and chip_fail_streak >= 2:
+                    send_log("[counter] Partial streak — re-scanning")
+                    try:
+                        mark_table_exited(current_name)
+                        executor.exit_table()
+                    except Exception:
+                        pass
+                    if chip_fail_streak >= 4:
+                        _restart_counter_browser("chip select failed x2 after re-entry")
+                        chip_fail_streak = 0
+                    current_tid = None
+                    current_name = None
+                    continue
             else:
                 # flat mode: 直接BET
                 send_log(f"[counter] BET {side.upper()} ${FLAT_BET_AMOUNT:.0f} (flat)")
