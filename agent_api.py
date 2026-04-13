@@ -2142,7 +2142,7 @@ def _run_bet_session_inner(config: dict, stop_event: threading.Event, skip_event
                     daily_profit += round_profit
                     money_pnl += round_profit
 
-                    send_result(rr_res, rr_won, rr_ba, bal, ptc, turns_disp, cp, cm, round_profit)
+                    send_result(rr_res, rr_won, rr_ba, bal, ptc, turns_disp, cp, money_pnl, round_profit)
 
                     send_msg({
                         "type": "status",
@@ -2151,7 +2151,7 @@ def _run_bet_session_inner(config: dict, stop_event: threading.Event, skip_event
                         "ties": counter_session.total_ties,
                         "total_bets": counter_session.total_bets,
                         "cumulative_profit": cp,
-                        "cumulative_money": cm,
+                        "cumulative_money": money_pnl,
                         "sets": len(counter_session.tracker.sets),
                         "current_turn": ptc,
                         "current_unit": _SEQ[counter_session.tracker.current_unit_idx],
