@@ -545,7 +545,7 @@ class RemoteLaplaceSession:
                 logger.info(f"DOM total=0だがplace_bet=True — BET${bet_amount:.0f}で続行")
 
         # wait for result
-        result_info = self.executor.wait_for_result(timeout=90, bet_amount=bet_amount)
+        result_info = self.executor.wait_for_result(timeout=90, bet_amount=bet_amount, bet_side=side)
         if not result_info or not result_info.get("result"):
             return self._exit("wait_for_result failed or empty")
 

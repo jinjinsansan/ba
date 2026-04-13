@@ -510,6 +510,7 @@ class BetExecutor:
             return False
 
         logger.info(f"${amount:.0f} {side.upper()} BETします")
+        self._last_bet_side = side
 
         if self.game_ws and self.game_ws.balance > 0:
             self._pre_bet_balance = self.game_ws.balance
@@ -786,7 +787,7 @@ class BetExecutor:
 
     # ─── 結果待ち ───
 
-    def wait_for_result(self, timeout: float = 60, bet_amount: float = 0) -> dict | None:
+    def wait_for_result(self, timeout: float = 60, bet_amount: float = 0, bet_side: str | None = None) -> dict | None:
         """DOM + WS ハイブリッドで結果を検出。
 
         Step 1: タイマー消失(ディーリング中)を待つ
@@ -885,10 +886,11 @@ class BetExecutor:
         if bet_amount > 0 and pre_balance > 0 and new_balance > 0:
             diff = new_balance - pre_balance
             logger.info(f"残高変化: ${pre_balance:.2f} → ${new_balance:.2f} (差${diff:+.2f}, BET${bet_amount:.0f})")
+            _side = bet_side or getattr(self, '_last_bet_side', None)
             if diff > 0.01:
-                balance_result = "player"
+                balance_result = _side if _side in ("player", "banker") else "player"
             elif diff < -0.01:
-                balance_result = "banker"
+                balance_result = ("banker" if _side == "player" else "player") if _side in ("player", "banker") else "banker"
             else:
                 # 残高変化なし → Tie候補だが、WS Settled確認が必要
                 # シャッフル中など BET未受理だと残高変化なし＝Tie誤判定の危険
