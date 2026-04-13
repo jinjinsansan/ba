@@ -26,10 +26,6 @@ class GameWSMonitor:
     def __init__(self):
         self._lock = threading.Lock()
         self._status = "unknown"       # Idle / Betting / Accepted / Settled
-        self._status_epoch = 0
-        self._status_changed_at = time.time()
-        self._last_betting_at = 0.0
-        self._last_settled_at = 0.0
         self._balance = 0.0
         self._last_confirmed = {}      # {"Player": 1, "PlayerFee": 0.2}
         self._last_result_multiplier = None  # {"betSpot": "Player", "multiplier": 2}
@@ -45,19 +41,6 @@ class GameWSMonitor:
     def status(self) -> str:
         with self._lock:
             return self._status
-
-    @property
-    def status_epoch(self) -> int:
-        with self._lock:
-            return self._status_epoch
-
-    @property
-    def status_changed_at(self) -> float:
-        with self._lock:
-            return self._status_changed_at
-
-    def seconds_since_status_change(self) -> float:
-        return time.time() - self.status_changed_at
 
     @property
     def balance(self) -> float:
@@ -78,10 +61,6 @@ class GameWSMonitor:
     def reset(self):
         with self._lock:
             self._status = "unknown"
-            self._status_epoch = 0
-            self._status_changed_at = time.time()
-            self._last_betting_at = 0.0
-            self._last_settled_at = 0.0
             self._last_confirmed = {}
             self._last_result_multiplier = None
             self._multiplier_received_at = 0.0
@@ -150,13 +129,6 @@ class GameWSMonitor:
         with self._lock:
             old = self._status
             self._status = new_status
-            if old != new_status:
-                self._status_epoch += 1
-                self._status_changed_at = time.time()
-                if new_status == "Betting":
-                    self._last_betting_at = self._status_changed_at
-                if new_status in ("Settled", "Idle"):
-                    self._last_settled_at = self._status_changed_at
 
             bal = value.get("balance")
             if bal is not None:
@@ -208,13 +180,6 @@ class GameWSMonitor:
                 with self._lock:
                     old = self._status
                     self._status = status
-                    if old != status:
-                        self._status_epoch += 1
-                        self._status_changed_at = time.time()
-                        if status == "Betting":
-                            self._last_betting_at = self._status_changed_at
-                        if status in ("Settled", "Idle"):
-                            self._last_settled_at = self._status_changed_at
                 if old != status:
                     logger.debug(f"サーバー状態: {old} → {status}")
                     self._status_changed.set()

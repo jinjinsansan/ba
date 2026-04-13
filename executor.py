@@ -22,7 +22,8 @@ class BetExecutor:
         self.current_table_id = ""
         self.current_table_name = ""
         self.demo_mode = config.get("demo_mode", True)
-        self.video_quality = str(config.get("video_quality", "auto") or "auto").lower()
+        self.video_quality = str(config.get("video_quality", "low") or "low").lower()
+        self._last_video_quality_table = None
         self._settled_seen = False
         self._pre_bet_balance = 0.0
         self._available_chips = None  # テーブル入場後にスキャン
@@ -31,67 +32,61 @@ class BetExecutor:
         self._bead_last_ok = 0.0
         self._entered_at = 0.0
         self._last_error_type = None
-        self._last_betting_phase_at = 0.0
-        self._last_betting_phase_source = None
-        self._last_video_quality_table = None
         try:
             self.page.set_default_timeout(10000)
         except Exception:
             pass
 
-    # ─── Video Quality (best-effort) ───
-
-    def _try_click(self, frame, selector: str, timeout: int = 1000) -> bool:
-        try:
-            loc = frame.locator(selector).first
-            if loc.is_visible(timeout=timeout):
-                loc.click(timeout=timeout)
-                return True
-        except Exception:
-            return False
-        return False
-
-    def _try_click_text(self, frame, pattern: str, timeout: int = 800) -> bool:
-        try:
-            loc = frame.locator(f'text=/{pattern}/i').first
-            if loc.is_visible(timeout=timeout):
-                loc.click(timeout=timeout)
-                return True
-        except Exception:
-            return False
-        return False
+    # ─── 映像品質設定 (Evolution UI経由) ───
 
     def _apply_video_quality(self) -> None:
+        """Evolutionゲーム内の設定UIで映像品質を低画質に切替。
+        ネットワーク遮断は一切行わない。テーブル入場後に1回だけ実行。
+        """
         if self.video_quality not in ("low", "mini"):
             return
         if self._last_video_quality_table == self.current_table_id:
             return
+        self._last_video_quality_table = self.current_table_id
         inner = self._get_evo_inner()
         if not inner:
             return
-        self._last_video_quality_table = self.current_table_id
-        # 1) Settings / Gear
-        settings_selectors = [
-            'button[aria-label*="Settings"]',
-            'button[aria-label*="設定"]',
-            'button[title*="Settings"]',
-            'button[title*="設定"]',
-            'button:has(svg[aria-label*="Settings"])',
-            'button:has(svg[aria-label*="settings"])',
-            '[data-role*="settings"] button',
-        ]
-        opened = False
-        for sel in settings_selectors:
-            if self._try_click(inner, sel):
-                opened = True
-                break
-        if not opened:
-            return
-        # 2) Select low quality
-        for pat in ("Low", "低画質", "低", "SD", "360", "480", "Eco", "Economy"):
-            if self._try_click_text(inner, pat):
-                logger.info(f"Video quality set: {pat}")
+        try:
+            # Settings ボタンを探してクリック
+            opened = False
+            for sel in (
+                '[data-role="settings-button"]',
+                'button[aria-label*="Settings"]',
+                'button[aria-label*="設定"]',
+                '[class*="settingsButton"]',
+                '[class*="settings-button"]',
+            ):
+                try:
+                    loc = inner.locator(sel).first
+                    if loc.is_visible(timeout=800):
+                        loc.click(timeout=1000)
+                        opened = True
+                        break
+                except Exception:
+                    pass
+            if not opened:
+                logger.debug("Video quality: Settings button not found")
                 return
+            time.sleep(0.5)
+            # Low / 低画質 などを選択
+            for pat in ("Low", "低画質", "低", "SD", "360", "480", "Eco"):
+                try:
+                    loc = inner.locator(f'text=/{pat}/i').first
+                    if loc.is_visible(timeout=600):
+                        loc.click(timeout=800)
+                        logger.info(f"映像品質を設定: {pat}")
+                        time.sleep(0.3)
+                        return
+                except Exception:
+                    pass
+            logger.debug("Video quality: Low option not found in settings")
+        except Exception as e:
+            logger.debug(f"Video quality apply failed: {e}")
 
     # ─── iframe取得 ───
 
@@ -272,105 +267,15 @@ class BetExecutor:
         """
         if self.demo_mode:
             return True
-        if not self.game_ws:
-            return self._wait_for_betting_phase_dom_only(timeout=timeout, skip_round=skip_round)
-        self._last_betting_phase_at = 0.0
-        self._last_betting_phase_source = None
-        return self._wait_for_betting_phase_with_ws(timeout=timeout, skip_round=skip_round)
-
-    def _wait_for_betting_phase_dom_only(self, timeout: float = 120, skip_round: bool = True) -> bool:
-        if skip_round:
-            deadline = time.time() + timeout
-            while time.time() < deadline:
-                if not self._is_betting_phase_dom():
-                    break
-                if not self.check_and_dismiss_error():
-                    return False
-                time.sleep(0.5)
-        deadline = time.time() + timeout
-        while time.time() < deadline:
-            if self._is_betting_phase_dom():
-                self._mark_betting_phase("dom")
-                return True
-            if not self.check_and_dismiss_error():
-                return False
-            time.sleep(0.5)
-        return False
-
-    def _wait_for_betting_phase_with_ws(self, timeout: float = 120, skip_round: bool = True) -> bool:
-        start_epoch = self.game_ws.status_epoch
-        if skip_round:
-            deadline = time.time() + timeout
-            while time.time() < deadline:
-                dom_active = False
-                try:
-                    dom_active = self._is_betting_phase_dom()
-                except Exception:
-                    dom_active = False
-                ws_status = self.game_ws.status
-                if (not dom_active) or (ws_status and ws_status != "Betting"):
-                    break
-                if not self.check_and_dismiss_error():
-                    return False
-                time.sleep(0.5)
-            start_epoch = self.game_ws.status_epoch
-
-        deadline = time.time() + timeout
-        _dom_error_logged = False
-        while time.time() < deadline:
-            if self.game_ws.status == "Betting":
-                if self.game_ws.status_epoch != start_epoch:
-                    self._mark_betting_phase("ws")
-                    return True
-            try:
-                if self._is_betting_phase_dom():
-                    self._mark_betting_phase("dom")
-                    return True
-            except Exception as _e:
-                if not _dom_error_logged:
-                    logger.warning(f"DOM checker例外（WSフォールバック使用中）: {_e}")
-                    _dom_error_logged = True
-            if not self.check_and_dismiss_error():
-                return False
-            time.sleep(0.5)
-
-        logger.warning("BETフェーズ待機タイムアウト (シャッフル/ディーラー交代の可能性)")
-        return False
-
-    def _mark_betting_phase(self, source: str):
-        self._last_betting_phase_at = time.time()
-        self._last_betting_phase_source = source
-
-    def _betting_phase_ws_fresh(self, max_age: float = 5.0) -> bool:
-        if self._last_betting_phase_source != "ws":
+        result = self.game_ws.wait_for_betting_phase(
+            timeout, dom_checker=self._is_betting_phase_dom, skip_round=skip_round,
+            error_checker=self.check_and_dismiss_error
+        )
+        # ② BETフェーズ検出後もシャッフル中の可能性がある (Canvas描画はDOMに出ない)
+        if result and self.is_shuffle_state():
+            logger.warning("BETフェーズ検出後にシャッフル状態を検知 — BETスキップ")
             return False
-        return (time.time() - self._last_betting_phase_at) <= max_age
-
-    def _clear_existing_bet(self, max_undo: int = 2) -> bool:
-        total = self._get_total_bet()
-        if total < 0.5:
-            return True
-        logger.warning(f"BET前チェック: 既存チップ${total:.2f} — UNDO")
-        for _ in range(max_undo):
-            self.cancel_bet()
-            time.sleep(0.2)
-            total = self._get_total_bet()
-            if total < 0.5:
-                return True
-        logger.warning(f"BET前チェック: UNDO失敗 total=${total:.2f}")
-        return False
-
-    def pre_bet_check(self, allow_ws_fresh: bool = True) -> bool:
-        if not self.check_and_dismiss_error():
-            return False
-        dom_active = self._is_betting_phase_dom()
-        if not dom_active and not (allow_ws_fresh and self._betting_phase_ws_fresh()):
-            logger.warning("BET前チェック: BETフェーズ未検知 (DOM/WS)")
-            return False
-        if self.is_shuffle_state():
-            logger.warning("BET前チェック: シャッフル状態検知")
-            return False
-        return self._clear_existing_bet()
+        return result
 
     def _is_betting_phase_dom(self) -> bool:
         """DOMでBETタイマー(円形カウントダウン)の表示を確認"""
@@ -604,9 +509,6 @@ class BetExecutor:
             logger.warning("BET スキップ: シャッフル状態検知 (DOM)")
             return False
 
-        if not self._clear_existing_bet():
-            return False
-
         logger.info(f"${amount:.0f} {side.upper()} BETします")
 
         if self.game_ws and self.game_ws.balance > 0:
@@ -645,14 +547,21 @@ class BetExecutor:
         except Exception:
             pass
 
-        # 前回BETの残りチップをクリア (遅延クリックによる超過BET防止)
-        try:
-            undo = evo.locator('[data-role="undo-button"]').first
-            if undo.is_visible(timeout=300):
-                undo.click(timeout=300, force=True)
-                time.sleep(0.1)
-        except Exception:
-            pass
+        # ③ 前回BETの残りチップをクリア (二重BET防止 — 残高0になるまでループ)
+        for _undo_i in range(5):
+            total = self._get_total_bet()
+            if total < 0.5:
+                break
+            logger.warning(f"既存チップ${total:.2f}検出 — UNDO ({_undo_i+1}/5)")
+            try:
+                undo = evo.locator('[data-role="undo-button"]').first
+                if undo.is_visible(timeout=300):
+                    undo.click(timeout=500, force=True)
+                    time.sleep(0.2)
+                else:
+                    break
+            except Exception:
+                break
 
         bet_loc = evo.locator(f'[data-betspot-destination="{dest}"]').first
         _current_chip = None  # 現在選択中のチップ額
@@ -705,7 +614,7 @@ class BetExecutor:
                     return False
 
         # BET受理確認: WS BET_CHIP → DOM total-bet の順で検出
-        _confirm_deadline = time.time() + 10.0
+        _confirm_deadline = time.time() + 5.0
         while time.time() < _confirm_deadline:
             # WS で CLIENT_BET_CHIP が来ていれば即受理
             if self.game_ws and self.game_ws.status == "Betting":
@@ -935,10 +844,18 @@ class BetExecutor:
                 return None
             time.sleep(0.15)
 
-        # Step 2.5: ビーズロード差分で結果を優先判定
+        # Step 3: WS結果を先に確認 (即時)
+        ws_result = None
+        if self.game_ws:
+            ws_result = self.game_ws.get_result_side()
+            if ws_result:
+                logger.info(f"WS結果検出: {ws_result.upper()}")
+
+        # Step 2.5: ビーズロード差分で結果判定 (WS取得済みなら最大0.3s、未取得なら最大1s)
         bead_result = None
         if pre_bead:
-            bead_deadline = min(deadline, time.time() + 8)
+            bead_wait = 0.3 if ws_result else 1.0
+            bead_deadline = min(deadline, time.time() + bead_wait)
             while time.time() < bead_deadline:
                 if not self.check_and_dismiss_error():
                     return None
@@ -957,17 +874,7 @@ class BetExecutor:
                             break
                 except Exception:
                     pass
-                time.sleep(0.3)
-
-        # Step 3: WS multiplier (来ないテーブルが多いので最大0.3秒のみ待機)
-        ws_result = None
-        if self.game_ws:
-            ws_result = self.game_ws.get_result_side()
-            if not ws_result:
-                time.sleep(0.3)
-                ws_result = self.game_ws.get_result_side()
-            if ws_result:
-                logger.info(f"WS結果検出: {ws_result.upper()}")
+                time.sleep(0.2)
 
         # 方法2: WS残高diff (CLIENT_BALANCE_UPDATEDで即更新されるため高速)
         new_balance = self.game_ws.balance if self.game_ws and self.game_ws.balance > 0 else 0.0
