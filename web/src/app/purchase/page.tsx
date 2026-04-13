@@ -68,21 +68,21 @@ function PurchaseForm() {
   if (submitted) {
     return (
       <div className="min-h-screen flex items-center justify-center px-6">
-        <div className="max-w-lg text-center">
+        <div className="max-w-lg text-center glass-card p-10">
           <div className="text-5xl mb-6">{isFree ? '🎉' : '✅'}</div>
-          <h1 className="text-3xl font-bold mb-4">{isFree ? 'Activated!' : 'Order Submitted'}</h1>
+          <h1 className="text-3xl font-bold mb-4 font-hud">{isFree ? 'Activated!' : 'Order Submitted'}</h1>
           {isFree ? (
-            <p className="text-slate-400 mb-8">Your license has been activated. Go to your dashboard to continue.</p>
+            <p className="text-text-muted mb-8">Your license has been activated. Go to your dashboard to continue.</p>
           ) : (
             <>
-              <p className="text-slate-400 mb-4">Send <span className="text-white font-bold">${finalAmount} USDT</span> ({network}) to:</p>
-              <div className="p-4 rounded-xl bg-bg-card border border-white/10 font-mono text-sm text-player break-all mb-4">
+              <p className="text-text-muted mb-4">Send <span className="text-text font-bold">${finalAmount} USDT</span> ({network}) to:</p>
+              <div className="p-4 rounded-xl glass-soft font-mono text-sm text-player break-all mb-4">
                 {network === 'TRC-20' ? (process.env.NEXT_PUBLIC_USDT_TRC20 || 'TRC20 wallet not configured') : (process.env.NEXT_PUBLIC_USDT_ERC20 || 'ERC20 wallet not configured')}
               </div>
-              <p className="text-slate-500 text-sm mb-8">Order ID: {orderId}<br />We&apos;ll confirm within 30 minutes after receiving payment.</p>
+              <p className="text-text-muted text-sm mb-8">Order ID: {orderId}<br />We&apos;ll confirm within 30 minutes after receiving payment.</p>
             </>
           )}
-          <button onClick={() => router.push('/dashboard')} className="px-8 py-3 rounded-xl bg-gradient-to-r from-player to-accent text-white font-bold">
+          <button onClick={() => router.push('/dashboard')} className="btn-primary px-8 py-3">
             Go to Dashboard
           </button>
         </div>
@@ -93,13 +93,14 @@ function PurchaseForm() {
   return (
     <div className="min-h-screen py-24 px-6">
       <div className="max-w-lg mx-auto">
-        <h1 className="text-3xl font-black text-center mb-2">Purchase License</h1>
-        <p className="text-center text-slate-400 mb-12">Get full access to LAPLACE AI Engine</p>
+        <div className="hud-label text-center mb-2">License Access</div>
+        <h1 className="text-3xl font-black text-center mb-2 font-hud">Purchase License</h1>
+        <p className="text-center text-text-muted mb-12">Get full access to LAPLACE AI Engine</p>
 
-        <div className="p-8 rounded-2xl bg-bg-card border border-player/40 mb-8">
-          <h2 className="text-xl font-bold mb-1">LAPLACE License</h2>
-          <div className="text-4xl font-black my-4">${PRICE.toLocaleString()} <span className="text-sm text-slate-500 font-normal">USDT</span></div>
-          <ul className="space-y-3 text-sm text-slate-400">
+        <div className="p-8 rounded-2xl glass-card mb-8">
+          <h2 className="text-xl font-bold mb-1 text-text">LAPLACE License</h2>
+          <div className="text-4xl font-black my-4 text-text">${PRICE.toLocaleString()} <span className="text-sm text-text-muted font-normal">USDT</span></div>
+          <ul className="space-y-3 text-sm text-text-muted">
             <li className="flex gap-2"><span className="text-player">✓</span> Full AI prediction engine</li>
             <li className="flex gap-2"><span className="text-player">✓</span> Automated bet execution</li>
             <li className="flex gap-2"><span className="text-player">✓</span> Real-time dashboard</li>
@@ -109,11 +110,11 @@ function PurchaseForm() {
         </div>
 
         <div className="mb-8">
-          <label className="block text-sm text-slate-400 mb-2">USDT Network</label>
+          <label className="block text-sm text-text-muted mb-2">USDT Network</label>
           <div className="grid grid-cols-2 gap-4">
             {(['TRC-20', 'ERC-20'] as const).map(n => (
               <button key={n} onClick={() => setNetwork(n)}
-                className={`p-4 rounded-xl border text-center transition ${network === n ? 'border-player bg-player/10' : 'border-white/10 bg-bg-card hover:border-white/20'}`}>
+                className={`p-4 rounded-xl border text-center transition ${network === n ? 'border-accent/60 bg-accent/10 text-accent' : 'border-accent/15 bg-bg-card hover:border-accent/30 text-text-muted'}`}>
                 {n}
               </button>
             ))}
@@ -121,34 +122,34 @@ function PurchaseForm() {
         </div>
 
         <div className="mb-8">
-          <label className="block text-sm text-slate-400 mb-2">Promo Code <span className="text-slate-600">(optional)</span></label>
+          <label className="block text-sm text-text-muted mb-2">Promo Code <span className="text-text-dim">(optional)</span></label>
           <div className="flex gap-3">
             <input value={promoCode} onChange={e => setPromoCode(e.target.value)}
-              className="flex-1 px-4 py-3 rounded-xl bg-bg-card border border-white/10 text-white focus:outline-none focus:border-player/50 transition"
+              className="input-field flex-1"
               placeholder="Enter code" />
-            <button onClick={checkPromo} className="px-6 py-3 rounded-xl border border-player/30 text-player font-semibold hover:bg-player/10 transition">Apply</button>
+            <button onClick={checkPromo} className="btn-outline px-6 py-3">Apply</button>
           </div>
-          {promoMessage && <p className={`text-sm mt-2 ${promoValid ? 'text-green-400' : 'text-banker'}`}>{promoMessage}</p>}
+          {promoMessage && <p className={`text-sm mt-2 ${promoValid ? 'text-player' : 'text-banker'}`}>{promoMessage}</p>}
         </div>
 
-        <div className="p-6 rounded-xl bg-bg-card border border-white/10 mb-8">
+        <div className="p-6 rounded-xl glass-soft mb-8">
           <div className="flex justify-between items-center mb-2">
-            <span className="text-slate-400">License</span>
-            <span className="font-bold">LAPLACE</span>
+            <span className="text-text-muted">License</span>
+            <span className="font-bold text-text">LAPLACE</span>
           </div>
           <div className="flex justify-between items-center mb-2">
-            <span className="text-slate-400">Network</span>
-            <span>{network}</span>
+            <span className="text-text-muted">Network</span>
+            <span className="text-text">{network}</span>
           </div>
-          <div className="border-t border-white/10 my-3" />
+          <div className="border-t border-accent/10 my-3" />
           <div className="flex justify-between items-center">
-            <span className="text-slate-400">Total</span>
-            <span className="text-2xl font-black">${PRICE.toLocaleString()}</span>
+            <span className="text-text-muted">Total</span>
+            <span className="text-2xl font-black text-text">${PRICE.toLocaleString()}</span>
           </div>
         </div>
 
         <button onClick={handleSubmit} disabled={loading}
-          className="w-full py-4 rounded-xl bg-gradient-to-r from-player to-accent text-white font-bold text-lg hover:opacity-90 transition disabled:opacity-50">
+          className="w-full btn-primary py-4 text-lg disabled:opacity-50">
           {loading ? 'Processing...' : 'Submit Order'}
         </button>
       </div>

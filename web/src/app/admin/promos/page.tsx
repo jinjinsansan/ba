@@ -19,22 +19,22 @@ export default async function AdminPromosPage() {
 
   return (
     <div className="min-h-screen">
-      <nav className="border-b border-white/5 bg-bg-primary/80 backdrop-blur-xl">
+      <nav className="glass-panel border-b border-accent/20 rounded-none">
         <div className="max-w-6xl mx-auto px-6 h-16 flex items-center justify-between">
-          <Link href="/" className="text-xl font-black bg-gradient-to-r from-player to-banker bg-clip-text text-transparent">LAPLACE</Link>
+          <Link href="/" className="text-sm font-hud tracking-[0.35em] text-accent">LAPLACE</Link>
           <div className="flex items-center gap-4 text-sm">
-            <Link href="/admin" className="text-slate-400 hover:text-white">管理</Link>
-            <Link href="/admin/orders" className="text-slate-400 hover:text-white">注文</Link>
-            <Link href="/admin/users" className="text-slate-400 hover:text-white">ユーザー</Link>
-            <Link href="/admin/promos" className="text-white font-semibold">プロモ</Link>
-            <Link href="/admin/tickets" className="text-slate-400 hover:text-white">チケット</Link>
+            <Link href="/admin" className="text-text-muted hover:text-text">管理</Link>
+            <Link href="/admin/orders" className="text-text-muted hover:text-text">注文</Link>
+            <Link href="/admin/users" className="text-text-muted hover:text-text">ユーザー</Link>
+            <Link href="/admin/promos" className="text-text font-semibold">プロモ</Link>
+            <Link href="/admin/tickets" className="text-text-muted hover:text-text">チケット</Link>
           </div>
         </div>
       </nav>
 
       <div className="max-w-6xl mx-auto px-6 py-10">
         <div className="flex items-center justify-between mb-8">
-          <h1 className="text-3xl font-black">プロモコード</h1>
+          <h1 className="text-3xl font-black font-hud">プロモコード</h1>
         </div>
 
         <PromoActions promos={promos || []} />

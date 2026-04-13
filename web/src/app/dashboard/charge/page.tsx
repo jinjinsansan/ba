@@ -66,21 +66,21 @@ export default function ChargePage() {
   if (submitted) {
     return (
       <div className="min-h-screen flex items-center justify-center px-6">
-        <div className="max-w-lg text-center">
+        <div className="max-w-lg text-center glass-card p-10">
           <div className="text-5xl mb-6">{isFree ? '🎉' : '✅'}</div>
-          <h1 className="text-3xl font-bold mb-4">{isFree ? 'Charge Activated!' : 'Charge Submitted'}</h1>
+          <h1 className="text-3xl font-bold mb-4 font-hud">{isFree ? 'Charge Activated!' : 'Charge Submitted'}</h1>
           {isFree ? (
-            <p className="text-slate-400 mb-8">Your account is now active with unlimited balance.</p>
+            <p className="text-text-muted mb-8">Your account is now active with unlimited balance.</p>
           ) : (
             <>
-              <p className="text-slate-400 mb-4">Send <span className="text-white font-bold">${finalAmount} USDT</span> ({network}) to:</p>
-              <div className="p-4 rounded-xl bg-bg-card border border-white/10 font-mono text-sm text-player break-all mb-4">
+              <p className="text-text-muted mb-4">Send <span className="text-text font-bold">${finalAmount} USDT</span> ({network}) to:</p>
+              <div className="p-4 rounded-xl glass-soft font-mono text-sm text-player break-all mb-4">
                 {network === 'TRC-20' ? (process.env.NEXT_PUBLIC_USDT_TRC20 || 'TRC20 wallet not configured') : (process.env.NEXT_PUBLIC_USDT_ERC20 || 'ERC20 wallet not configured')}
               </div>
-              <p className="text-slate-500 text-sm mb-8">Your balance will be updated once we confirm the payment.</p>
+              <p className="text-text-muted text-sm mb-8">Your balance will be updated once we confirm the payment.</p>
             </>
           )}
-          <button onClick={() => router.push('/dashboard')} className="px-8 py-3 rounded-xl bg-gradient-to-r from-player to-accent text-white font-bold">
+          <button onClick={() => router.push('/dashboard')} className="btn-primary px-8 py-3">
             Back to Dashboard
           </button>
         </div>
@@ -91,24 +91,25 @@ export default function ChargePage() {
   return (
     <div className="min-h-screen py-24 px-6">
       <div className="max-w-lg mx-auto">
-        <h1 className="text-3xl font-black text-center mb-2">Charge Balance</h1>
-        <p className="text-center text-slate-400 mb-12">Add funds to enable live betting</p>
+        <div className="hud-label text-center mb-2">Balance Access</div>
+        <h1 className="text-3xl font-black text-center mb-2 font-hud">Charge Balance</h1>
+        <p className="text-center text-text-muted mb-12">Add funds to enable live betting</p>
 
         <form onSubmit={handleSubmit} className="space-y-6">
           <div>
-            <label className="block text-sm text-slate-400 mb-2">Amount (USD)</label>
+            <label className="block text-sm text-text-muted mb-2">Amount (USD)</label>
             <input type="number" min="100" step="100" value={amount}
               onChange={e => setAmount(e.target.value)}
-              className="w-full px-4 py-3 rounded-xl bg-bg-card border border-white/10 text-white focus:outline-none focus:border-player/50 transition"
+              className="input-field"
               placeholder="Minimum $100" />
           </div>
 
           <div>
-            <label className="block text-sm text-slate-400 mb-2">USDT Network</label>
+            <label className="block text-sm text-text-muted mb-2">USDT Network</label>
             <div className="grid grid-cols-2 gap-4">
               {(['TRC-20', 'ERC-20'] as const).map(n => (
                 <button key={n} type="button" onClick={() => setNetwork(n)}
-                  className={`p-3 rounded-xl border text-center transition ${network === n ? 'border-player bg-player/10' : 'border-white/10 bg-bg-card hover:border-white/20'}`}>
+                  className={`p-3 rounded-xl border text-center transition ${network === n ? 'border-accent/60 bg-accent/10 text-accent' : 'border-accent/15 bg-bg-card hover:border-accent/30 text-text-muted'}`}>
                   {n}
                 </button>
               ))}
@@ -116,18 +117,18 @@ export default function ChargePage() {
           </div>
 
           <div>
-            <label className="block text-sm text-slate-400 mb-2">Promo Code <span className="text-slate-600">(optional)</span></label>
+            <label className="block text-sm text-text-muted mb-2">Promo Code <span className="text-text-dim">(optional)</span></label>
             <div className="flex gap-3">
               <input value={promoCode} onChange={e => setPromoCode(e.target.value)}
-                className="flex-1 px-4 py-3 rounded-xl bg-bg-card border border-white/10 text-white focus:outline-none focus:border-player/50 transition"
+                className="input-field flex-1"
                 placeholder="Enter code" />
-              <button type="button" onClick={checkPromo} className="px-6 py-3 rounded-xl border border-player/30 text-player font-semibold hover:bg-player/10 transition">Apply</button>
+              <button type="button" onClick={checkPromo} className="btn-outline px-6 py-3">Apply</button>
             </div>
             {promoMessage && <p className={`text-sm mt-2 ${promoValid ? 'text-green-400' : 'text-banker'}`}>{promoMessage}</p>}
           </div>
 
           <button type="submit" disabled={loading}
-            className="w-full py-4 rounded-xl bg-gradient-to-r from-player to-accent text-white font-bold text-lg hover:opacity-90 transition disabled:opacity-50">
+            className="w-full btn-primary py-4 text-lg disabled:opacity-50">
             {loading ? 'Processing...' : 'Submit Charge'}
           </button>
         </form>

@@ -22,24 +22,25 @@ export default async function AdminUsersPage() {
 
   return (
     <div className="min-h-screen">
-      <nav className="border-b border-white/5 bg-bg-primary/80 backdrop-blur-xl">
+      <nav className="glass-panel border-b border-accent/20 rounded-none">
         <div className="max-w-6xl mx-auto px-6 h-16 flex items-center justify-between">
-          <Link href="/" className="text-xl font-black bg-gradient-to-r from-player to-banker bg-clip-text text-transparent">LAPLACE</Link>
+          <Link href="/" className="text-sm font-hud tracking-[0.35em] text-accent">LAPLACE</Link>
           <div className="flex items-center gap-4 text-sm">
-            <Link href="/admin" className="text-slate-400 hover:text-white">管理</Link>
-            <Link href="/admin/orders" className="text-slate-400 hover:text-white">注文</Link>
-            <Link href="/admin/users" className="text-white font-semibold">ユーザー</Link>
-            <Link href="/admin/promos" className="text-slate-400 hover:text-white">プロモ</Link>
-            <Link href="/admin/tickets" className="text-slate-400 hover:text-white">チケット</Link>
+            <Link href="/admin" className="text-text-muted hover:text-text">管理</Link>
+            <Link href="/admin/orders" className="text-text-muted hover:text-text">注文</Link>
+            <Link href="/admin/users" className="text-text font-semibold">ユーザー</Link>
+            <Link href="/admin/promos" className="text-text-muted hover:text-text">プロモ</Link>
+            <Link href="/admin/tickets" className="text-text-muted hover:text-text">チケット</Link>
           </div>
         </div>
       </nav>
 
       <div className="max-w-6xl mx-auto px-6 py-10">
-        <h1 className="text-3xl font-black mb-8">ユーザー管理</h1>
-        <div className="overflow-x-auto">
+        <div className="hud-label mb-2">Admin Console</div>
+        <h1 className="text-3xl font-black mb-8 font-hud">ユーザー管理</h1>
+        <div className="overflow-x-auto glass-card p-4">
           <table className="w-full text-sm">
-            <thead><tr className="text-slate-500 text-left border-b border-white/10">
+            <thead><tr className="text-text-muted text-left border-b border-accent/10">
               <th className="pb-3">メール</th>
               <th className="pb-3">残高</th>
               <th className="pb-3">利益分配率</th>

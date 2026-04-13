@@ -43,22 +43,22 @@ export default function PromoActions({ promos }: { promos: any[] }) {
 
   return (
     <>
-      <form onSubmit={handleCreate} className="p-6 rounded-2xl bg-bg-card border border-white/5 mb-8">
+      <form onSubmit={handleCreate} className="p-6 rounded-2xl glass-card mb-8">
         <h2 className="text-lg font-bold mb-4">プロモコード作成</h2>
         <div className="grid md:grid-cols-4 gap-4 mb-4">
           <div>
-            <label className="block text-sm text-slate-400 mb-1">コード</label>
+            <label className="block text-sm text-text-muted mb-1">コード</label>
             <input
               value={code} onChange={e => setCode(e.target.value)} required
-              className="w-full px-3 py-2 rounded-lg bg-bg-primary border border-white/10 text-white text-sm"
+              className="input-field text-sm"
               placeholder="BETA2026"
             />
           </div>
           <div>
-            <label className="block text-sm text-slate-400 mb-1">種別</label>
+            <label className="block text-sm text-text-muted mb-1">種別</label>
             <select
               value={type} onChange={e => setType(e.target.value)}
-              className="w-full px-3 py-2 rounded-lg bg-bg-primary border border-white/10 text-white text-sm"
+              className="input-field text-sm"
             >
               <option value="package_free">パッケージ無料</option>
               <option value="charge_free">チャージ無料</option>
@@ -66,32 +66,32 @@ export default function PromoActions({ promos }: { promos: any[] }) {
             </select>
           </div>
           <div>
-            <label className="block text-sm text-slate-400 mb-1">最大利用回数</label>
+            <label className="block text-sm text-text-muted mb-1">最大利用回数</label>
             <input
               type="number" value={maxUses} onChange={e => setMaxUses(e.target.value)}
-              className="w-full px-3 py-2 rounded-lg bg-bg-primary border border-white/10 text-white text-sm"
+              className="input-field text-sm"
             />
           </div>
           <div>
-            <label className="block text-sm text-slate-400 mb-1">割引率 %</label>
+            <label className="block text-sm text-text-muted mb-1">割引率 %</label>
             <input
               type="number" value={discount} onChange={e => setDiscount(e.target.value)}
-              className="w-full px-3 py-2 rounded-lg bg-bg-primary border border-white/10 text-white text-sm"
+              className="input-field text-sm"
             />
           </div>
         </div>
-        <button type="submit" disabled={loading} className="px-6 py-2 rounded-lg bg-gradient-to-r from-player to-accent text-white font-bold text-sm disabled:opacity-50">
+        <button type="submit" disabled={loading} className="btn-primary px-6 py-2 text-sm disabled:opacity-50">
           {loading ? '作成中...' : '作成'}
         </button>
       </form>
 
       <table className="w-full text-sm">
-        <thead><tr className="text-slate-500 text-left border-b border-white/10">
+        <thead><tr className="text-text-muted text-left border-b border-accent/10">
           <th className="pb-3">コード</th><th className="pb-3">種別</th><th className="pb-3">割引率</th><th className="pb-3">利用数</th><th className="pb-3">状態</th><th className="pb-3">操作</th>
         </tr></thead>
         <tbody>
           {promos.map(p => (
-            <tr key={p.id} className="border-b border-white/5">
+            <tr key={p.id} className="border-b border-accent/10">
               <td className="py-3 font-mono text-player">{p.code}</td>
               <td className="py-3">{p.type === 'package_free' ? 'パッケージ無料' : p.type === 'charge_free' ? 'チャージ無料' : '割引'}</td>
               <td className="py-3">{p.discount_percent}%</td>
@@ -111,7 +111,7 @@ export default function PromoActions({ promos }: { promos: any[] }) {
               </td>
             </tr>
           ))}
-          {!promos.length && <tr><td colSpan={6} className="py-6 text-center text-slate-500">プロモコードはまだありません</td></tr>}
+          {!promos.length && <tr><td colSpan={6} className="py-6 text-center text-text-muted">プロモコードはまだありません</td></tr>}
         </tbody>
       </table>
     </>

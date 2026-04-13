@@ -25,7 +25,7 @@ export default function SupportForm() {
   }
 
   return (
-    <div className="p-6 rounded-2xl bg-bg-card border border-white/5">
+    <div className="p-6 rounded-2xl glass-card">
       <h2 className="text-lg font-bold mb-4">Support</h2>
       {sent ? (
         <p className="text-green-400 text-sm">Message sent! We&apos;ll get back to you soon.</p>
@@ -33,12 +33,12 @@ export default function SupportForm() {
         <form onSubmit={handleSubmit} className="flex gap-3">
           <input
             value={message} onChange={e => setMessage(e.target.value)}
-            className="flex-1 px-4 py-3 rounded-xl bg-bg-primary border border-white/10 text-white text-sm focus:outline-none focus:border-player/50"
+            className="input-field flex-1 text-sm"
             placeholder="Describe your issue..."
             required
           />
           <button type="submit" disabled={loading}
-            className="px-6 py-3 rounded-xl bg-player/20 text-player font-semibold text-sm hover:bg-player/30 transition disabled:opacity-50">
+            className="btn-outline px-6 py-3 text-sm disabled:opacity-50">
             {loading ? '...' : 'Send'}
           </button>
         </form>

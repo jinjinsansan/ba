@@ -9,18 +9,28 @@ export default {
   theme: {
     extend: {
       colors: {
-        'bg-primary': '#0a0a0f',
-        'bg-secondary': '#12121a',
-        'bg-card': '#1a1a28',
+        'bg-primary': '#05080f',
+        'bg-secondary': '#0b0f1b',
+        'bg-card': 'rgba(15, 20, 35, 0.85)',
+        'bg-glass': 'rgba(20, 28, 50, 0.6)',
+        text: '#e0e8f0',
+        'text-muted': '#7888a0',
+        'text-dim': '#4a5568',
         player: {
-          DEFAULT: '#3b82f6',
-          dark: '#1e40af',
+          DEFAULT: '#00ff88',
+          dark: '#00cc6f',
         },
         banker: {
-          DEFAULT: '#ef4444',
-          dark: '#991b1b',
+          DEFAULT: '#ff3366',
+          dark: '#b91c1c',
         },
-        accent: '#8b5cf6',
+        tie: '#ffcc00',
+        accent: '#00e5ff',
+      },
+      fontFamily: {
+        hud: ['Orbitron', 'Inter', 'sans-serif'],
+        mono: ['"Share Tech Mono"', 'monospace'],
+        body: ['Inter', '"Segoe UI"', 'sans-serif'],
       },
     },
   },

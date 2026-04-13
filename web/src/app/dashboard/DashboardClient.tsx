@@ -14,7 +14,7 @@ export default function DashboardClient() {
   }
 
   return (
-    <button onClick={handleLogout} className="text-sm text-slate-400 hover:text-white transition">
+    <button onClick={handleLogout} className="text-sm text-text-muted hover:text-text transition">
       Logout
     </button>
   )

@@ -30,44 +30,45 @@ export default async function AdminPage() {
 
   return (
     <div className="min-h-screen">
-      <nav className="border-b border-white/5 bg-bg-primary/80 backdrop-blur-xl">
+      <nav className="glass-panel border-b border-accent/20 rounded-none">
         <div className="max-w-6xl mx-auto px-6 h-16 flex items-center justify-between">
-          <Link href="/" className="text-xl font-black bg-gradient-to-r from-player to-banker bg-clip-text text-transparent">LAPLACE</Link>
+          <Link href="/" className="text-sm font-hud tracking-[0.35em] text-accent">LAPLACE</Link>
           <div className="flex items-center gap-4 text-sm">
-            <Link href="/admin" className="text-white font-semibold">管理</Link>
-            <Link href="/admin/orders" className="text-slate-400 hover:text-white">注文</Link>
-            <Link href="/admin/users" className="text-slate-400 hover:text-white">ユーザー</Link>
-            <Link href="/admin/promos" className="text-slate-400 hover:text-white">プロモ</Link>
-            <Link href="/admin/tickets" className="text-slate-400 hover:text-white">チケット</Link>
-            <Link href="/admin/withdrawals" className="text-slate-400 hover:text-white">出金申請</Link>
-            <Link href="/dashboard" className="text-slate-400 hover:text-white">マイページ</Link>
+            <Link href="/admin" className="text-text font-semibold">管理</Link>
+            <Link href="/admin/orders" className="text-text-muted hover:text-text">注文</Link>
+            <Link href="/admin/users" className="text-text-muted hover:text-text">ユーザー</Link>
+            <Link href="/admin/promos" className="text-text-muted hover:text-text">プロモ</Link>
+            <Link href="/admin/tickets" className="text-text-muted hover:text-text">チケット</Link>
+            <Link href="/admin/withdrawals" className="text-text-muted hover:text-text">出金申請</Link>
+            <Link href="/dashboard" className="text-text-muted hover:text-text">マイページ</Link>
           </div>
         </div>
       </nav>
 
       <div className="max-w-6xl mx-auto px-6 py-10">
-        <h1 className="text-3xl font-black mb-8">管理パネル</h1>
+        <div className="hud-label mb-2">Admin Console</div>
+        <h1 className="text-3xl font-black mb-8 font-hud">管理パネル</h1>
 
         <div className="grid md:grid-cols-4 gap-4 mb-8">
-          <Link href="/admin/users" className="p-6 rounded-2xl bg-bg-card border border-white/5 hover:border-player/30 transition">
+          <Link href="/admin/users" className="p-6 rounded-2xl glass-card hover:border-accent/40 transition">
             <div className="text-3xl font-black text-player">{userCount || 0}</div>
-            <div className="text-sm text-slate-400 mt-1">総ユーザー数</div>
+            <div className="text-sm text-text-muted mt-1">総ユーザー数</div>
           </Link>
-          <Link href="/admin/orders" className="p-6 rounded-2xl bg-bg-card border border-white/5 hover:border-yellow-500/30 transition">
+          <Link href="/admin/orders" className="p-6 rounded-2xl glass-card hover:border-accent/40 transition">
             <div className="text-3xl font-black text-yellow-400">{pendingOrders || 0}</div>
-            <div className="text-sm text-slate-400 mt-1">未確認注文</div>
+            <div className="text-sm text-text-muted mt-1">未確認注文</div>
           </Link>
-          <Link href="/admin/orders" className="p-6 rounded-2xl bg-bg-card border border-white/5 hover:border-yellow-500/30 transition">
+          <Link href="/admin/orders" className="p-6 rounded-2xl glass-card hover:border-accent/40 transition">
             <div className="text-3xl font-black text-yellow-400">{pendingCharges || 0}</div>
-            <div className="text-sm text-slate-400 mt-1">未確認チャージ</div>
+            <div className="text-sm text-text-muted mt-1">未確認チャージ</div>
           </Link>
-          <Link href="/admin/tickets" className="p-6 rounded-2xl bg-bg-card border border-white/5 hover:border-banker/30 transition">
+          <Link href="/admin/tickets" className="p-6 rounded-2xl glass-card hover:border-accent/40 transition">
             <div className="text-3xl font-black text-banker">{openTickets || 0}</div>
-            <div className="text-sm text-slate-400 mt-1">未対応チケット</div>
+            <div className="text-sm text-text-muted mt-1">未対応チケット</div>
           </Link>
-          <Link href="/admin/withdrawals" className="p-6 rounded-2xl bg-bg-card border border-white/5 hover:border-green-500/30 transition">
+          <Link href="/admin/withdrawals" className="p-6 rounded-2xl glass-card hover:border-accent/40 transition">
             <div className="text-3xl font-black text-green-400">{pendingWithdrawals || 0}</div>
-            <div className="text-sm text-slate-400 mt-1">出金申請</div>
+            <div className="text-sm text-text-muted mt-1">出金申請</div>
           </Link>
         </div>
       </div>

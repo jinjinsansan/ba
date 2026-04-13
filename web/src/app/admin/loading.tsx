@@ -1,9 +1,9 @@
 export default function Loading() {
   return (
     <div className="min-h-screen">
-      <nav className="border-b border-white/5 bg-bg-primary/80 backdrop-blur-xl">
+      <nav className="glass-panel border-b border-accent/20 rounded-none">
         <div className="max-w-6xl mx-auto px-6 h-16 flex items-center">
-          <span className="text-xl font-black bg-gradient-to-r from-player to-banker bg-clip-text text-transparent">LAPLACE</span>
+          <span className="text-sm font-hud tracking-[0.35em] text-accent">LAPLACE</span>
         </div>
       </nav>
       <div className="max-w-6xl mx-auto px-6 py-10">
