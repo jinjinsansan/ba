@@ -187,7 +187,6 @@ class BetExecutor:
             self._bead_fail_count = 0
             self._bead_last_ok = time.time()
             self._scan_available_chips()
-            self._apply_video_quality()
             logger.info(f"{table_name} 入場完了")
             return True
 
