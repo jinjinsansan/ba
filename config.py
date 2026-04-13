@@ -70,12 +70,6 @@ TARGET_TABLE = os.getenv(
 VIDEO_QUALITY = os.getenv("VIDEO_QUALITY", _ini_get("monitor", "video_quality", "auto")).lower()
 VIDEO_VIEWPORT_WIDTH = int(os.getenv("VIDEO_VIEWPORT_WIDTH", _ini_getint("monitor", "video_viewport_width", 1280)))
 VIDEO_VIEWPORT_HEIGHT = int(os.getenv("VIDEO_VIEWPORT_HEIGHT", _ini_getint("monitor", "video_viewport_height", 720)))
-_video_block_media_env = os.getenv("VIDEO_BLOCK_MEDIA", "").strip().lower()
-VIDEO_BLOCK_MEDIA = (_video_block_media_env in ("1", "true", "yes")) or _ini_getbool("monitor", "video_block_media", False)
-if VIDEO_QUALITY == "off":
-    VIDEO_BLOCK_MEDIA = True
-_video_block_patterns_env = os.getenv("VIDEO_BLOCK_PATTERNS", _ini_get("monitor", "video_block_patterns", "")).strip()
-VIDEO_BLOCK_PATTERNS = [p.strip().lower() for p in _video_block_patterns_env.split(",") if p.strip()]
 
 # --- BET ---
 BET_ENABLED = _ini_getbool("bet", "enabled", False)

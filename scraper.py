@@ -204,48 +204,6 @@ class BaccaratScraper:
                 logger.info(f"Video viewport set: {config.VIDEO_VIEWPORT_WIDTH}x{config.VIDEO_VIEWPORT_HEIGHT}")
         except Exception as e:
             logger.warning(f"Viewport設定失敗（続行）: {e}")
-        if config.VIDEO_BLOCK_MEDIA:
-            try:
-                patterns = config.VIDEO_BLOCK_PATTERNS or [
-                    ".m3u8", ".mpd", ".ts", ".m4s", ".mp4", ".webm",
-                    "hls", "dash", "video", "stream", "streaming", "live",
-                ]
-                def _should_block(url: str, rtype: str) -> bool:
-                    if rtype == "media":
-                        return True
-                    low = url.lower()
-                    if any(p in low for p in patterns):
-                        return True
-                    return False
-                def _route_media(route, request):
-                    if _should_block(request.url, request.resource_type):
-                        route.abort()
-                    else:
-                        route.continue_()
-                try:
-                    ctx = self.browser or self.page.context
-                    ctx.route("**/*", _route_media)
-                except Exception:
-                    self.page.route("**/*", _route_media)
-                logger.info("Video media/stream requests blocked")
-            except Exception as e:
-                logger.warning(f"Media block設定失敗（続行）: {e}")
-            # Block video WebSocket connections
-            try:
-                patterns = config.VIDEO_BLOCK_PATTERNS or ["stream", "video", "live"]
-                def _block_video_ws(ws):
-                    url = ws.url.lower()
-                    if any(p in url for p in patterns):
-                        logger.info(f"Video WS blocked: {ws.url[:80]}")
-                        try:
-                            ws.close()
-                        except Exception:
-                            pass
-                        return
-                self.page.on("websocket", _block_video_ws)
-                logger.info("Video WebSocket blocking enabled")
-            except Exception as e:
-                logger.warning(f"Video WS block設定失敗（続行）: {e}")
 
     @staticmethod
     def _resolve_executable_path() -> str | None:
