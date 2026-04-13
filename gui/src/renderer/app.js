@@ -240,8 +240,13 @@ const DEFAULT_SETTINGS = {
   telegram_chat_id: '',
   user_email: '',
   dry_run: false,
-  bet_mode: '1drop',
+  bet_mode: 'counter',
 };
+const ALLOWED_BET_MODES = new Set(['counter', 'counter_seq7']);
+
+function normalizeBetMode(mode) {
+  return ALLOWED_BET_MODES.has(mode) ? mode : 'counter';
+}
 
 const SITE_URL = 'https://bafather.uk';
 const LAPLACE_API_KEY = 'c6gDoe0xIyBOTQ7bvzRaAHNYn4ZE1W9Mriumqkw8Shf5Jlsd';
@@ -524,7 +529,7 @@ $('#btnSettings').addEventListener('click', () => {
   $('#inputTelegramChat').value = s.telegram_chat_id || '';
   $('#inputUserEmail').value = s.user_email || '';
   $('#inputDryRun').checked = !!s.dry_run;
-  $('#inputBetMode').value = s.bet_mode || '1drop';
+  $('#inputBetMode').value = s.bet_mode || 'counter';
   // Load table filter into UI
   applyTableFilterToUI(loadTableFilter());
   // Reset to BOT tab
@@ -575,7 +580,9 @@ $('#btnSaveSettings').addEventListener('click', async () => {
 function loadSettings() {
   try {
     const stored = JSON.parse(localStorage.getItem('valhalla_settings') || '{}');
-    return { ...DEFAULT_SETTINGS, ...stored };
+    const merged = { ...DEFAULT_SETTINGS, ...stored };
+    merged.bet_mode = normalizeBetMode(merged.bet_mode);
+    return merged;
   } catch {
     return { ...DEFAULT_SETTINGS };
   }
@@ -1050,10 +1057,12 @@ window.valhalla.onAgentMessage((msg) => {
       addLog(msg.message || '');
       break;
 
-    case 'mode_changed':
-      if ($('#inputBetMode')) $('#inputBetMode').value = msg.mode || '1drop';
-      addLog(`BET mode → ${msg.mode}`, 'info');
+    case 'mode_changed': {
+      const nextMode = normalizeBetMode(msg.mode);
+      if ($('#inputBetMode')) $('#inputBetMode').value = nextMode;
+      addLog(`BET mode → ${nextMode}`, 'info');
       break;
+    }
 
     default:
       if (msg.message) addLog(msg.message);

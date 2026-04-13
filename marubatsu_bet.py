@@ -44,6 +44,7 @@ class MaruBatsuBetSession:
         profit_stop: int = PROFIT_STOP,
         resume: bool = True,
         counter_mode: bool = False,
+        counter_set_size: int | None = None,
     ):
         self.executor = executor
         self.notifier = notifier
@@ -55,7 +56,8 @@ class MaruBatsuBetSession:
         self.counter_mode = counter_mode
 
         if counter_mode:
-            self.tracker = MaruBatsuTracker(chip_base=chip_base, seq=SEQ_COUNTER, set_size=SET_SIZE_COUNTER)
+            set_size = counter_set_size or SET_SIZE_COUNTER
+            self.tracker = MaruBatsuTracker(chip_base=chip_base, seq=SEQ_COUNTER, set_size=set_size)
             self._active_seq = SEQ_COUNTER
         else:
             self.tracker = MaruBatsuTracker(chip_base=chip_base)

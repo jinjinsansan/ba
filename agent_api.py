@@ -258,7 +258,7 @@ def _has_session_state(state: dict | None) -> bool:
 
 
 def _build_session_state_from_results(results: list, chip_base: float, profit_stop: int, loss_cut: int,
-                                      counter_mode: bool = False) -> dict | None:
+                                      counter_mode: bool = False, counter_set_size: int | None = None) -> dict | None:
     if not results or not isinstance(results, list):
         return None
     try:
@@ -267,7 +267,8 @@ def _build_session_state_from_results(results: list, chip_base: float, profit_st
         return None
 
     if counter_mode:
-        tracker = MaruBatsuTracker(chip_base=chip_base, seq=SEQ_COUNTER, set_size=SET_SIZE_COUNTER)
+        set_size = counter_set_size or SET_SIZE_COUNTER
+        tracker = MaruBatsuTracker(chip_base=chip_base, seq=SEQ_COUNTER, set_size=set_size)
     else:
         tracker = MaruBatsuTracker(chip_base=chip_base)
     total_wins = 0
@@ -644,10 +645,12 @@ def _run_bet_session_inner(config: dict, stop_event: threading.Event, skip_event
     send_log(f"Config: chip_base=${chip_base} profit_target=${profit_target_dollars} (={profit_stop_chips}chips) loss_cut=${loss_cut_dollars} (={loss_cut_chips}chips)")
 
     if resume and not supabase_state and resume_results:
-        _is_counter = _effective_mode_box[0] in ("counter", "counter_flat")
+        _is_counter = _effective_mode_box[0] in ("counter", "counter_flat", "counter_seq7")
+        counter_set_size = 7 if _effective_mode_box[0] == "counter_seq7" else None
         built_state = _build_session_state_from_results(
             resume_results, chip_base, profit_stop_chips, loss_cut_chips,
             counter_mode=_is_counter,
+            counter_set_size=counter_set_size,
         )
         if built_state:
             supabase_state = built_state
@@ -1749,7 +1752,7 @@ def _run_bet_session_inner(config: dict, stop_event: threading.Event, skip_event
     executor = BetExecutor(scraper.page, scraper.game_ws, executor_config, humanizer=humanizer)
 
     # === Counter mode (テレコ逆張り) ===
-    if _effective_mode_box[0] in ("counter", "counter_flat"):
+    if _effective_mode_box[0] in ("counter", "counter_flat", "counter_seq7"):
         from counter_logic import (
             compute_column_lengths,
             decide_counter_bet,
@@ -1774,6 +1777,7 @@ def _run_bet_session_inner(config: dict, stop_event: threading.Event, skip_event
             send_log(f"[counter] Param load error: {e} — using defaults")
 
         is_flat = (_effective_mode_box[0] == "counter_flat")
+        counter_set_size = 7 if _effective_mode_box[0] == "counter_seq7" else None
         counter_session = None
         if not is_flat:
             try:
@@ -1787,6 +1791,7 @@ def _run_bet_session_inner(config: dict, stop_event: threading.Event, skip_event
                     dry_run=dry_run,
                     resume=resume,
                     counter_mode=True,
+                    counter_set_size=counter_set_size,
                 )
             except Exception as e:
                 send_log(f"[counter] FATAL: MaruBatsuBetSession init failed: {e}")
@@ -1903,6 +1908,7 @@ def _run_bet_session_inner(config: dict, stop_event: threading.Event, skip_event
         flat_wins = 0
         flat_losses = 0
         flat_ties = 0
+        flat_session_count = 0
         chip_fail_streak = 0
 
         send_action("Counter mode starting...")
@@ -2305,6 +2311,38 @@ def _run_bet_session_inner(config: dict, stop_event: threading.Event, skip_event
                         "session_count": 0,
                     })
                     _flush_daily_summary(table_name=current_name or "")
+                    if money_pnl >= profit_target_dollars or money_pnl <= -loss_cut_dollars:
+                        is_profit = money_pnl >= profit_target_dollars
+                        reason_en = "PROFIT TARGET" if is_profit else "LOSS CUT"
+                        send_msg({
+                            "type": "session_reset",
+                            "is_profit": is_profit,
+                            "amount": money_pnl,
+                            "reason": reason_en,
+                        })
+                        send_action(f"{reason_en} HIT! {'+$' if money_pnl >= 0 else '-$'}{abs(money_pnl):.0f} locked in -- new session starting")
+                        send_log(f"[{reason_en}] Session ended at {'+$' if money_pnl >= 0 else '-$'}{abs(money_pnl):.0f}")
+                        daily_sessions += 1
+                        if is_profit:
+                            daily_profit_sessions += 1
+                        else:
+                            daily_loss_sessions += 1
+                        try:
+                            flat_session_count += 1
+                            hands_count = flat_total_bets
+                            if is_profit:
+                                composite.on_profit_target(
+                                    user_label, flat_session_count, money_pnl, hands_count, daily_profit,
+                                    verification_mode, current_name or ""
+                                )
+                            else:
+                                composite.on_loss_cut(
+                                    user_label, flat_session_count, money_pnl, hands_count, daily_profit,
+                                    verification_mode, current_name or ""
+                                )
+                        except Exception as e:
+                            logger.warning(f"Reset notify failed (counter flat): {e}")
+                        money_pnl = 0.0
                 if chip_fail_streak >= 2:
                     send_log("[counter] Partial streak — re-scanning")
                     try:
@@ -2381,6 +2419,15 @@ def _run_bet_session_inner(config: dict, stop_event: threading.Event, skip_event
                 is_profit = cp >= 0
                 reason = "profit" if is_profit else "losscut"
                 money = cp * chip_base
+                reason_en = "PROFIT TARGET" if is_profit else "LOSS CUT"
+                send_msg({
+                    "type": "session_reset",
+                    "is_profit": is_profit,
+                    "amount": money_pnl,
+                    "reason": reason_en,
+                })
+                send_action(f"{reason_en} HIT! {'+$' if money_pnl >= 0 else '-$'}{abs(money_pnl):.0f} locked in -- new session starting")
+                send_log(f"[{reason_en}] Session ended at {'+$' if money_pnl >= 0 else '-$'}{abs(money_pnl):.0f}")
                 daily_sessions += 1
                 if is_profit:
                     daily_profit_sessions += 1
@@ -4106,7 +4153,7 @@ def main():
 
                 elif msg_type == "change_mode":
                     new_mode = msg.get("mode", "1drop")
-                    if new_mode in ("normal", "1drop", "mix", "sync", "sync_pause", "pattern", "pattern_test", "counter", "counter_flat"):
+                    if new_mode in ("normal", "1drop", "mix", "sync", "sync_pause", "pattern", "pattern_test", "counter", "counter_flat", "counter_seq7"):
                         _bet_mode_box[0] = new_mode
                         _effective_mode_box[0] = "normal" if new_mode == "mix" else new_mode
                         send_log(f"BET mode changed to: {new_mode} (effective: {_effective_mode_box[0]})")
