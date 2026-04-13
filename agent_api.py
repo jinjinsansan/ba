@@ -2130,44 +2130,44 @@ def _run_bet_session_inner(config: dict, stop_event: threading.Event, skip_event
                     turns = counter_session.tracker.current_turns
                     turns_disp = "".join("O" if t == "O" else "X" for t in turns)
                     cp = counter_session.tracker.cumulative_profit
-                    cm = cp * chip_base
 
-                    # round_profit in dollars
                     if rr_res == "tie":
-                        round_profit = 0.0
-                    elif rr_won:
-                        round_profit = rr_ba * (0.95 if side == "banker" else 1.0)
+                        # Tie: BET返還、PNL影響なし → GUI PNL送信スキップ
+                        send_action("Tie — BET returned")
                     else:
-                        round_profit = -rr_ba
-                    daily_profit += round_profit
-                    money_pnl += round_profit
+                        # Win/Lose: PNL計算 → GUI送信
+                        if rr_won:
+                            round_profit = rr_ba * (0.95 if side == "banker" else 1.0)
+                        else:
+                            round_profit = -rr_ba
+                        daily_profit += round_profit
+                        money_pnl += round_profit
 
-                    send_result(rr_res, rr_won, rr_ba, bal, ptc, turns_disp, cp, money_pnl, round_profit)
+                        send_result(rr_res, rr_won, rr_ba, bal, ptc, turns_disp, cp, money_pnl, round_profit)
 
-                    send_msg({
-                        "type": "status",
-                        "wins": counter_session.total_wins,
-                        "losses": counter_session.total_losses,
-                        "ties": counter_session.total_ties,
-                        "total_bets": counter_session.total_bets,
-                        "cumulative_profit": cp,
-                        "cumulative_money": money_pnl,
-                        "sets": len(counter_session.tracker.sets),
-                        "current_turn": ptc,
-                        "current_unit": _SEQ[counter_session.tracker.current_unit_idx],
-                        "current_unit_idx": counter_session.tracker.current_unit_idx,
-                        "overshoot": counter_session.tracker.prev_overshoot,
-                        "balance": bal,
-                        "turns_display": turns_disp,
-                        "running": True,
-                        "session_count": counter_session.session_count,
-                        "pre_wins": pw,
-                        "pre_losses": pl,
-                    })
-                    _schedule_session_state_sync(user_email, counter_session, user_id, session_api_key)
-                    _flush_daily_summary(table_name=current_name or "")
+                        send_msg({
+                            "type": "status",
+                            "wins": counter_session.total_wins,
+                            "losses": counter_session.total_losses,
+                            "ties": counter_session.total_ties,
+                            "total_bets": counter_session.total_bets,
+                            "cumulative_profit": cp,
+                            "cumulative_money": money_pnl,
+                            "sets": len(counter_session.tracker.sets),
+                            "current_turn": ptc,
+                            "current_unit": _SEQ[min(counter_session.tracker.current_unit_idx, len(_SEQ)-1)],
+                            "current_unit_idx": counter_session.tracker.current_unit_idx,
+                            "overshoot": counter_session.tracker.prev_overshoot,
+                            "balance": bal,
+                            "turns_display": turns_disp,
+                            "running": True,
+                            "session_count": counter_session.session_count,
+                            "pre_wins": pw,
+                            "pre_losses": pl,
+                        })
+                        _schedule_session_state_sync(user_email, counter_session, user_id, session_api_key)
+                        _flush_daily_summary(table_name=current_name or "")
 
-                    if rr_res != "tie":
                         send_action(f"{'WIN' if rr_won else 'LOSE'} {side.upper()} ${rr_ba:.0f}. Balance: ${bal:.2f}")
 
                 # Set complete
