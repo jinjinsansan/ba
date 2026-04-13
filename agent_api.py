@@ -2275,27 +2275,30 @@ def _run_bet_session_inner(config: dict, stop_event: threading.Event, skip_event
                 else:
                     flat_ties += 1
                 flat_total_bets += 1
-                daily_profit += round_profit
-                money_pnl += round_profit
 
-                bal = float(result_info.get("balance", 0) or 0)
-                send_result(
-                    result=result, won=won, bet_amount=bet_amt,
-                    balance=bal, turn=0, turns_display="",
-                    cumulative_profit=0, cumulative_money=money_pnl,
-                    round_profit_dollars=round_profit,
-                )
-                send_msg({
-                    "type": "status",
-                    "wins": flat_wins, "losses": flat_losses, "ties": flat_ties,
-                    "total_bets": flat_total_bets,
-                    "cumulative_profit": 0, "cumulative_money": money_pnl,
-                    "sets": 0, "current_turn": 0, "current_unit": 1,
-                    "current_unit_idx": 0, "overshoot": 0,
-                    "balance": bal, "turns_display": "", "running": True,
-                    "session_count": 0,
-                })
-                _flush_daily_summary(table_name=current_name or "")
+                if result == "tie":
+                    send_action("Tie — BET returned")
+                else:
+                    daily_profit += round_profit
+                    money_pnl += round_profit
+                    bal = float(result_info.get("balance", 0) or 0)
+                    send_result(
+                        result=result, won=won, bet_amount=bet_amt,
+                        balance=bal, turn=0, turns_display="",
+                        cumulative_profit=0, cumulative_money=money_pnl,
+                        round_profit_dollars=round_profit,
+                    )
+                    send_msg({
+                        "type": "status",
+                        "wins": flat_wins, "losses": flat_losses, "ties": flat_ties,
+                        "total_bets": flat_total_bets,
+                        "cumulative_profit": 0, "cumulative_money": money_pnl,
+                        "sets": 0, "current_turn": 0, "current_unit": 1,
+                        "current_unit_idx": 0, "overshoot": 0,
+                        "balance": bal, "turns_display": "", "running": True,
+                        "session_count": 0,
+                    })
+                    _flush_daily_summary(table_name=current_name or "")
                 if chip_fail_streak >= 2:
                     send_log("[counter] Partial streak — re-scanning")
                     try:
