@@ -654,12 +654,18 @@ function updateDevPanel(msg) {
   const sd = $('#sigDrift');
   const srd = $('#sigRound');
   if (sc && typeof msg.current_turn === 'number') sc.textContent = _turnToCode(msg.current_turn);
-  if (sr && typeof msg.wins === 'number' && typeof msg.losses === 'number') {
-    // wins/losses in current set from turns_display
-    const td = msg.turns_display || '';
-    const sw = (td.match(/O/g) || []).length;
-    const sl = (td.match(/X/g) || []).length;
-    sr.textContent = _ratioToCode(sw, sl);
+  if (sr) {
+    // pre_wins/pre_losses from server (accurate even after set completion)
+    const pw = typeof msg.pre_wins === 'number' ? msg.pre_wins : 0;
+    const pl = typeof msg.pre_losses === 'number' ? msg.pre_losses : 0;
+    if (pw > 0 || pl > 0) {
+      sr.textContent = _ratioToCode(pw, pl);
+    } else {
+      const td = msg.turns_display || '';
+      const sw = (td.match(/O/g) || []).length;
+      const sl = (td.match(/X/g) || []).length;
+      sr.textContent = _ratioToCode(sw, sl);
+    }
   }
   if (sd && typeof msg.overshoot === 'number') sd.textContent = _driftToCode(msg.overshoot);
   if (srd && typeof msg.session_count === 'number') srd.textContent = `#${msg.session_count}`;

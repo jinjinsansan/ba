@@ -2111,6 +2111,10 @@ def _run_bet_session_inner(config: dict, stop_event: threading.Event, skip_event
 
                 if rr_res:
                     bal = executor.get_balance() if not dry_run else 0
+                    # pre_turn情報を使う (セット完了でクリアされた後でも正確)
+                    ptc = round_result.get("pre_turn_count", len(counter_session.tracker.current_turns))
+                    pw = round_result.get("pre_wins", 0)
+                    pl = round_result.get("pre_losses", 0)
                     turns = counter_session.tracker.current_turns
                     turns_disp = "".join("O" if t == "O" else "X" for t in turns)
                     cp = counter_session.tracker.cumulative_profit
@@ -2126,7 +2130,7 @@ def _run_bet_session_inner(config: dict, stop_event: threading.Event, skip_event
                     daily_profit += round_profit
                     money_pnl += round_profit
 
-                    send_result(rr_res, rr_won, rr_ba, bal, len(turns), turns_disp, cp, cm, round_profit)
+                    send_result(rr_res, rr_won, rr_ba, bal, ptc, turns_disp, cp, cm, round_profit)
 
                     send_msg({
                         "type": "status",
@@ -2137,7 +2141,7 @@ def _run_bet_session_inner(config: dict, stop_event: threading.Event, skip_event
                         "cumulative_profit": cp,
                         "cumulative_money": cm,
                         "sets": len(counter_session.tracker.sets),
-                        "current_turn": len(turns),
+                        "current_turn": ptc,
                         "current_unit": _SEQ[counter_session.tracker.current_unit_idx],
                         "current_unit_idx": counter_session.tracker.current_unit_idx,
                         "overshoot": counter_session.tracker.prev_overshoot,
@@ -2145,6 +2149,8 @@ def _run_bet_session_inner(config: dict, stop_event: threading.Event, skip_event
                         "turns_display": turns_disp,
                         "running": True,
                         "session_count": counter_session.session_count,
+                        "pre_wins": pw,
+                        "pre_losses": pl,
                     })
                     _schedule_session_state_sync(user_email, counter_session, user_id, session_api_key)
                     _flush_daily_summary(table_name=current_name or "")

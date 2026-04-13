@@ -333,6 +333,12 @@ class MaruBatsuBetSession:
         else:
             self.total_losses += 1
 
+        # ★ add_result前にターン情報を取得 (completeでクリアされるため)
+        pre_turns = list(self.tracker.current_turns) + ["O" if won else "X"]
+        pre_turn_count = len(pre_turns)
+        pre_wins = sum(1 for t in pre_turns if t == "O")
+        pre_losses = pre_turn_count - pre_wins
+
         # NOTE: Tracker は Player=〇 / Banker=✕ のマッピングだが、counter用途では
         # 〇=勝ち / ✕=負け として使いたい。そのため勝敗で player/banker を擬似入力する。
         completed_set = self.tracker.add_result("player" if won else "banker")
@@ -343,25 +349,19 @@ class MaruBatsuBetSession:
             f"(残高${balance:.2f})"
         )
 
-        # ターン通知
-        turns_display = "".join("〇" if t == "O" else "✕" for t in self.tracker.current_turns)
-        if not completed_set:
-            remaining = 7 - len(self.tracker.current_turns)
-            turns_display += "_" * remaining
-
         import random as _rnd
         # Encrypted status: Turn=cycle(prefix+letter), W:L=prefix+nums, OS=prefix+num
         _cp = _rnd.choice("CDEFG")
-        _turn_letter = chr(ord('A') + len(self.tracker.current_turns))
-        _wp = _rnd.choice("qrstm")
-        _wins_in_set = sum(1 for t in self.tracker.current_turns if t == "O")
-        _losses_in_set = len(self.tracker.current_turns) - _wins_in_set
-        _lp = _rnd.choice("qrstm")
-        _vp = _rnd.choice("uvwxy")
+        _turn_letter = chr(ord('A') + pre_turn_count)  # 1-7 → B-H
+        _wp = _rnd.choice("QRSTM")
+        _lp = _rnd.choice("QRSTM")
+        _vp = _rnd.choice("UVWXY")
         _os = self.tracker.prev_overshoot
+        _spnl = self.effective_profit() * self.chip_base
+        _spnl_sign = "+" if _spnl >= 0 else ""
         self.notifier.send(
             f"{'WIN' if won else 'LOSE'} | {result.upper()} | ${bet_amount:.0f}\n"
-            f"{_cp}{_turn_letter} {_wp}{_wins_in_set}{_lp}{_losses_in_set} {_vp}{_os} | ${balance:.2f}"
+            f"{_cp}{_turn_letter} {_wp}{pre_wins}{_lp}{pre_losses} {_vp}{_os} | {_spnl_sign}${_spnl:.0f} | ${balance:.2f}"
         )
 
         need_reset = self.should_reset()
@@ -374,6 +374,9 @@ class MaruBatsuBetSession:
             "bet_amount": bet_amount,
             "completed_set": completed_set,
             "should_reset": need_reset,
+            "pre_turn_count": pre_turn_count,
+            "pre_wins": pre_wins,
+            "pre_losses": pre_losses,
         }
 
     def _notify_set_complete(self, new_set: SetData, balance: float):
