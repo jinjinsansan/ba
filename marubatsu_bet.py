@@ -267,6 +267,10 @@ class MaruBatsuBetSession:
             logger.warning("BETフェーズ待ちタイムアウト")
             return {"action": "exit"}
 
+        if not self.executor.pre_bet_check():
+            logger.warning("BET前チェック失敗 — 退室")
+            return {"action": "exit"}
+
         # 残高チェック
         bet_amount = self.get_bet_amount()
         if not self.dry_run:

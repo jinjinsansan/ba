@@ -2228,6 +2228,17 @@ def _run_bet_session_inner(config: dict, stop_event: threading.Event, skip_event
                     current_name = None
                     continue
 
+                if not executor.pre_bet_check():
+                    send_log("[counter] Pre-bet check failed — exiting")
+                    try:
+                        mark_table_exited(current_name)
+                        executor.exit_table()
+                    except Exception:
+                        pass
+                    current_tid = None
+                    current_name = None
+                    continue
+
                 placed = executor.place_bet(side, FLAT_BET_AMOUNT)
                 if not placed:
                     actual = executor._get_total_bet()

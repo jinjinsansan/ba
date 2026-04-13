@@ -30,6 +30,8 @@ class BetExecutor:
         self._bead_last_ok = 0.0
         self._entered_at = 0.0
         self._last_error_type = None
+        self._last_betting_phase_at = 0.0
+        self._last_betting_phase_source = None
         try:
             self.page.set_default_timeout(10000)
         except Exception:
@@ -213,10 +215,105 @@ class BetExecutor:
         """
         if self.demo_mode:
             return True
-        return self.game_ws.wait_for_betting_phase(
-            timeout, dom_checker=self._is_betting_phase_dom, skip_round=skip_round,
-            error_checker=self.check_and_dismiss_error
-        )
+        if not self.game_ws:
+            return self._wait_for_betting_phase_dom_only(timeout=timeout, skip_round=skip_round)
+        self._last_betting_phase_at = 0.0
+        self._last_betting_phase_source = None
+        return self._wait_for_betting_phase_with_ws(timeout=timeout, skip_round=skip_round)
+
+    def _wait_for_betting_phase_dom_only(self, timeout: float = 120, skip_round: bool = True) -> bool:
+        if skip_round:
+            deadline = time.time() + timeout
+            while time.time() < deadline:
+                if not self._is_betting_phase_dom():
+                    break
+                if not self.check_and_dismiss_error():
+                    return False
+                time.sleep(0.5)
+        deadline = time.time() + timeout
+        while time.time() < deadline:
+            if self._is_betting_phase_dom():
+                self._mark_betting_phase("dom")
+                return True
+            if not self.check_and_dismiss_error():
+                return False
+            time.sleep(0.5)
+        return False
+
+    def _wait_for_betting_phase_with_ws(self, timeout: float = 120, skip_round: bool = True) -> bool:
+        start_epoch = self.game_ws.status_epoch
+        if skip_round:
+            deadline = time.time() + timeout
+            while time.time() < deadline:
+                dom_active = False
+                try:
+                    dom_active = self._is_betting_phase_dom()
+                except Exception:
+                    dom_active = False
+                ws_status = self.game_ws.status
+                if (not dom_active) or (ws_status and ws_status != "Betting"):
+                    break
+                if not self.check_and_dismiss_error():
+                    return False
+                time.sleep(0.5)
+            start_epoch = self.game_ws.status_epoch
+
+        deadline = time.time() + timeout
+        _dom_error_logged = False
+        while time.time() < deadline:
+            if self.game_ws.status == "Betting":
+                if self.game_ws.status_epoch != start_epoch:
+                    self._mark_betting_phase("ws")
+                    return True
+            try:
+                if self._is_betting_phase_dom():
+                    self._mark_betting_phase("dom")
+                    return True
+            except Exception as _e:
+                if not _dom_error_logged:
+                    logger.warning(f"DOM checker例外（WSフォールバック使用中）: {_e}")
+                    _dom_error_logged = True
+            if not self.check_and_dismiss_error():
+                return False
+            time.sleep(0.5)
+
+        logger.warning("BETフェーズ待機タイムアウト (シャッフル/ディーラー交代の可能性)")
+        return False
+
+    def _mark_betting_phase(self, source: str):
+        self._last_betting_phase_at = time.time()
+        self._last_betting_phase_source = source
+
+    def _betting_phase_ws_fresh(self, max_age: float = 5.0) -> bool:
+        if self._last_betting_phase_source != "ws":
+            return False
+        return (time.time() - self._last_betting_phase_at) <= max_age
+
+    def _clear_existing_bet(self, max_undo: int = 2) -> bool:
+        total = self._get_total_bet()
+        if total < 0.5:
+            return True
+        logger.warning(f"BET前チェック: 既存チップ${total:.2f} — UNDO")
+        for _ in range(max_undo):
+            self.cancel_bet()
+            time.sleep(0.2)
+            total = self._get_total_bet()
+            if total < 0.5:
+                return True
+        logger.warning(f"BET前チェック: UNDO失敗 total=${total:.2f}")
+        return False
+
+    def pre_bet_check(self, allow_ws_fresh: bool = True) -> bool:
+        if not self.check_and_dismiss_error():
+            return False
+        dom_active = self._is_betting_phase_dom()
+        if not dom_active and not (allow_ws_fresh and self._betting_phase_ws_fresh()):
+            logger.warning("BET前チェック: BETフェーズ未検知 (DOM/WS)")
+            return False
+        if self.is_shuffle_state():
+            logger.warning("BET前チェック: シャッフル状態検知")
+            return False
+        return self._clear_existing_bet()
 
     def _is_betting_phase_dom(self) -> bool:
         """DOMでBETタイマー(円形カウントダウン)の表示を確認"""
@@ -448,6 +545,9 @@ class BetExecutor:
         # AI は観戦モード中 + wait_for_result 失敗時のエラー識別でのみ使用
         if self.is_shuffle_state():
             logger.warning("BET スキップ: シャッフル状態検知 (DOM)")
+            return False
+
+        if not self._clear_existing_bet():
             return False
 
         logger.info(f"${amount:.0f} {side.upper()} BETします")
