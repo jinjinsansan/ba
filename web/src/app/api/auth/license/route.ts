@@ -37,7 +37,7 @@ export async function POST(req: NextRequest) {
     .eq('user_id', profile.id)
     .single()
 
-  if (billingError || !billing) {
+  if (!billing) {
     return NextResponse.json({ ok: false, reason: 'No subscription found. Please purchase a plan at bafather.uk' })
   }
 
