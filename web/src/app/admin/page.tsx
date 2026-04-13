@@ -31,11 +31,11 @@ export default async function AdminPage() {
   return (
     <div className="min-h-screen">
       <nav className="glass-panel border-b border-accent/20 rounded-none">
-        <div className="max-w-6xl mx-auto px-6 h-16 flex items-center justify-between">
+        <div className="max-w-6xl mx-auto px-4 sm:px-6 h-16 flex items-center justify-between">
           <Link href="/" className="text-sm font-hud tracking-[0.35em] text-accent">LAPLACE</Link>
-          <div className="flex items-center gap-4 text-sm">
+          <div className="flex flex-wrap items-center gap-3 text-xs sm:text-sm">
             <Link href="/admin" className="text-text font-semibold">管理</Link>
-            <Link href="/admin/orders" className="text-text-muted hover:text-text">注文</Link>
+            <Link href="/dashboard" className="text-text-muted hover:text-text">Dashboard</Link>
             <Link href="/admin/users" className="text-text-muted hover:text-text">ユーザー</Link>
             <Link href="/admin/promos" className="text-text-muted hover:text-text">プロモ</Link>
             <Link href="/admin/tickets" className="text-text-muted hover:text-text">チケット</Link>
@@ -45,11 +45,11 @@ export default async function AdminPage() {
         </div>
       </nav>
 
-      <div className="max-w-6xl mx-auto px-6 py-10">
+      <div className="max-w-6xl mx-auto px-4 sm:px-6 py-8 sm:py-10">
         <div className="hud-label mb-2">Admin Console</div>
-        <h1 className="text-3xl font-black mb-8 font-hud">管理パネル</h1>
+        <h1 className="text-2xl sm:text-3xl font-black mb-6 sm:mb-8 font-hud">管理パネル</h1>
 
-        <div className="grid md:grid-cols-4 gap-4 mb-8">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
           <Link href="/admin/users" className="p-6 rounded-2xl glass-card hover:border-accent/40 transition">
             <div className="text-3xl font-black text-player">{userCount || 0}</div>
             <div className="text-sm text-text-muted mt-1">総ユーザー数</div>

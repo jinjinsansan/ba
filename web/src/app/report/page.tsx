@@ -51,8 +51,10 @@ export default function ReportPage() {
           display: 'flex',
           justifyContent: 'space-between',
           alignItems: 'center',
+          flexWrap: 'wrap',
+          gap: '8px',
         }}>
-          <span style={{ color: 'var(--accent)', fontSize: '13px', fontWeight: 700 }}>{viewingFile}</span>
+          <span style={{ color: 'var(--accent)', fontSize: '13px', fontWeight: 700, wordBreak: 'break-all' }}>{viewingFile}</span>
           <button
             onClick={() => { setViewingFile(''); setHtmlContent(''); }}
             style={{
@@ -80,12 +82,12 @@ export default function ReportPage() {
       }}>
         <div style={{
           background: 'var(--bg-card)', border: '1px solid var(--border)', borderRadius: '12px',
-          padding: '40px', width: '340px', textAlign: 'center',
+          padding: '32px 24px', width: 'min(90vw, 360px)', textAlign: 'center',
         }}>
-          <div style={{ color: 'var(--accent)', fontSize: '24px', fontWeight: 900, letterSpacing: '4px', marginBottom: '8px' }}>
+          <div style={{ color: 'var(--accent)', fontSize: 'clamp(20px, 4vw, 24px)', fontWeight: 900, letterSpacing: '4px', marginBottom: '8px' }}>
             LAPLACE
           </div>
-          <div style={{ color: 'var(--text-dim)', fontSize: '11px', letterSpacing: '2px', marginBottom: '28px' }}>
+          <div style={{ color: 'var(--text-dim)', fontSize: '11px', letterSpacing: '2px', marginBottom: '24px' }}>
             REPORT ACCESS
           </div>
           {error && (
@@ -119,13 +121,13 @@ export default function ReportPage() {
   }
 
   return (
-    <div style={{ background: 'var(--bg)', minHeight: '100vh', padding: '24px' }}>
+    <div style={{ background: 'var(--bg)', minHeight: '100vh', padding: '24px 16px' }}>
       <div style={{ maxWidth: '900px', margin: '0 auto' }}>
-        <h1 style={{ color: 'var(--accent)', fontSize: '24px', borderBottom: '2px solid var(--accent)', paddingBottom: '8px', marginBottom: '24px' }}>
+        <h1 style={{ color: 'var(--accent)', fontSize: 'clamp(20px, 3vw, 24px)', borderBottom: '2px solid var(--accent)', paddingBottom: '8px', marginBottom: '20px' }}>
           LAPLACE Report
         </h1>
         <div style={{
-          display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))',
+          display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))',
           gap: '12px',
         }}>
           {files.map(f => (

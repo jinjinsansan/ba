@@ -65,23 +65,23 @@ export default function ChargePage() {
 
   if (submitted) {
     return (
-      <div className="min-h-screen flex items-center justify-center px-6">
-        <div className="max-w-lg text-center glass-card p-10">
+      <div className="min-h-screen flex items-center justify-center px-4 sm:px-6">
+        <div className="max-w-lg text-center glass-card p-6 sm:p-10">
           <div className="text-5xl mb-6">{isFree ? '🎉' : '✅'}</div>
-          <h1 className="text-3xl font-bold mb-4 font-hud">{isFree ? 'Charge Activated!' : 'Charge Submitted'}</h1>
+          <h1 className="text-2xl sm:text-3xl font-bold mb-4 font-hud">{isFree ? 'Charge Activated!' : 'Charge Submitted'}</h1>
           {isFree ? (
             <p className="text-text-muted mb-8">Your account is now active with unlimited balance.</p>
           ) : (
             <>
               <p className="text-text-muted mb-4">Send <span className="text-text font-bold">${finalAmount} USDT</span> ({network}) to:</p>
-              <div className="p-4 rounded-xl glass-soft font-mono text-sm text-player break-all mb-4">
+            <p className="text-text-muted mb-4">Send <span className="text-text font-bold">${amount} USDT</span> ({network}) to:</p>
                 {network === 'TRC-20' ? (process.env.NEXT_PUBLIC_USDT_TRC20 || 'TRC20 wallet not configured') : (process.env.NEXT_PUBLIC_USDT_ERC20 || 'ERC20 wallet not configured')}
               </div>
               <p className="text-text-muted text-sm mb-8">Your balance will be updated once we confirm the payment.</p>
-            </>
+            <p className="text-text-muted text-sm mb-8">We&apos;ll confirm within 30 minutes after receiving payment.</p>
           )}
           <button onClick={() => router.push('/dashboard')} className="btn-primary px-8 py-3">
-            Back to Dashboard
+          <button onClick={() => router.push('/dashboard')} className="btn-primary px-8 py-3 w-full sm:w-auto">
           </button>
         </div>
       </div>
@@ -89,11 +89,11 @@ export default function ChargePage() {
   }
 
   return (
-    <div className="min-h-screen py-24 px-6">
+    <div className="min-h-screen py-16 sm:py-24 px-4 sm:px-6">
       <div className="max-w-lg mx-auto">
         <div className="hud-label text-center mb-2">Balance Access</div>
-        <h1 className="text-3xl font-black text-center mb-2 font-hud">Charge Balance</h1>
-        <p className="text-center text-text-muted mb-12">Add funds to enable live betting</p>
+        <h1 className="text-2xl sm:text-3xl font-black text-center mb-2 font-hud">Charge Balance</h1>
+        <p className="text-center text-sm sm:text-base text-text-muted mb-10 sm:mb-12">Add funds to enable live betting</p>
 
         <form onSubmit={handleSubmit} className="space-y-6">
           <div>
@@ -105,8 +105,8 @@ export default function ChargePage() {
           </div>
 
           <div>
-            <label className="block text-sm text-text-muted mb-2">USDT Network</label>
-            <div className="grid grid-cols-2 gap-4">
+          <label className="block text-sm text-text-muted mb-2">USDT Network</label>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               {(['TRC-20', 'ERC-20'] as const).map(n => (
                 <button key={n} type="button" onClick={() => setNetwork(n)}
                   className={`p-3 rounded-xl border text-center transition ${network === n ? 'border-accent/60 bg-accent/10 text-accent' : 'border-accent/15 bg-bg-card hover:border-accent/30 text-text-muted'}`}>
@@ -117,19 +117,19 @@ export default function ChargePage() {
           </div>
 
           <div>
-            <label className="block text-sm text-text-muted mb-2">Promo Code <span className="text-text-dim">(optional)</span></label>
-            <div className="flex gap-3">
+          <label className="block text-sm text-text-muted mb-2">Promo Code <span className="text-text-dim">(optional)</span></label>
+          <div className="flex flex-col sm:flex-row gap-3">
               <input value={promoCode} onChange={e => setPromoCode(e.target.value)}
                 className="input-field flex-1"
                 placeholder="Enter code" />
-              <button type="button" onClick={checkPromo} className="btn-outline px-6 py-3">Apply</button>
+            <button onClick={checkPromo} className="btn-outline px-6 py-3 w-full sm:w-auto">Apply</button>
             </div>
             {promoMessage && <p className={`text-sm mt-2 ${promoValid ? 'text-green-400' : 'text-banker'}`}>{promoMessage}</p>}
           </div>
 
           <button type="submit" disabled={loading}
-            className="w-full btn-primary py-4 text-lg disabled:opacity-50">
-            {loading ? 'Processing...' : 'Submit Charge'}
+        <button onClick={handleSubmit} disabled={loading}
+          className="w-full btn-primary py-4 text-base sm:text-lg disabled:opacity-50">
           </button>
         </form>
       </div>

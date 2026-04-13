@@ -70,7 +70,7 @@ export default function OrderActions({ type, id, userId, status, amount }: {
   function renderUploadPanel() {
     return (
       <div className="flex flex-col gap-2">
-        <div className="flex gap-2">
+        <div className="flex flex-wrap gap-2">
           <button
             onClick={() => setUploadMode('url')}
             className={`px-2 py-1 rounded text-xs transition ${uploadMode === 'url' ? 'bg-player/20 text-player' : 'bg-white/5 text-slate-400'}`}
@@ -85,15 +85,15 @@ export default function OrderActions({ type, id, userId, status, amount }: {
           </button>
         </div>
         {uploadMode === 'file' ? (
-          <div className="flex gap-2 items-center">
-            <input ref={fileRef} type="file" accept=".zip" className="text-xs text-slate-400 w-32" />
+          <div className="flex flex-col sm:flex-row gap-2 sm:items-center">
+            <input ref={fileRef} type="file" accept=".zip" className="text-xs text-slate-400 w-full sm:w-32" />
             <button onClick={handleUpload} disabled={loading}
-              className="px-3 py-1 rounded-lg bg-player/20 text-player text-xs font-semibold disabled:opacity-50">
+              className="px-3 py-1 rounded-lg bg-player/20 text-player text-xs font-semibold disabled:opacity-50 w-full sm:w-auto">
               {loading ? '...' : 'ZIP送付'}
             </button>
           </div>
         ) : (
-          <div className="flex gap-2 items-center">
+          <div className="flex flex-col sm:flex-row gap-2 sm:items-center">
             <input
               type="url"
               value={zipUrl}
@@ -102,7 +102,7 @@ export default function OrderActions({ type, id, userId, status, amount }: {
               className="flex-1 text-xs bg-white/5 border border-white/10 rounded px-2 py-1 text-white placeholder-slate-500"
             />
             <button onClick={handleSendUrl} disabled={loading}
-              className="px-3 py-1 rounded-lg bg-player/20 text-player text-xs font-semibold disabled:opacity-50">
+              className="px-3 py-1 rounded-lg bg-player/20 text-player text-xs font-semibold disabled:opacity-50 w-full sm:w-auto">
               {loading ? '...' : '送付'}
             </button>
           </div>

@@ -24,7 +24,7 @@ export default function WithdrawalActions({ id }: { id: string }) {
       <input
         type="text" value={note} onChange={e => setNote(e.target.value)}
         placeholder="備考(任意)"
-        className="px-2 py-1 rounded bg-bg-primary border border-white/10 text-white text-xs w-28"
+        className="px-2 py-1 rounded bg-bg-primary border border-white/10 text-white text-xs w-full sm:w-28"
       />
       <button onClick={() => act('approve')} disabled={loading}
         className="px-2 py-1 rounded text-xs bg-green-500/20 text-green-400 hover:bg-green-500/30 transition disabled:opacity-50">

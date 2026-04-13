@@ -168,7 +168,7 @@ export default function UserRow({ user, billing }: { user: any; billing: any }) 
       {showUrlInput && (
         <tr className="border-b border-white/5 bg-purple-500/5">
           <td colSpan={7} className="py-3 px-4">
-            <div className="flex gap-2 items-center">
+            <div className="flex flex-col sm:flex-row gap-2 sm:items-center">
               <input
                 type="url"
                 placeholder="GitHub Release URL (https://github.com/...)"
@@ -179,7 +179,7 @@ export default function UserRow({ user, billing }: { user: any; billing: any }) 
               <button
                 onClick={sendZipUrl}
                 disabled={uploading}
-                className="px-3 py-1.5 rounded text-xs bg-purple-500/30 text-purple-300 hover:bg-purple-500/50 transition disabled:opacity-50"
+                className="px-3 py-1.5 rounded text-xs bg-purple-500/30 text-purple-300 hover:bg-purple-500/50 transition disabled:opacity-50 w-full sm:w-auto"
               >
                 {uploading ? '送付中...' : '送付'}
               </button>

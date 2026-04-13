@@ -80,18 +80,18 @@ export default async function DashboardPage() {
     <div className="min-h-screen">
       {/* Header */}
       <nav className="glass-panel border-b border-accent/20 rounded-none">
-        <div className="max-w-6xl mx-auto px-6 h-16 flex items-center justify-between">
+        <div className="max-w-6xl mx-auto px-4 sm:px-6 h-16 flex items-center justify-between">
           <Link href="/" className="text-sm font-hud tracking-[0.35em] text-accent">LAPLACE</Link>
-          <div className="flex items-center gap-4">
+          <div className="flex items-center gap-3 sm:gap-4 flex-wrap justify-end">
             {profile?.is_admin && <Link href="/admin" className="text-sm text-text-muted hover:text-text">Admin</Link>}
             <DashboardClient />
           </div>
         </div>
       </nav>
 
-      <div className="max-w-6xl mx-auto px-6 py-10">
+      <div className="max-w-6xl mx-auto px-4 sm:px-6 py-8 sm:py-10">
         <div className="hud-label mb-2">Account Overview</div>
-        <h1 className="text-3xl font-black mb-8 font-hud">My Dashboard</h1>
+        <h1 className="text-2xl sm:text-3xl font-black mb-6 sm:mb-8 font-hud">My Dashboard</h1>
 
         {/* Status Banner */}
         <div className={`p-6 rounded-2xl border mb-8 glass-soft ${
@@ -104,7 +104,7 @@ export default async function DashboardPage() {
           <div className="flex items-center justify-between flex-wrap gap-4">
             <div>
               <div className="text-sm text-text-muted mb-1">Account Status</div>
-              <div className={`text-2xl font-bold ${
+              <div className={`text-xl sm:text-2xl font-bold leading-tight ${
                 status === 'active' ? 'text-green-400' :
                 status === 'dry_run' ? 'text-player' :
                 status === 'pending' ? 'text-yellow-400' :
@@ -119,12 +119,12 @@ export default async function DashboardPage() {
               </div>
             </div>
             {status === 'no_purchase' && (
-              <Link href="/purchase" className="btn-primary px-6 py-3">
+              <Link href="/purchase" className="btn-primary px-6 py-3 w-full sm:w-auto text-center">
                 Purchase License
               </Link>
             )}
             {status === 'dry_run' && (
-              <Link href="/dashboard/charge" className="btn-primary px-6 py-3">
+              <Link href="/dashboard/charge" className="btn-primary px-6 py-3 w-full sm:w-auto text-center">
                 Charge Balance
               </Link>
             )}
@@ -132,7 +132,7 @@ export default async function DashboardPage() {
         </div>
 
         {/* Stats Grid */}
-        <div className="grid md:grid-cols-4 gap-4 mb-8">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
           <div className="p-5 rounded-xl glass-card">
             <div className="text-sm text-text-muted">Balance</div>
             {billing?.is_free ? (
@@ -159,7 +159,7 @@ export default async function DashboardPage() {
         </div>
 
         {/* Download + Referral */}
-        <div className="grid md:grid-cols-2 gap-6 mb-8">
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
           {/* Download Section */}
           <div className="p-6 rounded-2xl glass-card">
             <h2 className="text-lg font-bold mb-4">Software Download</h2>
@@ -167,7 +167,7 @@ export default async function DashboardPage() {
               <div className="space-y-3">
                 <a
                   href={`/api/download?file=${deliverables![0].file_path}`}
-                  className="btn-primary inline-block px-6 py-3"
+                  className="btn-primary inline-block px-6 py-3 w-full sm:w-auto text-center"
                 >
                   Download LAPLACE v{deliverables![0].version}
                 </a>
@@ -200,22 +200,24 @@ export default async function DashboardPage() {
             <Link href="/dashboard/charge" className="text-sm text-accent hover:underline">Add Charge</Link>
           </div>
           {charges?.length ? (
-            <table className="w-full text-sm">
-              <thead><tr className="text-text-muted text-left"><th className="pb-2">Date</th><th className="pb-2">Amount</th><th className="pb-2">Status</th></tr></thead>
-              <tbody>
-                {charges.map(c => (
-                  <tr key={c.id} className="border-t border-accent/10">
-                    <td className="py-2">{new Date(c.created_at).toLocaleDateString()}</td>
-                    <td className="py-2 font-bold">${Number(c.amount).toLocaleString()}</td>
-                    <td className="py-2">
-                      <span className={`px-2 py-0.5 rounded text-xs ${c.status === 'confirmed' ? 'bg-green-500/20 text-green-400' : 'bg-yellow-500/20 text-yellow-400'}`}>
-                        {c.status}
-                      </span>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+            <div className="overflow-x-auto">
+              <table className="min-w-[520px] w-full text-sm">
+                <thead><tr className="text-text-muted text-left"><th className="pb-2">Date</th><th className="pb-2">Amount</th><th className="pb-2">Status</th></tr></thead>
+                <tbody>
+                  {charges.map(c => (
+                    <tr key={c.id} className="border-t border-accent/10">
+                      <td className="py-2">{new Date(c.created_at).toLocaleDateString()}</td>
+                      <td className="py-2 font-bold">${Number(c.amount).toLocaleString()}</td>
+                      <td className="py-2">
+                        <span className={`px-2 py-0.5 rounded text-xs ${c.status === 'confirmed' ? 'bg-green-500/20 text-green-400' : 'bg-yellow-500/20 text-yellow-400'}`}>
+                          {c.status}
+                        </span>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
           ) : <p className="text-text-muted text-sm">No charges yet.</p>}
         </div>
 
@@ -223,21 +225,23 @@ export default async function DashboardPage() {
         <div className="p-6 rounded-2xl glass-card">
           <h2 className="text-lg font-bold mb-4">Daily Settlements</h2>
           {deductions?.length ? (
-            <table className="w-full text-sm">
-              <thead><tr className="text-text-muted text-left"><th className="pb-2">Date</th><th className="pb-2">Profit</th><th className="pb-2">Fee</th><th className="pb-2">Note</th></tr></thead>
-              <tbody>
-                {deductions.map(d => (
-                  <tr key={d.id} className="border-t border-accent/10">
-                    <td className="py-2">{d.date}</td>
-                    <td className={`py-2 font-bold ${Number(d.daily_profit) >= 0 ? 'text-green-400' : 'text-banker'}`}>
-                      {Number(d.daily_profit) >= 0 ? '+' : ''}${Number(d.daily_profit).toFixed(2)}
-                    </td>
-                    <td className="py-2 text-banker">${Number(d.fee_amount).toFixed(2)}</td>
-                    <td className="py-2 text-text-muted">{d.note || '—'}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+            <div className="overflow-x-auto">
+              <table className="min-w-[640px] w-full text-sm">
+                <thead><tr className="text-text-muted text-left"><th className="pb-2">Date</th><th className="pb-2">Profit</th><th className="pb-2">Fee</th><th className="pb-2">Note</th></tr></thead>
+                <tbody>
+                  {deductions.map(d => (
+                    <tr key={d.id} className="border-t border-accent/10">
+                      <td className="py-2">{d.date}</td>
+                      <td className={`py-2 font-bold ${Number(d.daily_profit) >= 0 ? 'text-green-400' : 'text-banker'}`}>
+                        {Number(d.daily_profit) >= 0 ? '+' : ''}${Number(d.daily_profit).toFixed(2)}
+                      </td>
+                      <td className="py-2 text-banker">${Number(d.fee_amount).toFixed(2)}</td>
+                      <td className="py-2 text-text-muted">{d.note || '—'}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
           ) : <p className="text-text-muted text-sm">No settlements yet.</p>}
         </div>
 

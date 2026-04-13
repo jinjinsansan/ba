@@ -35,22 +35,22 @@ export default function TicketActions({ ticketId, status }: { ticketId: string; 
   }
 
   return (
-    <div className="flex gap-2 items-start">
+    <div className="flex flex-wrap gap-2 items-start">
       {status !== 'closed' && (
         <>
           {showReply ? (
-            <div className="flex-1 flex gap-2">
+            <div className="flex-1 flex flex-col sm:flex-row gap-2">
               <input
                 value={reply} onChange={e => setReply(e.target.value)}
                 className="flex-1 px-3 py-2 rounded-lg bg-bg-primary border border-white/10 text-white text-sm"
                 placeholder="返信内容を入力..."
               />
               <button onClick={handleReply} disabled={loading}
-                className="px-3 py-2 rounded-lg bg-player/20 text-player text-xs font-semibold">
+                className="px-3 py-2 rounded-lg bg-player/20 text-player text-xs font-semibold w-full sm:w-auto">
                 送信
               </button>
               <button onClick={() => setShowReply(false)}
-                className="px-3 py-2 rounded-lg bg-slate-500/20 text-slate-400 text-xs">
+                className="px-3 py-2 rounded-lg bg-slate-500/20 text-slate-400 text-xs w-full sm:w-auto">
                 キャンセル
               </button>
             </div>

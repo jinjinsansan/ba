@@ -67,13 +67,13 @@ export default function ReferralSection({
       {/* Referral URL */}
       <div className="mb-6">
         <div className="text-sm text-text-muted mb-2">Your Referral URL</div>
-        <div className="flex gap-2 items-center flex-wrap">
-          <code className="flex-1 px-4 py-2.5 rounded-lg glass-soft text-player font-mono text-sm break-all">
+        <div className="flex flex-col sm:flex-row gap-2 items-stretch sm:items-center">
+          <code className="flex-1 px-4 py-2.5 rounded-lg glass-soft text-player font-mono text-xs sm:text-sm break-all">
             {referralUrl}
           </code>
           <button
             onClick={copyUrl}
-            className="btn-outline px-4 py-2.5 text-sm flex-shrink-0"
+            className="btn-outline px-4 py-2.5 text-sm w-full sm:w-auto flex-shrink-0"
           >
             {copied ? 'Copied!' : 'Copy'}
           </button>
@@ -81,18 +81,18 @@ export default function ReferralSection({
       </div>
 
       {/* Commission Balance */}
-      <div className="grid grid-cols-3 gap-4 mb-6">
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-6">
         <div className="p-4 rounded-xl glass-soft">
           <div className="text-xs text-text-dim mb-1">Total Earned</div>
-          <div className="text-xl font-black text-green-400">${totalEarned.toFixed(2)}</div>
+          <div className="text-lg sm:text-xl font-black text-green-400">${totalEarned.toFixed(2)}</div>
         </div>
         <div className="p-4 rounded-xl glass-soft">
           <div className="text-xs text-text-dim mb-1">Withdrawn</div>
-          <div className="text-xl font-black text-text-muted">${totalWithdrawn.toFixed(2)}</div>
+          <div className="text-lg sm:text-xl font-black text-text-muted">${totalWithdrawn.toFixed(2)}</div>
         </div>
         <div className="p-4 rounded-xl glass-soft">
           <div className="text-xs text-text-dim mb-1">Available</div>
-          <div className="text-xl font-black text-player">${available.toFixed(2)}</div>
+          <div className="text-lg sm:text-xl font-black text-player">${available.toFixed(2)}</div>
         </div>
       </div>
 
@@ -101,7 +101,7 @@ export default function ReferralSection({
         <div className="mb-6">
           <div className="text-sm text-text-muted mb-3">Referred Users ({referred.length})</div>
           <div className="overflow-x-auto">
-            <table className="w-full text-sm">
+            <table className="min-w-[640px] w-full text-sm">
               <thead>
                 <tr className="text-text-muted text-left border-b border-accent/10">
                   <th className="pb-2">Email</th>
@@ -131,11 +131,11 @@ export default function ReferralSection({
           <div className="text-sm text-text-muted mb-3">Withdrawal History</div>
           <div className="space-y-2">
             {withdrawals.map((w: any) => (
-              <div key={w.id} className="flex items-center justify-between p-3 rounded-lg glass-soft text-sm">
-                <div>
+              <div key={w.id} className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 p-3 rounded-lg glass-soft text-sm">
+                <div className="flex flex-wrap items-center gap-2">
                   <span className="font-bold">${Number(w.amount).toFixed(2)}</span>
-                  <span className="text-text-muted ml-2">{w.network}</span>
-                  <span className="text-text-dim ml-2 text-xs">{new Date(w.created_at).toLocaleDateString()}</span>
+                  <span className="text-text-muted">{w.network}</span>
+                  <span className="text-text-dim text-xs">{new Date(w.created_at).toLocaleDateString()}</span>
                 </div>
                 <span className={`px-2 py-0.5 rounded text-xs font-semibold ${
                   w.status === 'approved' ? 'bg-green-500/20 text-green-400' :
@@ -173,7 +173,7 @@ export default function ReferralSection({
           </div>
           <div>
             <label className="text-xs text-text-dim mb-1 block">Network</label>
-            <div className="flex gap-2">
+            <div className="flex flex-wrap gap-2">
               {['TRC-20', 'ERC-20'].map(n => (
                 <button key={n} onClick={() => setNetwork(n)}
                   className={`px-4 py-2 rounded-lg text-sm font-semibold transition ${network === n ? 'bg-accent text-black' : 'bg-bg-card text-text-muted border border-accent/20'}`}>
@@ -191,13 +191,13 @@ export default function ReferralSection({
             />
           </div>
           {error && <p className="text-banker text-xs">{error}</p>}
-          <div className="flex gap-3">
+          <div className="flex flex-col sm:flex-row gap-3">
             <button onClick={submitWithdraw} disabled={loading}
-              className="btn-primary px-5 py-2.5 text-sm disabled:opacity-50">
+              className="btn-primary px-5 py-2.5 text-sm disabled:opacity-50 w-full sm:w-auto">
               {loading ? 'Submitting...' : 'Submit'}
             </button>
             <button onClick={() => { setShowWithdraw(false); setError('') }}
-              className="btn-outline px-5 py-2.5 text-sm">
+              className="btn-outline px-5 py-2.5 text-sm w-full sm:w-auto">
               Cancel
             </button>
           </div>

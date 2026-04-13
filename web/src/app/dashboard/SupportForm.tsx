@@ -30,7 +30,7 @@ export default function SupportForm() {
       {sent ? (
         <p className="text-green-400 text-sm">Message sent! We&apos;ll get back to you soon.</p>
       ) : (
-        <form onSubmit={handleSubmit} className="flex gap-3">
+        <form onSubmit={handleSubmit} className="flex flex-col sm:flex-row gap-3">
           <input
             value={message} onChange={e => setMessage(e.target.value)}
             className="input-field flex-1 text-sm"

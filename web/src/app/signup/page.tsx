@@ -47,10 +47,10 @@ function SignupForm() {
   }
 
   return (
-    <div className="w-full max-w-md glass-card p-8">
+    <div className="w-full max-w-md glass-card p-6 sm:p-8">
       <div className="hud-label text-center mb-2">LAPLACE ACCESS</div>
-      <h1 className="text-3xl font-black text-center mb-2 font-hud">Create Account</h1>
-      <p className="text-center text-text-muted mb-8">Join LAPLACE and start winning</p>
+      <h1 className="text-2xl sm:text-3xl font-black text-center mb-2 font-hud">Create Account</h1>
+      <p className="text-center text-sm sm:text-base text-text-muted mb-8">Join LAPLACE and start winning</p>
 
       {message && (
         <div className="mb-6 p-4 rounded-xl bg-player/10 border border-player/30 text-player text-sm text-center">
@@ -105,7 +105,7 @@ function SignupForm() {
 
 export default function SignupPage() {
   return (
-    <div className="min-h-screen flex items-center justify-center px-6">
+    <div className="min-h-screen flex items-center justify-center px-4 sm:px-6">
       <Suspense fallback={<div className="text-text-muted">Loading...</div>}>
         <SignupForm />
       </Suspense>
