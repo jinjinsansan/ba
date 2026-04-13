@@ -99,11 +99,32 @@ export default function UserRow({ user, billing }: { user: any; billing: any }) 
               {isSuspended ? '停止解除' : '停止'}
             </button>
             <button
-              onClick={() => updateUser(isFree ? 'unfree' : 'set_free')}
+              onClick={() => updateUser('free_license')}
               disabled={loading}
               className="px-2 py-1 rounded text-xs bg-accent/20 text-accent hover:bg-accent/30 transition disabled:opacity-50"
             >
-              {isFree ? '無料解除' : '無料設定'}
+              ライセンス無料
+            </button>
+            <button
+              onClick={() => updateUser('free_charge')}
+              disabled={loading}
+              className="px-2 py-1 rounded text-xs bg-accent/20 text-accent hover:bg-accent/30 transition disabled:opacity-50"
+            >
+              チャージ無料
+            </button>
+            <button
+              onClick={() => updateUser('free_both')}
+              disabled={loading}
+              className="px-2 py-1 rounded text-xs bg-accent/20 text-accent hover:bg-accent/30 transition disabled:opacity-50"
+            >
+              両方無料
+            </button>
+            <button
+              onClick={() => updateUser('unfree_charge')}
+              disabled={loading || !isFree}
+              className="px-2 py-1 rounded text-xs bg-white/10 text-slate-300 hover:text-white transition disabled:opacity-50"
+            >
+              無料解除
             </button>
             <button
               onClick={() => updateUser(isActive ? 'deactivate' : 'activate')}
