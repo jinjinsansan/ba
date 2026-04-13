@@ -167,7 +167,7 @@ class MaruBatsuBetSession:
             self.total_ties = state.get("total_ties", 0)
             logger.info(
                 f"状態復元: {len(self.tracker.sets)}セット, "
-                f"ターン{len(self.tracker.current_turns)}/7, "
+                f"ターン{len(self.tracker.current_turns)}/{self.tracker.set_size}, "
                 f"累計{self.tracker.cumulative_profit:+d}chip"
             )
         except Exception as e:
@@ -408,7 +408,7 @@ class MaruBatsuBetSession:
             logger.info(f"シュー交換 — 途中ターン破棄: {partial}")
             self.notifier.send(
                 f"⚠️ シュー交換\n"
-                f"途中ターン破棄: {partial} ({len(self.tracker.current_turns)}/7)\n"
+                f"途中ターン破棄: {partial} ({len(self.tracker.current_turns)}/{self.tracker.set_size})\n"
                 f"累計損益: {self.tracker.cumulative_profit:+d} chip"
             )
             self.tracker.current_turns.clear()
