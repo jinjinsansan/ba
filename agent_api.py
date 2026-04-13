@@ -2156,7 +2156,8 @@ def _run_bet_session_inner(config: dict, stop_event: threading.Event, skip_event
                     cp = counter_session.tracker.cumulative_profit
 
                     if rr_res == "tie":
-                        # Tie: BET返還、PNL影響なし → GUI PNL送信スキップ
+                        # Tie: BET返還、PNL影響なし。round_profit=0でGUI送信 (STREAM用)
+                        send_result(rr_res, None, rr_ba, bal, ptc, turns_disp, cp, money_pnl, 0.0)
                         send_action("Tie — BET returned")
                     else:
                         # Win/Lose: PNL計算 → GUI送信

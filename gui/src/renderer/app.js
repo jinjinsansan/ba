@@ -688,24 +688,29 @@ function updateDevPanel(msg) {
   }
   if (sd && typeof msg.overshoot === 'number') sd.textContent = _driftToCode(msg.overshoot);
   // ROUND = total bets, color cycles per set (hidden set boundary indicator)
+  const _setColors = ['#ff3366', '#ffcc00', '#00b8d4', '#ffffff', '#00ff88', '#c084fc'];
+  const setIdx = typeof msg.sets === 'number' ? msg.sets : 0;
+  const currentSetColor = _setColors[setIdx % _setColors.length];
   if (srd && typeof msg.total_bets === 'number') {
     srd.textContent = `#${msg.total_bets}`;
-    const _setColors = ['#ff3366', '#ffcc00', '#00b8d4', '#ffffff', '#00ff88', '#c084fc'];
-    const setIdx = typeof msg.sets === 'number' ? msg.sets : 0;
-    srd.style.color = _setColors[setIdx % _setColors.length];
+    srd.style.color = currentSetColor;
   }
 
-  // Stream: add one mark per hand (from pre_wins/pre_losses change)
+  // Stream: add one mark per hand, colored by current set
   const el = $('#sigStream');
-  if (el && typeof msg.current_turn === 'number' && typeof msg.total_bets === 'number') {
+  if (el && typeof msg.total_bets === 'number') {
     if (msg.total_bets !== _lastStreamTurn) {
       _lastStreamTurn = msg.total_bets;
-      // Determine last result from won field in the most recent round_result
-      if (typeof _lastRoundWon === 'boolean') {
-        const mark = _lastRoundWon
-          ? '<span class="s-o">O</span>'
-          : '<span class="s-x">X</span>';
-        if (el.querySelector('[style]')) el.innerHTML = '';  // Clear "AWAITING SIGNAL"
+      let mark = '';
+      if (_lastRoundWon === true) {
+        mark = `<span style="color:${currentSetColor}">O</span>`;
+      } else if (_lastRoundWon === false) {
+        mark = `<span style="color:${currentSetColor}">X</span>`;
+      } else if (_lastRoundWon === null) {
+        mark = `<span style="color:${currentSetColor}">T</span>`;
+      }
+      if (mark) {
+        if (el.querySelector('[style*="rgba"]')) el.innerHTML = '';  // Clear "AWAITING SIGNAL"
         el.innerHTML += mark;
         el.scrollTop = el.scrollHeight;
       }
