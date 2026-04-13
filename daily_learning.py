@@ -26,7 +26,7 @@ DB_PATH = os.environ.get("ANALYTICS_DB", "analytics.sqlite3")
 JST = timezone(timedelta(hours=9))
 
 # Supabase
-SITE_URL = os.environ.get("LAPLACE_SITE_URL", "https://bafather.uk")
+SITE_URL = os.environ.get("LAPLACE_SITE_URL", "https://bafather.uk").rstrip("/")
 API_KEY = os.environ.get("LAPLACE_API_KEY", "")
 
 # Telegram alert
@@ -375,13 +375,165 @@ def main():
     else:
         print("\n  [ok] All thresholds normal")
 
+    # パラメータ自動調整
+    param_changes = auto_adjust_params(metrics, recent)
+
     # 日次サマリー通知 (常時)
+    param_note = ""
+    if param_changes:
+        param_note = "\n" + " | ".join(param_changes)
     summary = (
         f"📊 LAPLACE Daily — {date_str}\n"
         f"WR: {metrics['counter_wr']}% | Dur: {metrics['avg_duration']}h | Tereko: {metrics['tereko_rate']}%\n"
         f"Best: {metrics['best_hour']:02d}:00 ({metrics['best_wr']}%) | Worst: {metrics['worst_hour']:02d}:00 ({metrics['worst_wr']}%)"
+        f"{param_note}"
     )
     send_telegram_alert(summary)
+
+
+# ============================================================
+# パラメータ自動調整
+# ============================================================
+
+# デフォルト値
+DEFAULT_PARAMS = {
+    "entry_window": 15,
+    "entry_threshold": 0.85,
+    "exit_drop3_limit": 2,
+    "exit_drop5_immediate": True,
+    "profit_target": 30,
+}
+
+# 調整範囲
+PARAM_LIMITS = {
+    "entry_window": (8, 20),
+    "entry_threshold": (0.70, 0.95),
+    "exit_drop3_limit": (1, 4),
+}
+
+
+def load_current_params() -> dict:
+    """Supabase から現在のパラメータを取得"""
+    if not API_KEY:
+        return dict(DEFAULT_PARAMS)
+    try:
+        url = f"{SITE_URL}/api/optimal-params?api_key={API_KEY}"
+        req = urllib.request.Request(url, headers={"User-Agent": "LAPLACE-learning/1.0"})
+        with urllib.request.urlopen(req, timeout=10) as res:
+            data = json.loads(res.read().decode("utf-8"))
+            params = data.get("params", {})
+            if not params or params.get("status") == "default":
+                return dict(DEFAULT_PARAMS)
+            return params
+    except Exception:
+        return dict(DEFAULT_PARAMS)
+
+
+def save_params(params: dict, reason: str):
+    """Supabase にパラメータを保存"""
+    if not API_KEY:
+        print(f"  [skip] No API_KEY — param save skipped ({reason})")
+        return
+    payload = json.dumps({
+        "api_key": API_KEY,
+        "entry_window": params["entry_window"],
+        "entry_threshold": params["entry_threshold"],
+        "exit_drop3_limit": params["exit_drop3_limit"],
+        "exit_drop5_immediate": params.get("exit_drop5_immediate", True),
+        "profit_target": params.get("profit_target", 30),
+        "status": "active",
+        "reason": reason,
+    }).encode("utf-8")
+    url = f"{SITE_URL}/api/optimal-params"
+    req = urllib.request.Request(
+        url, data=payload,
+        headers={"Content-Type": "application/json", "User-Agent": "LAPLACE-learning/1.0"},
+        method="POST",
+    )
+    try:
+        with urllib.request.urlopen(req, timeout=10):
+            print(f"  [ok] Params saved: {reason}")
+    except Exception as e:
+        print(f"  [err] Param save failed: {e}")
+
+
+def auto_adjust_params(today_metrics: dict, recent_metrics: list) -> list[str]:
+    """過去7日のトレンドからパラメータを自動調整"""
+    changes = []
+    current = load_current_params()
+    new_params = dict(current)
+    adjusted = False
+
+    if not recent_metrics or len(recent_metrics) < 3:
+        print("  [params] Not enough history (< 3 days) — skip adjustment")
+        return changes
+
+    # 直近3日のトレンド
+    recent_3 = recent_metrics[-3:] if len(recent_metrics) >= 3 else recent_metrics
+    avg_wr_3d = sum(m.get('counter_wr', 53) for m in recent_3) / len(recent_3)
+    avg_dur_3d = sum(m.get('avg_duration', 15) for m in recent_3) / len(recent_3)
+
+    ew_min, ew_max = PARAM_LIMITS["entry_window"]
+    et_min, et_max = PARAM_LIMITS["entry_threshold"]
+    d3_min, d3_max = PARAM_LIMITS["exit_drop3_limit"]
+
+    # ── 入室条件 (ENTRY_THRESHOLD) ──
+    # テレコ寿命が短い → 厳しくする (もっと確実なテレコだけ入る)
+    if avg_dur_3d < 8:
+        new_et = min(current.get("entry_threshold", 0.85) + 0.05, et_max)
+        if new_et != current.get("entry_threshold", 0.85):
+            new_params["entry_threshold"] = round(new_et, 2)
+            changes.append(f"ET {current.get('entry_threshold', 0.85)}→{new_et} (dur↓)")
+            adjusted = True
+    # テレコ寿命が長い → 緩める (もっと積極的に入る)
+    elif avg_dur_3d > 18:
+        new_et = max(current.get("entry_threshold", 0.85) - 0.05, et_min)
+        if new_et != current.get("entry_threshold", 0.85):
+            new_params["entry_threshold"] = round(new_et, 2)
+            changes.append(f"ET {current.get('entry_threshold', 0.85)}→{new_et} (dur↑)")
+            adjusted = True
+
+    # ── 入室ウィンドウ (ENTRY_WINDOW) ──
+    # 勝率が低い → ウィンドウを広げる (より多くの列で判定 = 慎重)
+    if avg_wr_3d < 51:
+        new_ew = min(current.get("entry_window", 15) + 2, ew_max)
+        if new_ew != current.get("entry_window", 15):
+            new_params["entry_window"] = new_ew
+            changes.append(f"EW {current.get('entry_window', 15)}→{new_ew} (wr↓)")
+            adjusted = True
+    # 勝率が高い → ウィンドウを狭める (素早く入る)
+    elif avg_wr_3d > 55:
+        new_ew = max(current.get("entry_window", 15) - 2, ew_min)
+        if new_ew != current.get("entry_window", 15):
+            new_params["entry_window"] = new_ew
+            changes.append(f"EW {current.get('entry_window', 15)}→{new_ew} (wr↑)")
+            adjusted = True
+
+    # ── 退室条件 (EXIT_DROP3_LIMIT) ──
+    # テレコ寿命が短い → 退室を早める (1回で退室)
+    if avg_dur_3d < 7:
+        new_d3 = max(current.get("exit_drop3_limit", 2) - 1, d3_min)
+        if new_d3 != current.get("exit_drop3_limit", 2):
+            new_params["exit_drop3_limit"] = new_d3
+            changes.append(f"D3 {current.get('exit_drop3_limit', 2)}→{new_d3} (dur↓↓)")
+            adjusted = True
+    # テレコ寿命が長い → もう少し粘る
+    elif avg_dur_3d > 20:
+        new_d3 = min(current.get("exit_drop3_limit", 2) + 1, d3_max)
+        if new_d3 != current.get("exit_drop3_limit", 2):
+            new_params["exit_drop3_limit"] = new_d3
+            changes.append(f"D3 {current.get('exit_drop3_limit', 2)}→{new_d3} (dur↑↑)")
+            adjusted = True
+
+    # パラメータ変更があればSupabaseに保存
+    if adjusted:
+        reason = f"auto: wr3d={avg_wr_3d:.1f}% dur3d={avg_dur_3d:.1f}h"
+        save_params(new_params, reason)
+        print(f"  [params] Adjusted: {', '.join(changes)}")
+    else:
+        print(f"  [params] No adjustment needed (wr3d={avg_wr_3d:.1f}% dur3d={avg_dur_3d:.1f}h)")
+
+    return changes
 
 
 if __name__ == "__main__":
