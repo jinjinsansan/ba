@@ -1893,12 +1893,12 @@ def _run_bet_session_inner(config: dict, stop_event: threading.Event, skip_event
         while not stop_event.is_set():
             # Table selection / entry
             if current_tid is None:
-                send_log("[counter] テレコテーブル検索中...")
+                send_log("[counter] Scanning...")
                 # Lobby WS health
                 if not scraper.get_all_table_configs():
                     no_configs_streak += 1
                     if no_configs_streak >= 3:
-                        send_log("[counter] ⚠️ ロビーWSにテーブル情報なし → 再接続")
+                        send_log("[counter] No lobby data — reconnecting")
                         try:
                             scraper.setup_ws_intercept()
                         except Exception:
@@ -1910,7 +1910,7 @@ def _run_bet_session_inner(config: dict, stop_event: threading.Event, skip_event
                 no_configs_streak = 0
                 best = _find_best_tereko_table()
                 if not best:
-                    send_log(f"[counter] テレコテーブルなし。{SEARCH_INTERVAL}秒待機")
+                    send_log(f"[counter] No target. Waiting {SEARCH_INTERVAL}s")
                     if stop_event.wait(SEARCH_INTERVAL):
                         break
                     continue
@@ -1921,10 +1921,10 @@ def _run_bet_session_inner(config: dict, stop_event: threading.Event, skip_event
                 last_non_tie = None
                 last_bead = ""
 
-                send_log(f"[counter] 入室: {current_name} (短列率{current_short_rate:.0%})")
+                send_log(f"[counter] Entered: {current_name} ({current_short_rate:.0%})")
                 send_action(f"Entering {current_name}...")
                 if not executor.enter_table(current_tid, current_name):
-                    send_log(f"[counter] 入室失敗: {current_name} → 退避して再探索")
+                    send_log(f"[counter] Entry failed: {current_name}")
                     entry_fail_streak += 1
                     try:
                         mark_table_exited(current_name)
@@ -1951,7 +1951,7 @@ def _run_bet_session_inner(config: dict, stop_event: threading.Event, skip_event
                         break
                     time.sleep(0.5)
                 if not last_bead:
-                    send_log(f"[counter] ⚠️ 入室直後のビーズロード空 → 新シュー/シャッフル疑い → 退室")
+                    send_log("[counter] Empty board on entry — exiting")
                     try:
                         mark_table_exited(current_name)
                         executor.exit_table()
@@ -1963,7 +1963,7 @@ def _run_bet_session_inner(config: dict, stop_event: threading.Event, skip_event
                 # Validate in-table tereko state using actual bead road
                 in_cols = compute_column_lengths(last_bead)
                 if not is_tereko_state(in_cols):
-                    send_log(f"[counter] ⚠️ 入室後確認: テレコ条件未達(short={short_rate(in_cols, ENTRY_WINDOW):.0%}) → 退室")
+                    send_log(f"[counter] Condition not met ({short_rate(in_cols, ENTRY_WINDOW):.0%}) — exiting")
                     try:
                         mark_table_exited(current_name)
                         executor.exit_table()
@@ -1983,7 +1983,7 @@ def _run_bet_session_inner(config: dict, stop_event: threading.Event, skip_event
                 # If already in a long column at entry, exit immediately (e.g., 5+ drop ongoing)
                 exit_reason = should_exit(columns_since_entry, current_col_len)
                 if exit_reason:
-                    send_log(f"[counter] ⚠️ 入室直後に退室判定: {current_name} ({exit_reason})")
+                    send_log(f"[counter] Exit on entry: {exit_reason}")
                     try:
                         mark_table_exited(current_name)
                         executor.exit_table()
@@ -1999,7 +1999,7 @@ def _run_bet_session_inner(config: dict, stop_event: threading.Event, skip_event
                 _pre_bead = executor.read_bead_road() or ""
                 if _pre_bead and last_bead and len(_pre_bead) < len(last_bead):
                     # ビーズロードが短くなった → 新シュー
-                    send_log("[counter] ⚠️ 新シュー検出 (bead shorter) → last_non_tie リセット → 退室")
+                    send_log("[counter] Board reset detected — exiting")
                     last_non_tie = None
                     last_bead = _pre_bead
                     try:
@@ -2011,7 +2011,7 @@ def _run_bet_session_inner(config: dict, stop_event: threading.Event, skip_event
                     current_name = None
                     continue
                 if not _pre_bead:
-                    send_log("[counter] ⚠️ ビーズロード空 → シャッフル中 → 退室")
+                    send_log("[counter] Empty board — exiting")
                     try:
                         mark_table_exited(current_name)
                         executor.exit_table()
@@ -2029,7 +2029,7 @@ def _run_bet_session_inner(config: dict, stop_event: threading.Event, skip_event
             side = decide_counter_bet(last_non_tie)
             if side is None:
                 # 前手がない → 1ラウンド観測のみ (run_round は使わない)
-                send_log("[counter] SKIP (前手なし) → 観測待ち")
+                send_log("[counter] Observing...")
                 fallback = _wait_bead_change(last_bead, timeout_sec=120.0)
                 if fallback:
                     last_bead, hand_fb = fallback
@@ -2041,13 +2041,13 @@ def _run_bet_session_inner(config: dict, stop_event: threading.Event, skip_event
             # counter_session が None (flat mode) の場合は簡易セッションを使う
             if counter_session is not None:
                 from marubatsu_strategy import SEQ as _SEQ
-                send_log(f"[counter] BET {side.upper()} (〇✖ SEQ[{counter_session.tracker.current_unit_idx}])")
+                send_log(f"[counter] BET {side.upper()} ${counter_session.get_bet_amount():.0f}")
                 round_result = counter_session.run_round(
                     lambda: not stop_event.is_set(),
                     side=side,
                 )
                 if round_result.get("action") == "exit":
-                    send_log("[counter] ⚠️ run_round exit → 退室して再探索")
+                    send_log("[counter] Round exit — re-scanning")
                     try:
                         mark_table_exited(current_name)
                         executor.exit_table()
@@ -2083,14 +2083,14 @@ def _run_bet_session_inner(config: dict, stop_event: threading.Event, skip_event
                 partial_detected = False
                 if actual_total > 0 and rr_ba and abs(actual_total - rr_ba) > 0.5:
                     partial_detected = True
-                    send_log(f"[counter] ⚠️ 部分BET検出: 計画${rr_ba:.0f} → 実際${actual_total:.2f}")
+                    send_log(f"[counter] Partial: planned ${rr_ba:.0f} actual ${actual_total:.2f}")
                     rr_ba = actual_total
 
                 if not bet_confirmed:
                     chip_fail_streak += 1
-                    send_log("[counter] ⚠️ BET未確認 → GUI更新スキップ")
+                    send_log("[counter] Unconfirmed — skipped")
                     if chip_fail_streak >= 2:
-                        send_log(f"[counter] ⚠️ チップ失敗{chip_fail_streak}連続 → 退室")
+                        send_log(f"[counter] Chip fail x{chip_fail_streak} — exiting")
                         try:
                             mark_table_exited(current_name)
                             executor.exit_table()
@@ -2159,7 +2159,7 @@ def _run_bet_session_inner(config: dict, stop_event: threading.Event, skip_event
                     send_shoe_history(counter_session.tracker.sets, chip_base)
 
                 if partial_detected and chip_fail_streak >= 2:
-                    send_log("[counter] ⚠️ 部分BETが連続 → 退室して再探索")
+                    send_log("[counter] Partial streak — re-scanning")
                     try:
                         mark_table_exited(current_name)
                         executor.exit_table()
@@ -2175,7 +2175,7 @@ def _run_bet_session_inner(config: dict, stop_event: threading.Event, skip_event
                 # flat mode: 直接BET
                 send_log(f"[counter] BET {side.upper()} ${FLAT_BET_AMOUNT:.0f} (flat)")
                 if not executor.wait_for_betting_phase(timeout=120, skip_round=False):
-                    send_log("[counter] ⚠️ BETフェーズ待ちタイムアウト → 退室")
+                    send_log("[counter] Phase timeout — exiting")
                     try:
                         mark_table_exited(current_name)
                         executor.exit_table()
@@ -2189,12 +2189,12 @@ def _run_bet_session_inner(config: dict, stop_event: threading.Event, skip_event
                 if not placed:
                     actual = executor._get_total_bet()
                     if not actual or actual < 0.5:
-                        send_log("[counter] BET失敗 → 継続")
+                        send_log("[counter] BET failed — continuing")
                         continue
 
                 result_info = executor.wait_for_result(timeout=90, bet_amount=FLAT_BET_AMOUNT)
                 if not result_info or result_info.get("result") in (None, "unknown"):
-                    send_log("[counter] ⚠️ 結果不明 → 退室")
+                    send_log("[counter] Result unknown — exiting")
                     try:
                         mark_table_exited(current_name)
                         executor.exit_table()
@@ -2225,9 +2225,9 @@ def _run_bet_session_inner(config: dict, stop_event: threading.Event, skip_event
                 bet_confirmed = actual_total > 0
                 if not bet_confirmed:
                     chip_fail_streak += 1
-                    send_log("[counter] ⚠️ BET未確認 → GUI更新スキップ")
+                    send_log("[counter] Unconfirmed — skipped")
                     if chip_fail_streak >= 2:
-                        send_log(f"[counter] ⚠️ チップ失敗{chip_fail_streak}連続 → 退室")
+                        send_log(f"[counter] Chip fail x{chip_fail_streak} — exiting")
                         try:
                             mark_table_exited(current_name)
                             executor.exit_table()
@@ -2279,7 +2279,7 @@ def _run_bet_session_inner(config: dict, stop_event: threading.Event, skip_event
                 })
                 _flush_daily_summary(table_name=current_name or "")
                 if chip_fail_streak >= 2:
-                    send_log("[counter] ⚠️ 部分BETが連続 → 退室して再探索")
+                    send_log("[counter] Partial streak — re-scanning")
                     try:
                         mark_table_exited(current_name)
                         executor.exit_table()
@@ -2298,7 +2298,7 @@ def _run_bet_session_inner(config: dict, stop_event: threading.Event, skip_event
 
             # ── run_round / flat の結果を処理 ──
             if round_result.get("action") == "exit":
-                send_log("[counter] ⚠️ run_round exit → 退室して再探索")
+                send_log("[counter] Round exit — re-scanning")
                 try:
                     mark_table_exited(current_name)
                     executor.exit_table()
@@ -2333,7 +2333,7 @@ def _run_bet_session_inner(config: dict, stop_event: threading.Event, skip_event
             # 退室判定
             exit_reason = should_exit(columns_since_entry, current_col_len)
             if exit_reason:
-                send_log(f"[counter] 退室: {current_name} ({exit_reason})")
+                send_log(f"[counter] Exited: {exit_reason}")
                 send_action(f"Exiting: {exit_reason}")
                 try:
                     mark_table_exited(current_name)
@@ -2389,14 +2389,14 @@ def _run_bet_session_inner(config: dict, stop_event: threading.Event, skip_event
         if counter_session is not None:
             try:
                 counter_session._save_state()
-                send_log("[counter] ローカル状態保存完了")
+                send_log("[counter] State saved (local)")
             except Exception:
                 pass
             try:
                 _schedule_session_state_sync(user_email, counter_session, user_id, session_api_key)
-                send_log("[counter] Supabase セッション保存完了")
+                send_log("[counter] State synced (cloud)")
             except Exception as e:
-                send_log(f"[counter] Supabase 保存失敗: {e}")
+                send_log(f"[counter] Cloud sync failed: {e}")
         try:
             executor.exit_table()
         except Exception:

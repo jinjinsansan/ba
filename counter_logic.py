@@ -60,11 +60,11 @@ def should_exit(columns_since_entry: list[int], current_column_length: int) -> s
 
     if EXIT_DROP5_IMMEDIATE:
         if any(L >= 5 for L in check) or current_column_length >= 5:
-            return "5落ち発生"
+            return "streak-5"
 
     drop3_count = sum(1 for L in check if L >= 3)
     if drop3_count >= EXIT_DROP3_LIMIT:
-        return f"3落ち以上×{drop3_count}"
+        return f"streak-3x{drop3_count}"
 
     return None
 
