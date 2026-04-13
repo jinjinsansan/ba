@@ -1005,8 +1005,9 @@ async def create_session(
     with _sessions_lock:
         existing = get_or_load(req.user_id)
         if existing and req.resume:
+            desired_set_size = req.counter_set_size or (SET_SIZE_COUNTER if req.counter_mode else 7)
             mode_changed = existing.counter_mode != req.counter_mode
-            size_changed = req.counter_set_size and existing.set_size != req.counter_set_size
+            size_changed = existing.set_size != desired_set_size
             if mode_changed or size_changed:
                 existing.delete_state()
                 _SESSIONS.pop(req.user_id, None)

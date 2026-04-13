@@ -2076,8 +2076,10 @@ def _run_bet_session_inner(config: dict, stop_event: threading.Event, skip_event
                     current_tid = None
                     current_name = None
                     continue
+                prev_len = len(last_bead or "")
+                if prev_len == 0 or len(_pre_bead) > prev_len:
+                    last_non_tie = _last_non_tie_from_seq(_pre_bead) or last_non_tie
                 last_bead = _pre_bead
-                last_non_tie = _last_non_tie_from_seq(last_bead) or last_non_tie
             except Exception:
                 pass
 

@@ -4,6 +4,7 @@ const $ = (sel) => document.querySelector(sel);
 const $$ = (sel) => document.querySelectorAll(sel);
 
 let isRunning = false;
+let _currentBetMode = 'counter';
 let logVisible = true;
 
 // --- Title Bar ---
@@ -575,6 +576,7 @@ $('#btnSettings').addEventListener('click', async () => {
 });
 $('#settingsClose').addEventListener('click', () => $('#settingsModal').classList.add('hidden'));
 $('#btnSaveSettings').addEventListener('click', async () => {
+  const requestedMode = normalizeBetMode($('#inputBetMode').value || 'counter');
   const settings = {
     license_key: $('#inputLicense').value.trim(),
     chip_base: parseFloat($('#inputChipBase').value) || 1,
@@ -585,8 +587,13 @@ $('#btnSaveSettings').addEventListener('click', async () => {
     telegram_chat_id: $('#inputTelegramChat').value.trim(),
     user_email: $('#inputUserEmail').value.trim(),
     dry_run: $('#inputDryRun').checked,
-    bet_mode: $('#inputBetMode').value || '1drop',
+    bet_mode: requestedMode,
   };
+  if (isRunning && requestedMode !== _currentBetMode) {
+    addLog('BETモードは稼働中に切り替えできません。停止後に変更してください。', 'warn');
+    settings.bet_mode = _currentBetMode;
+    if ($('#inputBetMode')) $('#inputBetMode').value = _currentBetMode;
+  }
   localStorage.setItem('valhalla_settings', JSON.stringify(settings));
   $('#settingsModal').classList.add('hidden');
   addLog(`Settings saved. Base:$${settings.chip_base} Target:$${settings.profit_target} ProfitSessions:${settings.profit_session_limit} LossCut:$${settings.loss_cut}`, 'info');
@@ -602,12 +609,7 @@ $('#btnSaveSettings').addEventListener('click', async () => {
           loss_cut: settings.loss_cut,
         },
       });
-      // Live BET mode switch
-      await window.valhalla.sendCommand({
-        type: 'change_mode',
-        mode: settings.bet_mode,
-      });
-      addLog(`Live config update sent (profit/loss + mode: ${settings.bet_mode}).`, 'info');
+      addLog(`Live config update sent (profit/loss).`, 'info');
     } catch (e) {
       addLog(`Live update failed: ${e.message || e}`, 'lose');
     }
@@ -660,6 +662,7 @@ function loadSettings() {
     return { ...DEFAULT_SETTINGS };
   }
 }
+_currentBetMode = normalizeBetMode(loadSettings().bet_mode || 'counter');
 
 // --- Developer Mode ---
 const DEV_PASSWORD = 'laplace1749';
@@ -1136,6 +1139,7 @@ window.valhalla.onAgentMessage((msg) => {
 
     case 'mode_changed': {
       const nextMode = normalizeBetMode(msg.mode);
+      _currentBetMode = nextMode;
       if ($('#inputBetMode')) $('#inputBetMode').value = nextMode;
       addLog(`BET mode → ${nextMode}`, 'info');
       break;
