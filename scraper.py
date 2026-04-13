@@ -207,14 +207,33 @@ class BaccaratScraper:
         if config.VIDEO_BLOCK_MEDIA:
             try:
                 def _route_media(route, request):
-                    if request.resource_type == "media":
+                    url = request.url
+                    rtype = request.resource_type
+                    # Block media + video stream HTTP requests
+                    if rtype == "media" or "websocketstream" in url or ".m3u8" in url or ".ts" in url:
                         route.abort()
                     else:
                         route.continue_()
                 self.page.route("**/*", _route_media)
-                logger.info("Video media requests blocked")
+                logger.info("Video media/stream requests blocked")
             except Exception as e:
                 logger.warning(f"Media block設定失敗（続行）: {e}")
+            # Block video WebSocket connections
+            try:
+                _orig_ws_handler = getattr(self, '_on_ws_for_video_block', None)
+                def _block_video_ws(ws):
+                    url = ws.url
+                    if "websocketstream" in url:
+                        logger.info(f"Video WS blocked: {url[:80]}")
+                        try:
+                            ws.close()
+                        except Exception:
+                            pass
+                        return
+                self.page.on("websocket", _block_video_ws)
+                logger.info("Video WebSocket blocking enabled")
+            except Exception as e:
+                logger.warning(f"Video WS block設定失敗（続行）: {e}")
 
     @staticmethod
     def _resolve_executable_path() -> str | None:
