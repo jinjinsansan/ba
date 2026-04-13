@@ -18,7 +18,7 @@ import threading
 import time
 import logging
 import io
-from datetime import datetime
+from datetime import datetime, timezone, timedelta
 import urllib.request
 import urllib.error
 import urllib.parse
@@ -353,6 +353,54 @@ def _post_session_state_to_server(email: str, state: dict, api_key: str = "") ->
         pass
 
 
+def _jst_date_str() -> str:
+    return datetime.now(timezone(timedelta(hours=9))).strftime("%Y-%m-%d")
+
+
+def _post_daily_settlement(email: str, net_profit: float, api_key: str = "", date_str: str = "") -> tuple[bool, str]:
+    key = api_key or _SESSION_API_KEY
+    if not email or not key:
+        return False, "missing email/api_key"
+    payload = json.dumps({
+        "email": email,
+        "api_key": key,
+        "date": date_str or _jst_date_str(),
+        "net_profit": float(net_profit),
+    }).encode("utf-8")
+    url = f"{_SESSION_SITE_URL}/api/cron/settle"
+    req = urllib.request.Request(
+        url,
+        data=payload,
+        headers={"Content-Type": "application/json", "User-Agent": "LAPLACE-engine/1.0"},
+        method="POST",
+    )
+    try:
+        with urllib.request.urlopen(req, timeout=10):
+            return True, ""
+    except urllib.error.HTTPError as e:
+        if getattr(e, "code", None) == 409:
+            return True, "already settled"
+        try:
+            detail = e.read().decode("utf-8", errors="ignore")
+        except Exception:
+            detail = str(e)
+        return False, f"http {getattr(e, 'code', 'error')}: {detail}"
+    except Exception as e:
+        return False, str(e)
+
+
+def _post_daily_settlement_retry(email: str, net_profit: float, api_key: str = "", date_str: str = "",
+                                 attempts: int = 3, base_delay: float = 2.0) -> tuple[bool, str]:
+    last_err = ""
+    for idx in range(attempts):
+        ok, err = _post_daily_settlement(email, net_profit, api_key, date_str)
+        if ok:
+            return True, err
+        last_err = err
+        time.sleep(base_delay * (idx + 1))
+    return False, last_err
+
+
 def _schedule_session_state_sync(email: str, session, user_id: str = "", api_key: str = "") -> None:
     global _session_sync_inflight, _session_sync_last
     key = api_key or _SESSION_API_KEY
@@ -617,16 +665,67 @@ def _run_bet_session_inner(config: dict, stop_event: threading.Event, skip_event
     # Legacy alias: existing code uses `notifier` with .send(), .notify_*() — use UserNotifier
     notifier = user_notifier
 
-    daily_date = datetime.now().strftime("%Y-%m-%d")
+    daily_date = _jst_date_str()
     daily_profit = 0.0
     daily_sessions = 0
     daily_profit_sessions = 0
     daily_loss_sessions = 0
+    pending_settlements: list[dict] = []
+    settlement_lock = threading.Lock()
+    settlement_inflight = False
+
+    def _kick_settlement_worker():
+        nonlocal settlement_inflight
+        if settlement_inflight:
+            return
+        if not pending_settlements:
+            return
+        if not user_email or not session_api_key:
+            return
+        settlement_inflight = True
+
+        def _worker():
+            nonlocal settlement_inflight
+            try:
+                while True:
+                    with settlement_lock:
+                        item = pending_settlements[0] if pending_settlements else None
+                    if not item:
+                        break
+                    ok, err = _post_daily_settlement_retry(
+                        user_email,
+                        item["net_profit"],
+                        session_api_key,
+                        item["date"],
+                    )
+                    if ok:
+                        send_log(f"[settle] posted {item['date']} net=${item['net_profit']:.2f}")
+                        with settlement_lock:
+                            if pending_settlements:
+                                pending_settlements.pop(0)
+                    else:
+                        send_log(f"[settle] failed {item['date']}: {err}")
+                        break
+                    time.sleep(1)
+            finally:
+                settlement_inflight = False
+
+        threading.Thread(target=_worker, daemon=True).start()
+
+    def _enqueue_settlement(date_str: str, net_profit: float):
+        with settlement_lock:
+            if pending_settlements and pending_settlements[-1]["date"] == date_str:
+                pending_settlements[-1]["net_profit"] = net_profit
+            else:
+                pending_settlements.append({"date": date_str, "net_profit": float(net_profit)})
+        _kick_settlement_worker()
 
     def _flush_daily_summary(force: bool = False, table_name: str = ""):
         nonlocal daily_date, daily_profit, daily_sessions, daily_profit_sessions, daily_loss_sessions
-        today = datetime.now().strftime("%Y-%m-%d")
+        today = _jst_date_str()
         if not force and today == daily_date:
+            if pending_settlements:
+                _kick_settlement_worker()
             return
         if daily_sessions > 0 or abs(daily_profit) >= 0.01:
             try:
@@ -640,6 +739,13 @@ def _run_bet_session_inner(config: dict, stop_event: threading.Event, skip_event
                 )
             except Exception as e:
                 logger.warning(f"Daily summary notify failed: {e}")
+            try:
+                if user_email and session_api_key:
+                    _enqueue_settlement(daily_date, daily_profit)
+                else:
+                    send_log("[settle] skipped (missing user_email/api_key)")
+            except Exception as e:
+                logger.warning(f"Daily settlement post failed: {e}")
         daily_date = today
         daily_profit = 0.0
         daily_sessions = 0
@@ -2273,7 +2379,13 @@ def _run_bet_session_inner(config: dict, stop_event: threading.Event, skip_event
 
         # === Shutdown (counter mode) ===
         send_action("Stopping...")
-        # Supabase にセッション状態を保存 (STOP時に必ず実行)
+        # Telegram通知 (ブラウザ停止前に送る)
+        _flush_daily_summary(force=True, table_name=current_name or "")
+        try:
+            composite.on_shutdown(user_label, "Normal stop")
+        except Exception:
+            pass
+        # Supabase にセッション状態を保存
         if counter_session is not None:
             try:
                 counter_session._save_state()
@@ -2294,11 +2406,6 @@ def _run_bet_session_inner(config: dict, stop_event: threading.Event, skip_event
         except Exception:
             pass
         send_action("Stopped.")
-        _flush_daily_summary(force=True, table_name=current_name or "")
-        try:
-            composite.on_shutdown(user_label, "Normal stop")
-        except Exception:
-            pass
         _active_session = None
         return
 
