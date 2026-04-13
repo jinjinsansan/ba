@@ -122,6 +122,7 @@ _pending_config_update = {}
 # BET mode: mutable box for cross-thread access (stdin_reader ↔ bet loop)
 _bet_mode_box = ["1drop"]       # ユーザー選択モード: "normal" | "1drop" | "mix"
 _effective_mode_box = ["1drop"] # 実行時モード（mixの場合 normal→1drop に自動切替）
+_profit_session_limit_box = [0]  # 利確回数上限（0=無制限）
 
 MAX_ROUNDS = 9999
 
@@ -557,7 +558,7 @@ def run_bet_session(config: dict, stop_event: threading.Event, skip_event: threa
 
 
 def _run_bet_session_inner(config: dict, stop_event: threading.Event, skip_event: threading.Event = None):
-    global _active_session, _pending_config_update, _bet_mode_box, _effective_mode_box
+    global _active_session, _pending_config_update, _bet_mode_box, _effective_mode_box, _profit_session_limit_box
     """Main BET loop — runs in a thread."""
     # BETモード初期化
     _bet_mode_box[0] = config.get("bet_mode", "1drop")
@@ -598,6 +599,14 @@ def _run_bet_session_inner(config: dict, stop_event: threading.Event, skip_event
     chip_base = config.get("chip_base", 1.0)
     profit_target_dollars = config.get("profit_target", 50)
     loss_cut_dollars = config.get("loss_cut", 200)
+    profit_session_limit = config.get("profit_session_limit", config.get("profit_sessions_limit", 0))
+    try:
+        profit_session_limit = int(profit_session_limit)
+    except Exception:
+        profit_session_limit = 0
+    if profit_session_limit < 0:
+        profit_session_limit = 0
+    _profit_session_limit_box[0] = profit_session_limit
     dry_run = config.get("dry_run", False)
     resume = config.get("resume", False)
     user_email = (config.get("user_email") or "").strip()
@@ -643,6 +652,8 @@ def _run_bet_session_inner(config: dict, stop_event: threading.Event, skip_event
 
     send_log(f"Start mode: {'RESUME' if resume else 'RESET'} (dry_run={dry_run})")
     send_log(f"Config: chip_base=${chip_base} profit_target=${profit_target_dollars} (={profit_stop_chips}chips) loss_cut=${loss_cut_dollars} (={loss_cut_chips}chips)")
+    if profit_session_limit:
+        send_log(f"Config: profit_session_limit={profit_session_limit}")
 
     if resume and not supabase_state and resume_results:
         _is_counter = _effective_mode_box[0] in ("counter", "counter_flat", "counter_seq7")
@@ -679,6 +690,7 @@ def _run_bet_session_inner(config: dict, stop_event: threading.Event, skip_event
     daily_sessions = 0
     daily_profit_sessions = 0
     daily_loss_sessions = 0
+    profit_sessions_done = 0
     pending_settlements: list[dict] = []
     settlement_lock = threading.Lock()
     settlement_inflight = False
@@ -2342,7 +2354,16 @@ def _run_bet_session_inner(config: dict, stop_event: threading.Event, skip_event
                                 )
                         except Exception as e:
                             logger.warning(f"Reset notify failed (counter flat): {e}")
+                        if is_profit:
+                            profit_sessions_done += 1
+                            limit = _profit_session_limit_box[0]
+                            if limit and profit_sessions_done >= limit:
+                                send_action("Profit session limit reached — stopping")
+                                send_log(f"[profit-limit] reached {profit_sessions_done}/{limit} — stopping")
+                                stop_event.set()
                         money_pnl = 0.0
+                        if stop_event.is_set():
+                            break
                 if chip_fail_streak >= 2:
                     send_log("[counter] Partial streak — re-scanning")
                     try:
@@ -2449,7 +2470,16 @@ def _run_bet_session_inner(config: dict, stop_event: threading.Event, skip_event
                 except Exception as e:
                     logger.warning(f"Reset notify failed (counter): {e}")
                 counter_session.reset_session(reason)
+                if is_profit:
+                    profit_sessions_done += 1
+                    limit = _profit_session_limit_box[0]
+                    if limit and profit_sessions_done >= limit:
+                        send_action("Profit session limit reached — stopping")
+                        send_log(f"[profit-limit] reached {profit_sessions_done}/{limit} — stopping")
+                        stop_event.set()
                 money_pnl = 0.0
+                if stop_event.is_set():
+                    break
 
         # === Shutdown (counter mode) ===
         send_action("Stopping...")
@@ -3883,6 +3913,14 @@ def _run_bet_session_inner(config: dict, stop_event: threading.Event, skip_event
             # ── D'. 利確/損切り後の予防リカバリ ──
             # 完全な区切りなので最も安全なリフレッシュタイミング
             # iframe 劣化を完全リセット + 新しい推奨テーブルで再開
+            if is_win:
+                profit_sessions_done += 1
+                limit = _profit_session_limit_box[0]
+                if limit and profit_sessions_done >= limit:
+                    send_action("Profit session limit reached — stopping")
+                    send_log(f"[profit-limit] reached {profit_sessions_done}/{limit} — stopping")
+                    stop_event.set()
+                    break
             send_log(f"[proactive-recovery] {reason_en} → リカバリ")
             if not proactive_full_recovery(reason_en):
                 break
@@ -4140,6 +4178,16 @@ def main():
                             new_lc_chips = max(1, int(round(new_lc / max(chip_base_val, 0.01))))
                             s.loss_cut = new_lc_chips
                             send_log(f"Loss cut updated: ${new_lc:.0f} ({new_lc_chips} chips)")
+                        if "profit_session_limit" in cfg or "profit_sessions_limit" in cfg:
+                            limit_val = cfg.get("profit_session_limit", cfg.get("profit_sessions_limit", 0))
+                            try:
+                                limit_val = int(limit_val)
+                            except Exception:
+                                limit_val = 0
+                            if limit_val < 0:
+                                limit_val = 0
+                            _profit_session_limit_box[0] = limit_val
+                            send_log(f"Profit session limit updated: {limit_val}")
                         # Sync to remote session if applicable
                         if hasattr(s, "update_config") and hasattr(s, "client"):
                             try:
@@ -4149,6 +4197,15 @@ def main():
                     else:
                         # Session not yet initialized, buffer for later
                         _pending_config_update.update(cfg)
+                        if "profit_session_limit" in cfg or "profit_sessions_limit" in cfg:
+                            limit_val = cfg.get("profit_session_limit", cfg.get("profit_sessions_limit", 0))
+                            try:
+                                limit_val = int(limit_val)
+                            except Exception:
+                                limit_val = 0
+                            if limit_val < 0:
+                                limit_val = 0
+                            _profit_session_limit_box[0] = limit_val
                         send_log(f"Config buffered (session starting): {cfg}")
 
                 elif msg_type == "change_mode":

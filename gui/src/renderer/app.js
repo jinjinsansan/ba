@@ -235,6 +235,7 @@ const DEFAULT_SETTINGS = {
   license_key: '',
   chip_base: 1,
   profit_target: 50,
+  profit_session_limit: 0,
   loss_cut: 200,
   telegram_bot_token: '',
   telegram_chat_id: '',
@@ -246,6 +247,11 @@ const ALLOWED_BET_MODES = new Set(['counter', 'counter_seq7']);
 
 function normalizeBetMode(mode) {
   return ALLOWED_BET_MODES.has(mode) ? mode : 'counter';
+}
+
+function normalizeProfitSessionLimit(value) {
+  const n = Number.isFinite(Number(value)) ? Math.floor(Number(value)) : 0;
+  return n >= 0 ? n : 0;
 }
 
 const SITE_URL = 'https://bafather.uk';
@@ -326,7 +332,7 @@ function _getGuiState() {
     session_total: sessionTotal,
     daily_pnl: loadDailyPnl(),
     results: results.slice(-200),
-    bet_mode: (loadSettings().bet_mode || '1drop'),
+    bet_mode: (loadSettings().bet_mode || 'counter'),
     updated_at: new Date().toISOString(),
   };
 }
@@ -524,6 +530,7 @@ $('#btnSettings').addEventListener('click', () => {
   $('#inputLicense').value = s.license_key || '';
   $('#inputChipBase').value = s.chip_base;
   $('#inputProfitTarget').value = s.profit_target;
+  if ($('#inputProfitSessionLimit')) $('#inputProfitSessionLimit').value = s.profit_session_limit ?? 0;
   $('#inputLossCut').value = s.loss_cut;
   if ($('#inputTelegramToken')) $('#inputTelegramToken').value = s.telegram_bot_token || '';
   $('#inputTelegramChat').value = s.telegram_chat_id || '';
@@ -544,6 +551,7 @@ $('#btnSaveSettings').addEventListener('click', async () => {
     license_key: $('#inputLicense').value.trim(),
     chip_base: parseFloat($('#inputChipBase').value) || 1,
     profit_target: parseFloat($('#inputProfitTarget').value) || 50,
+    profit_session_limit: normalizeProfitSessionLimit($('#inputProfitSessionLimit')?.value),
     loss_cut: parseFloat($('#inputLossCut').value) || 200,
     telegram_bot_token: ($('#inputTelegramToken') ? $('#inputTelegramToken').value.trim() : ''),
     telegram_chat_id: $('#inputTelegramChat').value.trim(),
@@ -553,7 +561,7 @@ $('#btnSaveSettings').addEventListener('click', async () => {
   };
   localStorage.setItem('valhalla_settings', JSON.stringify(settings));
   $('#settingsModal').classList.add('hidden');
-  addLog(`Settings saved. Base:$${settings.chip_base} Target:$${settings.profit_target} LossCut:$${settings.loss_cut}`, 'info');
+  addLog(`Settings saved. Base:$${settings.chip_base} Target:$${settings.profit_target} ProfitSessions:${settings.profit_session_limit} LossCut:$${settings.loss_cut}`, 'info');
 
   // Live-update profit_target & loss_cut if session is running
   if (isRunning) {
@@ -562,6 +570,7 @@ $('#btnSaveSettings').addEventListener('click', async () => {
         type: 'update_config',
         config: {
           profit_target: settings.profit_target,
+          profit_session_limit: settings.profit_session_limit,
           loss_cut: settings.loss_cut,
         },
       });
@@ -582,6 +591,7 @@ function loadSettings() {
     const stored = JSON.parse(localStorage.getItem('valhalla_settings') || '{}');
     const merged = { ...DEFAULT_SETTINGS, ...stored };
     merged.bet_mode = normalizeBetMode(merged.bet_mode);
+    merged.profit_session_limit = normalizeProfitSessionLimit(merged.profit_session_limit);
     return merged;
   } catch {
     return { ...DEFAULT_SETTINGS };
