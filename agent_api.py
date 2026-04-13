@@ -2246,7 +2246,7 @@ def _run_bet_session_inner(config: dict, stop_event: threading.Event, skip_event
                         current_name = None
                     continue
                 if actual_total > 0 and abs(actual_total - FLAT_BET_AMOUNT) > 0.5:
-                    send_log(f"[counter] ⚠️ 部分BET検出: 計画${FLAT_BET_AMOUNT:.0f} → 実際${actual_total:.2f}")
+                    send_log(f"[counter] Partial: planned ${FLAT_BET_AMOUNT:.0f} actual ${actual_total:.2f}")
                     chip_fail_streak += 1
                 else:
                     chip_fail_streak = 0
@@ -2358,7 +2358,7 @@ def _run_bet_session_inner(config: dict, stop_event: threading.Event, skip_event
             if counter_session is not None and round_result.get("should_reset"):
                 cp = counter_session.effective_profit()
                 is_profit = cp >= 0
-                reason = "利確" if is_profit else "損切り"
+                reason = "profit" if is_profit else "losscut"
                 money = cp * chip_base
                 daily_sessions += 1
                 if is_profit:
@@ -3809,7 +3809,7 @@ def _run_bet_session_inner(config: dict, stop_event: threading.Event, skip_event
                     composite.on_loss_cut(user_label, sess_num, money, hands_count, daily_profit, verification_mode, target_name or "")
             except Exception as e:
                 logger.warning(f"Reset notify failed: {e}")
-            session.reset_session("利確" if is_win else "損切り")
+            session.reset_session("profit" if is_win else "losscut")
             send_shoe_history(session.tracker.sets, chip_base)
 
             # ── D'. 利確/損切り後の予防リカバリ ──

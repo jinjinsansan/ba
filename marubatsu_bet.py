@@ -206,7 +206,7 @@ class MaruBatsuBetSession:
         money = cp * self.chip_base
         balance = self.executor.get_balance() if not self.dry_run else 0
 
-        is_profit = reason == "利確"
+        is_profit = reason in ("利確", "profit")
         emoji = "🎉" if is_profit else "🛑"
         label = "TARGET REACHED" if is_profit else "LIMIT REACHED"
         msg = (
