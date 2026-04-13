@@ -239,51 +239,32 @@ class UserNotifier(TelegramNotifier):
         super().__init__(token, chat, label="USER")
 
     def notify_startup(self, table_name: str, config: dict | None = None):
-        base = None
-        target = None
-        loss = None
-        if isinstance(config, dict):
-            base = config.get("chip_base")
-            target = config.get("profit_target")
-            loss = config.get("loss_cut")
-        details = ""
-        if base is not None and target is not None and loss is not None:
-            details = f"\nBase: ${base:.2f} | Target: ${target:.0f} | LossCut: ${loss:.0f}"
-        self.send(
-            f"🃏 LAPLACE started\n"
-            f"Table: {table_name}{details}"
-        )
+        self.send("▶ Engine online")
 
     def notify_shutdown(self, reason: str = ""):
-        self.send(f"⛔ LAPLACE stopped{': ' + reason if reason else ''}")
+        self.send(f"⏹ Engine offline{' — ' + reason if reason else ''}")
 
     def notify_profit_target(self, session_num: int, amount: float,
                              cumulative_today: float, table_name: str = ""):
-        table_line = f"\nTable: {table_name}" if table_name else ""
         self.send(
-            f"🎉 Profit target hit (Session #{session_num})\n"
-            f"Locked: +${amount:.0f}\n"
-            f"Today: {cumulative_today:+.0f}{table_line}"
+            f"🎉 TARGET REACHED #{session_num}\n"
+            f"+${amount:.0f} | Today: {cumulative_today:+.0f}"
         )
 
     def notify_loss_cut(self, session_num: int, amount: float,
                         cumulative_today: float, table_name: str = ""):
-        table_line = f"\nTable: {table_name}" if table_name else ""
         self.send(
-            f"⚠️ Loss cut (Session #{session_num})\n"
-            f"Locked: -${abs(amount):.0f}\n"
-            f"Today: {cumulative_today:+.0f}{table_line}"
+            f"🛑 LIMIT REACHED #{session_num}\n"
+            f"-${abs(amount):.0f} | Today: {cumulative_today:+.0f}"
         )
 
     def notify_daily_summary(self, date_str: str, total_sessions: int,
                               profit_sessions: int, loss_sessions: int,
                               net_profit: float, table_name: str = ""):
         sign = "+" if net_profit >= 0 else ""
-        table_line = f"\nLast table: {table_name}" if table_name else ""
         self.send(
-            f"📊 Daily Summary — {date_str}\n"
-            f"Sessions: {total_sessions} (Profit {profit_sessions} / Loss {loss_sessions})\n"
-            f"Net: {sign}${net_profit:.0f}{table_line}"
+            f"📊 Daily | {date_str}\n"
+            f"{total_sessions} rounds ({profit_sessions}P / {loss_sessions}L) | {sign}${net_profit:.0f}"
         )
 
 

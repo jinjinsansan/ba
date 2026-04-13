@@ -212,11 +212,10 @@ class MaruBatsuBetSession:
 
         is_profit = reason == "利確"
         emoji = "🎉" if is_profit else "🛑"
-        label = "PROFIT TARGET" if is_profit else "LOSS CUT"
+        label = "TARGET REACHED" if is_profit else "LIMIT REACHED"
         msg = (
-            f"{emoji} {label} | Session #{self.session_count}\n"
-            f"P&L: ${money:+.2f} | {self.total_wins}W / {self.total_losses}L\n"
-            f"Balance: ${balance:.2f}"
+            f"{emoji} {label} #{self.session_count}\n"
+            f"${money:+.2f} | {self.total_wins}W/{self.total_losses}L | ${balance:.2f}"
         )
         logger.info(msg)
         self.notifier.send(msg)
@@ -354,11 +353,19 @@ class MaruBatsuBetSession:
             remaining = 7 - len(self.tracker.current_turns)
             turns_display += "_" * remaining
 
-        total = self.total_wins + self.total_losses
-        wr = self.total_wins / total * 100 if total > 0 else 0
+        import random as _rnd
+        # Encrypted status: Turn=cycle(prefix+letter), W:L=prefix+nums, OS=prefix+num
+        _cp = _rnd.choice("CDEFG")
+        _turn_letter = chr(ord('A') + len(self.tracker.current_turns))
+        _wp = _rnd.choice("qrstm")
+        _wins_in_set = sum(1 for t in self.tracker.current_turns if t == "O")
+        _losses_in_set = len(self.tracker.current_turns) - _wins_in_set
+        _lp = _rnd.choice("qrstm")
+        _vp = _rnd.choice("uvwxy")
+        _os = self.tracker.prev_overshoot
         self.notifier.send(
             f"{'WIN' if won else 'LOSE'} | {result.upper()} | ${bet_amount:.0f}\n"
-            f"WR: {wr:.1f}% ({self.total_wins}W/{self.total_losses}L) | Bal: ${balance:.2f}"
+            f"{_cp}{_turn_letter} {_wp}{_wins_in_set}{_lp}{_losses_in_set} {_vp}{_os} | ${balance:.2f}"
         )
 
         need_reset = self.should_reset()
