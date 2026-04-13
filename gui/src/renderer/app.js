@@ -940,12 +940,14 @@ window.valhalla.onAgentMessage((msg) => {
       if (msg.balance) {
         $('#balance').textContent = `$${msg.balance.toFixed(2)}`;
       }
-      // OS (overshoot) tag in BETS card
+      // OS (overshoot) tag in BETS card (removed from HTML, guard with null check)
       if (typeof msg.overshoot === 'number') {
         const osEl = $('#osValue');
-        const os = msg.overshoot;
-        osEl.textContent = `OS ${os}`;
-        osEl.className = 'os-tag ' + (os === 0 ? '' : os <= 2 ? 'safe' : os <= 4 ? 'warn' : 'danger');
+        if (osEl) {
+          const os = msg.overshoot;
+          osEl.textContent = `OS ${os}`;
+          osEl.className = 'os-tag ' + (os === 0 ? '' : os <= 2 ? 'safe' : os <= 4 ? 'warn' : 'danger');
+        }
       }
       // Developer panel
       updateDevPanel(msg);
