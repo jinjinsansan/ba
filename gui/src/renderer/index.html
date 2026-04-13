@@ -87,7 +87,7 @@
         <div class="stat-value" id="sessionPnl">$0.00</div>
       </div>
       <div class="stat-card">
-        <div class="stat-label">BETS <span class="os-tag" id="osValue">OS 0</span></div>
+        <div class="stat-label">BETS</div>
         <div class="stat-value" id="betCount">0W / 0L</div>
         <div id="testCounter" style="display:none; font-size:11px; color:#ffaa00; margin-top:6px; letter-spacing:1px;">🧪 TEST: 0W 0L 0T</div>
       </div>
@@ -97,48 +97,30 @@
       </div>
     </div>
 
-    <!-- Developer Mode Panel (hidden unless unlocked) -->
+    <!-- Signal Panel (hidden unless dev mode unlocked) -->
     <div class="section glass dev-panel hidden" id="devPanel">
-      <div class="section-header dev-header">
-        DEVELOPER VIEW <span class="dev-badge">DEV</span>
-      </div>
-      <div class="dev-grid">
-        <div class="dev-item">
-          <div class="dev-label">Current Unit Idx</div>
-          <div class="dev-value" id="devUnitIdx">-</div>
+      <div class="section-header dev-header">SIGNAL PANEL</div>
+      <div class="signal-grid">
+        <div class="signal-cell">
+          <div class="signal-value" id="sigCycle">--</div>
+          <div class="signal-label">CYCLE</div>
         </div>
-        <div class="dev-item">
-          <div class="dev-label">Current Unit ($)</div>
-          <div class="dev-value" id="devUnit">-</div>
+        <div class="signal-cell">
+          <div class="signal-value" id="sigRatio">--</div>
+          <div class="signal-label">RATIO</div>
         </div>
-        <div class="dev-item">
-          <div class="dev-label">Current Set</div>
-          <div class="dev-value" id="devSet">-</div>
+        <div class="signal-cell">
+          <div class="signal-value" id="sigDrift">--</div>
+          <div class="signal-label">DRIFT</div>
         </div>
-        <div class="dev-item">
-          <div class="dev-label">Turn in Set</div>
-          <div class="dev-value" id="devTurn">-/7</div>
-        </div>
-        <div class="dev-item">
-          <div class="dev-label">Set Profit (chip)</div>
-          <div class="dev-value" id="devSetProfit">-</div>
-        </div>
-        <div class="dev-item">
-          <div class="dev-label">Cumul. Profit (chip)</div>
-          <div class="dev-value" id="devCumProfit">-</div>
-        </div>
-        <div class="dev-item">
-          <div class="dev-label">Overshoot</div>
-          <div class="dev-value" id="devOvershoot">0</div>
-        </div>
-        <div class="dev-item">
-          <div class="dev-label">Total Bets</div>
-          <div class="dev-value" id="devTotalBets">0</div>
+        <div class="signal-cell">
+          <div class="signal-value" id="sigRound">--</div>
+          <div class="signal-label">ROUND</div>
         </div>
       </div>
-      <div class="dev-sets-container">
-        <div class="dev-label" style="padding:0 12px;">Set History (7 hands per line)</div>
-        <div class="dev-sets" id="devSets"></div>
+      <div class="signal-stream-container">
+        <div class="signal-stream-label">STREAM</div>
+        <div class="signal-stream" id="sigStream"></div>
       </div>
     </div>
 

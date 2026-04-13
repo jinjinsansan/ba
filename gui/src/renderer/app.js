@@ -635,37 +635,55 @@ $('#inputDevPassword').addEventListener('keypress', (e) => {
   if (e.key === 'Enter') $('#btnDevAuth').click();
 });
 
+// Encrypted signal helpers (same logic as Telegram)
+const _SIG_PREFIXES = 'CDEFG';
+const _SIG_WL_PREFIXES = 'QRSTM';
+const _SIG_OS_PREFIXES = 'UVWXY';
+function _rndChar(s) { return s[Math.floor(Math.random() * s.length)]; }
+function _turnToCode(turn) { return _rndChar(_SIG_PREFIXES) + String.fromCharCode(65 + (turn % 8)); }
+function _ratioToCode(w, l) { return _rndChar(_SIG_WL_PREFIXES) + w + _rndChar(_SIG_WL_PREFIXES) + l; }
+function _driftToCode(os) { return _rndChar(_SIG_OS_PREFIXES) + os; }
+
+// All O/X results as continuous stream (no set boundaries)
+let _signalStreamAll = '';
+
 function updateDevPanel(msg) {
   if (!isDevMode()) return;
-  if (typeof msg.current_unit_idx === 'number') $('#devUnitIdx').textContent = msg.current_unit_idx;
-  if (typeof msg.current_unit === 'number') $('#devUnit').textContent = `$${msg.current_unit}`;
-  if (typeof msg.set_count === 'number') $('#devSet').textContent = `#${msg.set_count + 1}`;
-  if (typeof msg.current_turn === 'number') $('#devTurn').textContent = `${msg.current_turn}/7`;
-  if (typeof msg.cumulative_profit === 'number') $('#devCumProfit').textContent = `${msg.cumulative_profit >= 0 ? '+' : ''}${msg.cumulative_profit}`;
-  if (typeof msg.overshoot === 'number') $('#devOvershoot').textContent = msg.overshoot;
-  if (typeof msg.total_bets === 'number') $('#devTotalBets').textContent = msg.total_bets;
+  const sc = $('#sigCycle');
+  const sr = $('#sigRatio');
+  const sd = $('#sigDrift');
+  const srd = $('#sigRound');
+  if (sc && typeof msg.current_turn === 'number') sc.textContent = _turnToCode(msg.current_turn);
+  if (sr && typeof msg.wins === 'number' && typeof msg.losses === 'number') {
+    // wins/losses in current set from turns_display
+    const td = msg.turns_display || '';
+    const sw = (td.match(/O/g) || []).length;
+    const sl = (td.match(/X/g) || []).length;
+    sr.textContent = _ratioToCode(sw, sl);
+  }
+  if (sd && typeof msg.overshoot === 'number') sd.textContent = _driftToCode(msg.overshoot);
+  if (srd && typeof msg.session_count === 'number') srd.textContent = `#${msg.session_count}`;
 }
 
 function renderDevSets(sets) {
   if (!isDevMode()) return;
-  const el = $('#devSets');
+  const el = $('#sigStream');
   if (!el) return;
   if (!sets || sets.length === 0) {
-    el.innerHTML = '<div style="color:var(--text-dim); padding:4px 12px;">No completed sets yet</div>';
+    if (!_signalStreamAll) el.innerHTML = '<span style="color:rgba(255,204,0,0.25)">AWAITING SIGNAL</span>';
     return;
   }
-  let html = '';
+  // Build continuous stream from all sets (no boundaries)
+  let stream = '';
   for (const s of sets) {
-    const marks = (s.results || '').split('').map(c =>
-      c === 'O' ? '<span class="set-mark-o">O</span>' : '<span class="set-mark-x">X</span>'
-    ).join('');
-    const sign = s.set_profit >= 0 ? '+' : '';
-    const os = (typeof s.overshoot === 'number') ? s.overshoot : '-';
-    const slashedCls = s.slashed ? ' slashed' : '';
-    const slashMark = s.slashed ? ' <span class="scissors">&#9986;</span>' : '';
-    html += `<div class="set-line${slashedCls}"><span class="set-index">#${s.set_index}</span>${marks}<span class="set-meta">${s.wins}W/${s.losses}L ${sign}${s.set_profit} OS:${os}${slashMark}</span></div>`;
+    for (const c of (s.results || '')) {
+      if (c === 'O') stream += '<span class="s-o">O</span>';
+      else if (c === 'X') stream += '<span class="s-x">X</span>';
+    }
   }
-  el.innerHTML = html;
+  _signalStreamAll = stream;
+  el.innerHTML = stream || '<span style="color:rgba(255,204,0,0.25)">AWAITING SIGNAL</span>';
+  el.scrollTop = el.scrollHeight;
 }
 
 // --- Log ---
