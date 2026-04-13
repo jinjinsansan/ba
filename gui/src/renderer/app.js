@@ -670,7 +670,13 @@ function updateDevPanel(msg) {
     }
   }
   if (sd && typeof msg.overshoot === 'number') sd.textContent = _driftToCode(msg.overshoot);
-  if (srd && typeof msg.session_count === 'number') srd.textContent = `#${msg.session_count}`;
+  // ROUND = total bets, color cycles per set (hidden set boundary indicator)
+  if (srd && typeof msg.total_bets === 'number') {
+    srd.textContent = `#${msg.total_bets}`;
+    const _setColors = ['#ff3366', '#ffcc00', '#00b8d4', '#ffffff', '#00ff88', '#c084fc'];
+    const setIdx = typeof msg.sets === 'number' ? msg.sets : 0;
+    srd.style.color = _setColors[setIdx % _setColors.length];
+  }
 
   // Stream: add one mark per hand (from pre_wins/pre_losses change)
   const el = $('#sigStream');
