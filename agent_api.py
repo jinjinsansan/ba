@@ -257,15 +257,19 @@ def _has_session_state(state: dict | None) -> bool:
     return False
 
 
-def _build_session_state_from_results(results: list, chip_base: float, profit_stop: int, loss_cut: int) -> dict | None:
+def _build_session_state_from_results(results: list, chip_base: float, profit_stop: int, loss_cut: int,
+                                      counter_mode: bool = False) -> dict | None:
     if not results or not isinstance(results, list):
         return None
     try:
-        from marubatsu_strategy import MaruBatsuTracker
+        from marubatsu_strategy import MaruBatsuTracker, SEQ_COUNTER, SET_SIZE_COUNTER
     except Exception:
         return None
 
-    tracker = MaruBatsuTracker(chip_base=chip_base)
+    if counter_mode:
+        tracker = MaruBatsuTracker(chip_base=chip_base, seq=SEQ_COUNTER, set_size=SET_SIZE_COUNTER)
+    else:
+        tracker = MaruBatsuTracker(chip_base=chip_base)
     total_wins = 0
     total_losses = 0
     total_ties = 0
@@ -640,8 +644,10 @@ def _run_bet_session_inner(config: dict, stop_event: threading.Event, skip_event
     send_log(f"Config: chip_base=${chip_base} profit_target=${profit_target_dollars} (={profit_stop_chips}chips) loss_cut=${loss_cut_dollars} (={loss_cut_chips}chips)")
 
     if resume and not supabase_state and resume_results:
+        _is_counter = _effective_mode_box[0] in ("counter", "counter_flat")
         built_state = _build_session_state_from_results(
-            resume_results, chip_base, profit_stop_chips, loss_cut_chips
+            resume_results, chip_base, profit_stop_chips, loss_cut_chips,
+            counter_mode=_is_counter,
         )
         if built_state:
             supabase_state = built_state

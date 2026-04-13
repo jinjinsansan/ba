@@ -136,7 +136,12 @@ class MaruBatsuBetSession:
             turns_display = state.get("turns_display", "")
             if isinstance(turns_display, str):
                 turns = list(turns_display)
-        self.tracker.current_turns = list(turns) if isinstance(turns, list) else []
+        restored_turns = list(turns) if isinstance(turns, list) else []
+        # set_size を超えるターンは前回のset_sizeが異なる場合のゴミ → クリア
+        if len(restored_turns) >= self.tracker.set_size:
+            logger.warning(f"Restored turns ({len(restored_turns)}) >= set_size ({self.tracker.set_size}) — clearing")
+            restored_turns = []
+        self.tracker.current_turns = restored_turns
         self.tracker.total_o = state.get("total_o", 0) or 0
         self.tracker.total_x = state.get("total_x", 0) or 0
         self.session_count = state.get("session_count", 0) or 0
@@ -157,7 +162,11 @@ class MaruBatsuBetSession:
             state = json.loads(self.state_path.read_text(encoding="utf-8"))
             for sd in state.get("sets", []):
                 self.tracker.sets.append(SetData(**sd))
-            self.tracker.current_turns = state.get("current_turns", [])
+            _lt = state.get("current_turns", [])
+            if len(_lt) >= self.tracker.set_size:
+                logger.warning(f"Loaded turns ({len(_lt)}) >= set_size ({self.tracker.set_size}) — clearing")
+                _lt = []
+            self.tracker.current_turns = _lt
             self.tracker.total_o = state.get("total_o", 0)
             self.tracker.total_x = state.get("total_x", 0)
             self.session_count = state.get("session_count", 0)
