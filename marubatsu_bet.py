@@ -354,14 +354,12 @@ class MaruBatsuBetSession:
             remaining = 7 - len(self.tracker.current_turns)
             turns_display += "_" * remaining
 
+        total = self.total_wins + self.total_losses
+        wr = self.total_wins / total * 100 if total > 0 else 0
         self.notifier.send(
             f"{'WIN' if won else 'LOSE'} | {result.upper()} | ${bet_amount:.0f}\n"
-            f"Balance: ${balance:.2f}"
+            f"WR: {wr:.1f}% ({self.total_wins}W/{self.total_losses}L) | Bal: ${balance:.2f}"
         )
-
-        # セット確定
-        if completed_set:
-            self._notify_set_complete(completed_set, balance)
 
         need_reset = self.should_reset()
         self._save_state()
@@ -383,12 +381,7 @@ class MaruBatsuBetSession:
         money_set = new_set.set_profit * self.chip_base
         money_cum = new_set.cumulative_profit * self.chip_base
 
-        msg = (
-            f"Round #{new_set.set_index} complete\n"
-            f"{new_set.wins}W / {new_set.losses}L | P&L: ${money_set:+.2f}\n"
-            f"Total: ${money_cum:+.2f} | Balance: ${balance:.2f}"
-        )
-        self.notifier.send(msg)
+        # Telegram通知は送らない (ログのみ)
         logger.info(
             f"Set #{new_set.set_index} 確定: {new_set.results} "
             f"{new_set.wins}/{new_set.losses} "
