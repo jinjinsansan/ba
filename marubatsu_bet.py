@@ -22,7 +22,7 @@ import json
 import logging
 from pathlib import Path
 
-from marubatsu_strategy import MaruBatsuTracker, SEQ, SetData
+from marubatsu_strategy import MaruBatsuTracker, SEQ, SEQ_COUNTER, SET_SIZE_COUNTER, SetData
 from notify import TelegramNotifier
 
 logger = logging.getLogger("baccarat.marubatsu_bet")
@@ -43,6 +43,7 @@ class MaruBatsuBetSession:
         dry_run: bool = False,
         profit_stop: int = PROFIT_STOP,
         resume: bool = True,
+        counter_mode: bool = False,
     ):
         self.executor = executor
         self.notifier = notifier
@@ -51,8 +52,14 @@ class MaruBatsuBetSession:
         self.profit_stop = profit_stop
         self.dry_run = dry_run
         self.resume = resume
+        self.counter_mode = counter_mode
 
-        self.tracker = MaruBatsuTracker(chip_base=chip_base)
+        if counter_mode:
+            self.tracker = MaruBatsuTracker(chip_base=chip_base, seq=SEQ_COUNTER, set_size=SET_SIZE_COUNTER)
+            self._active_seq = SEQ_COUNTER
+        else:
+            self.tracker = MaruBatsuTracker(chip_base=chip_base)
+            self._active_seq = SEQ
         self.session_count = 0
 
         self.total_bets = 0
@@ -170,7 +177,7 @@ class MaruBatsuBetSession:
 
     def get_bet_amount(self) -> float:
         """現在のSEQ[idx] × chip_base で実際のBET額($)を算出"""
-        unit = SEQ[self.tracker.current_unit_idx]
+        unit = self._active_seq[self.tracker.current_unit_idx] if self.tracker.current_unit_idx < len(self._active_seq) else self._active_seq[-1]
         return unit * self.chip_base
 
     # === セッション制御 ===
@@ -184,7 +191,7 @@ class MaruBatsuBetSession:
         if turns:
             wins = turns.count("O")
             losses = turns.count("X")
-            unit = SEQ[self.tracker.current_unit_idx]
+            unit = self._active_seq[self.tracker.current_unit_idx] if self.tracker.current_unit_idx < len(self._active_seq) else self._active_seq[-1]
             cp += (wins - losses) * unit
         return cp
 
@@ -257,7 +264,7 @@ class MaruBatsuBetSession:
                 logger.error(f"残高不足: ${balance:.2f} < ${bet_amount:.2f}")
                 self.notifier.send(
                     f"⚠️ 残高不足!\n"
-                    f"必要: ${bet_amount:.2f} (SEQ[{self.tracker.current_unit_idx}]={SEQ[self.tracker.current_unit_idx]})\n"
+                    f"必要: ${bet_amount:.2f} (SEQ[{self.tracker.current_unit_idx}]={self._active_seq[min(self.tracker.current_unit_idx, len(self._active_seq)-1)]})\n"
                     f"残高: ${balance:.2f}"
                 )
                 return {"action": "exit"}
@@ -419,6 +426,6 @@ class MaruBatsuBetSession:
             "total_wins": self.total_wins,
             "total_losses": self.total_losses,
             "total_ties": self.total_ties,
-            "current_unit": SEQ[self.tracker.current_unit_idx],
+            "current_unit": self._active_seq[min(self.tracker.current_unit_idx, len(self._active_seq)-1)],
             "current_unit_idx": self.tracker.current_unit_idx,
         }

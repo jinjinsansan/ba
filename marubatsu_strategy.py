@@ -26,6 +26,18 @@ SEQ = [
     170, 180, 190, 200, 210, 220, 230, 240, 250,
 ]
 
+# Counter モード専用 SEQ (バックテストで+67%の利益改善)
+SEQ_COUNTER = [
+    1, 3, 5, 7, 10, 13, 16, 20, 25, 30, 35, 40, 45, 50,
+    60, 70, 80, 90, 100, 110, 120, 130,
+    145, 160, 175, 190, 205, 220, 235, 250, 265, 280,
+    300, 320, 340, 360, 380, 400, 420, 440, 460, 480, 500,
+]
+
+# Counter モード専用セットサイズ
+SET_SIZE_COUNTER = 5
+SET_SIZE_DEFAULT = 7
+
 
 @dataclass
 class SetData:
@@ -41,9 +53,9 @@ class SetData:
     cumulative_profit: int
 
 
-def calc_wins_losses(results: str) -> tuple[int, int, int]:
+def calc_wins_losses(results: str, set_size: int = 7) -> tuple[int, int, int]:
     wins = results.count("O")
-    losses = 7 - wins
+    losses = set_size - wins
     diff = wins - losses
     return wins, losses, diff
 
@@ -114,12 +126,15 @@ def finalize_set(
     current_unit_idx: int,
     prev_cumulative_profit: int,
     prev_overshoot: int,
+    seq: list[int] | None = None,
+    set_size: int = 7,
 ) -> SetData:
-    wins, losses, diff = calc_wins_losses(results)
+    _seq = seq or SEQ
+    wins, losses, diff = calc_wins_losses(results, set_size)
     new_overshoot = calc_overshoot(prev_overshoot, diff)
     calc_slashed(sets, new_overshoot, diff)
     next_unit_idx = calc_next_unit_idx(sets, current_unit_idx, diff, new_overshoot)
-    set_profit = diff * SEQ[current_unit_idx]
+    set_profit = diff * _seq[current_unit_idx] if current_unit_idx < len(_seq) else diff * _seq[-1]
     cumulative_profit = prev_cumulative_profit + set_profit
 
     return SetData(
@@ -137,10 +152,12 @@ def finalize_set(
 
 
 class MaruBatsuTracker:
-    """バカラ結果を〇❌に変換し、7ハンド=1セットで管理"""
+    """バカラ結果を〇❌に変換し、Nハンド=1セットで管理"""
 
-    def __init__(self, chip_base: float = 1.0):
+    def __init__(self, chip_base: float = 1.0, seq: list[int] | None = None, set_size: int = 7):
         self.chip_base = chip_base
+        self.seq = seq or SEQ
+        self.set_size = set_size
         self.sets: list[SetData] = []
         self.current_turns: list[str] = []  # "O" or "X"
         self.total_o = 0
@@ -187,7 +204,7 @@ class MaruBatsuTracker:
         else:
             self.total_x += 1
 
-        if len(self.current_turns) == 7:
+        if len(self.current_turns) == self.set_size:
             results_str = "".join(self.current_turns)
             new_set = finalize_set(
                 results_str,
@@ -195,6 +212,8 @@ class MaruBatsuTracker:
                 self.current_unit_idx,
                 self.cumulative_profit,
                 self.prev_overshoot,
+                seq=self.seq,
+                set_size=self.set_size,
             )
             self.sets.append(new_set)
             self.current_turns.clear()

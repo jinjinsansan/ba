@@ -1780,6 +1780,7 @@ def _run_bet_session_inner(config: dict, stop_event: threading.Event, skip_event
                     profit_stop=profit_stop_chips,
                     dry_run=dry_run,
                     resume=resume,
+                    counter_mode=True,
                 )
             except Exception as e:
                 send_log(f"[counter] FATAL: MaruBatsuBetSession init failed: {e}")
@@ -2051,7 +2052,7 @@ def _run_bet_session_inner(config: dict, stop_event: threading.Event, skip_event
             # ── run_round() で BET→結果→GUI送信を一体処理 ──
             # counter_session が None (flat mode) の場合は簡易セッションを使う
             if counter_session is not None:
-                from marubatsu_strategy import SEQ as _SEQ
+                from marubatsu_strategy import SEQ_COUNTER as _SEQ
                 send_log(f"[counter] BET {side.upper()} ${counter_session.get_bet_amount():.0f}")
                 round_result = counter_session.run_round(
                     lambda: not stop_event.is_set(),
