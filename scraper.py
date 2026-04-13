@@ -206,25 +206,37 @@ class BaccaratScraper:
             logger.warning(f"Viewport設定失敗（続行）: {e}")
         if config.VIDEO_BLOCK_MEDIA:
             try:
+                patterns = config.VIDEO_BLOCK_PATTERNS or [
+                    ".m3u8", ".mpd", ".ts", ".m4s", ".mp4", ".webm",
+                    "hls", "dash", "video", "stream", "streaming", "live",
+                ]
+                def _should_block(url: str, rtype: str) -> bool:
+                    if rtype == "media":
+                        return True
+                    low = url.lower()
+                    if any(p in low for p in patterns):
+                        return True
+                    return False
                 def _route_media(route, request):
-                    url = request.url
-                    rtype = request.resource_type
-                    # Block media + video stream HTTP requests
-                    if rtype == "media" or "websocketstream" in url or ".m3u8" in url or ".ts" in url:
+                    if _should_block(request.url, request.resource_type):
                         route.abort()
                     else:
                         route.continue_()
-                self.page.route("**/*", _route_media)
+                try:
+                    ctx = self.browser or self.page.context
+                    ctx.route("**/*", _route_media)
+                except Exception:
+                    self.page.route("**/*", _route_media)
                 logger.info("Video media/stream requests blocked")
             except Exception as e:
                 logger.warning(f"Media block設定失敗（続行）: {e}")
             # Block video WebSocket connections
             try:
-                _orig_ws_handler = getattr(self, '_on_ws_for_video_block', None)
+                patterns = config.VIDEO_BLOCK_PATTERNS or ["stream", "video", "live"]
                 def _block_video_ws(ws):
-                    url = ws.url
-                    if "websocketstream" in url:
-                        logger.info(f"Video WS blocked: {url[:80]}")
+                    url = ws.url.lower()
+                    if any(p in url for p in patterns):
+                        logger.info(f"Video WS blocked: {ws.url[:80]}")
                         try:
                             ws.close()
                         except Exception:

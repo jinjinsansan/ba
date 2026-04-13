@@ -74,6 +74,8 @@ _video_block_media_env = os.getenv("VIDEO_BLOCK_MEDIA", "").strip().lower()
 VIDEO_BLOCK_MEDIA = (_video_block_media_env in ("1", "true", "yes")) or _ini_getbool("monitor", "video_block_media", False)
 if VIDEO_QUALITY == "off":
     VIDEO_BLOCK_MEDIA = True
+_video_block_patterns_env = os.getenv("VIDEO_BLOCK_PATTERNS", _ini_get("monitor", "video_block_patterns", "")).strip()
+VIDEO_BLOCK_PATTERNS = [p.strip().lower() for p in _video_block_patterns_env.split(",") if p.strip()]
 
 # --- BET ---
 BET_ENABLED = _ini_getbool("bet", "enabled", False)
