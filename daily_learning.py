@@ -189,25 +189,36 @@ def analyze(shoes):
     avg_duration = sum(tereko_durations) / len(tereko_durations) if tereko_durations else 0
     short5h_rate = sum(1 for d in tereko_durations if d <= 5) / len(tereko_durations) * 100 if tereko_durations else 0
 
-    # 時間帯別ベスト/ワースト
+    # 列長分布 (全シュー)
+    all_col_lens = []
+    for table_name, seq, started_at in shoes:
+        all_col_lens.extend(compute_columns(strip_ties(seq)))
+    total_cols = len(all_col_lens) if all_col_lens else 1
+    drop3_plus_rate = sum(1 for L in all_col_lens if L >= 3) / total_cols * 100
+    avg_col_len = sum(all_col_lens) / total_cols if all_col_lens else 1.0
+
+    # 時間帯別ベスト/ワースト + 分散
     best_hour = -1
     worst_hour = -1
     best_wr = 0
     worst_wr = 100
+    hourly_wrs = []
     for h in range(24):
         d = hourly_wr[h]
         t = d['w'] + d['l']
         if t < 50:
             continue
         hr = d['w'] / t * 100
+        hourly_wrs.append(hr)
         if hr > best_wr:
             best_wr = hr
             best_hour = h
         if hr < worst_wr:
             worst_wr = hr
             worst_hour = h
+    hourly_spread = max(hourly_wrs) - min(hourly_wrs) if len(hourly_wrs) >= 2 else 0
 
-    # パターン Top 100
+    # パターン Top 100 + Top平均勝率
     pattern_top = []
     for p_key, d in pattern_stats.items():
         t = d['w'] + d['l']
@@ -220,6 +231,7 @@ def analyze(shoes):
         })
     pattern_top.sort(key=lambda x: -x['win_rate'])
     pattern_top = pattern_top[:100]
+    top10_avg_wr = sum(p['win_rate'] for p in pattern_top[:10]) / min(10, len(pattern_top)) if pattern_top else 0
 
     return {
         'total_shoes': total_shoes,
@@ -229,6 +241,10 @@ def analyze(shoes):
         'counter_wr': round(wr, 2),
         'avg_duration': round(avg_duration, 1),
         'short5h_rate': round(short5h_rate, 1),
+        'drop3_plus_rate': round(drop3_plus_rate, 2),
+        'avg_col_len': round(avg_col_len, 2),
+        'hourly_spread': round(hourly_spread, 2),
+        'top10_avg_wr': round(top10_avg_wr, 2),
         'best_hour': best_hour,
         'worst_hour': worst_hour,
         'best_wr': round(best_wr, 2),
@@ -357,6 +373,10 @@ def main():
     print(f"  Short5h Rate: {metrics['short5h_rate']}%")
     print(f"  Best Hour: {metrics['best_hour']:02d}:00 ({metrics['best_wr']}%)")
     print(f"  Worst Hour: {metrics['worst_hour']:02d}:00 ({metrics['worst_wr']}%)")
+    print(f"  Drop3+ Rate: {metrics['drop3_plus_rate']}%")
+    print(f"  Avg Col Len: {metrics['avg_col_len']}")
+    print(f"  Hourly Spread: {metrics['hourly_spread']}%")
+    print(f"  Top10 Avg WR: {metrics['top10_avg_wr']}%")
     print(f"  Pattern Top: {len(pattern_top)} patterns")
 
     # Supabase に送信
@@ -458,7 +478,17 @@ def save_params(params: dict, reason: str):
 
 
 def auto_adjust_params(today_metrics: dict, recent_metrics: list) -> list[str]:
-    """過去7日のトレンドからパラメータを自動調整"""
+    """全指標のトレンドからパラメータを自動調整
+
+    7つの指標:
+      1. テレコ平均寿命 (avg_duration)
+      2. 逆張り勝率 (counter_wr)
+      3. テレコ出現率 (tereko_rate)
+      4. 短命区間率 (short5h_rate)
+      5. 時間帯別勝率の分散 (hourly_spread)
+      6. パターンTop10平均勝率 (top10_avg_wr)
+      7. 3落ち以上の出現率 (drop3_plus_rate)
+    """
     changes = []
     current = load_current_params()
     new_params = dict(current)
@@ -468,70 +498,181 @@ def auto_adjust_params(today_metrics: dict, recent_metrics: list) -> list[str]:
         print("  [params] Not enough history (< 3 days) — skip adjustment")
         return changes
 
-    # 直近3日のトレンド
     recent_3 = recent_metrics[-3:] if len(recent_metrics) >= 3 else recent_metrics
-    avg_wr_3d = sum(m.get('counter_wr', 53) for m in recent_3) / len(recent_3)
-    avg_dur_3d = sum(m.get('avg_duration', 15) for m in recent_3) / len(recent_3)
+    n = len(recent_3)
+
+    # 3日平均を計算
+    avg_wr = sum(m.get('counter_wr', 53) for m in recent_3) / n
+    avg_dur = sum(m.get('avg_duration', 15) for m in recent_3) / n
+    avg_tereko_rate = sum(m.get('tereko_rate', 40) for m in recent_3) / n
+    avg_short5h = sum(m.get('short5h_rate', 30) for m in recent_3) / n
+    avg_spread = sum(m.get('hourly_spread', 3) for m in recent_3) / n
+    avg_top10 = sum(m.get('top10_avg_wr', 55) for m in recent_3) / n
+    avg_drop3 = sum(m.get('drop3_plus_rate', 20) for m in recent_3) / n
 
     ew_min, ew_max = PARAM_LIMITS["entry_window"]
     et_min, et_max = PARAM_LIMITS["entry_threshold"]
     d3_min, d3_max = PARAM_LIMITS["exit_drop3_limit"]
 
-    # ── 入室条件 (ENTRY_THRESHOLD) ──
-    # テレコ寿命が短い → 厳しくする (もっと確実なテレコだけ入る)
-    if avg_dur_3d < 8:
-        new_et = min(current.get("entry_threshold", 0.85) + 0.05, et_max)
-        if new_et != current.get("entry_threshold", 0.85):
-            new_params["entry_threshold"] = round(new_et, 2)
-            changes.append(f"ET {current.get('entry_threshold', 0.85)}→{new_et} (dur↓)")
-            adjusted = True
-    # テレコ寿命が長い → 緩める (もっと積極的に入る)
-    elif avg_dur_3d > 18:
-        new_et = max(current.get("entry_threshold", 0.85) - 0.05, et_min)
-        if new_et != current.get("entry_threshold", 0.85):
-            new_params["entry_threshold"] = round(new_et, 2)
-            changes.append(f"ET {current.get('entry_threshold', 0.85)}→{new_et} (dur↑)")
-            adjusted = True
+    cur_et = current.get("entry_threshold", 0.85)
+    cur_ew = current.get("entry_window", 15)
+    cur_d3 = current.get("exit_drop3_limit", 2)
+    cur_d5 = current.get("exit_drop5_immediate", True)
 
-    # ── 入室ウィンドウ (ENTRY_WINDOW) ──
-    # 勝率が低い → ウィンドウを広げる (より多くの列で判定 = 慎重)
-    if avg_wr_3d < 51:
-        new_ew = min(current.get("entry_window", 15) + 2, ew_max)
-        if new_ew != current.get("entry_window", 15):
-            new_params["entry_window"] = new_ew
-            changes.append(f"EW {current.get('entry_window', 15)}→{new_ew} (wr↓)")
-            adjusted = True
-    # 勝率が高い → ウィンドウを狭める (素早く入る)
-    elif avg_wr_3d > 55:
-        new_ew = max(current.get("entry_window", 15) - 2, ew_min)
-        if new_ew != current.get("entry_window", 15):
-            new_params["entry_window"] = new_ew
-            changes.append(f"EW {current.get('entry_window', 15)}→{new_ew} (wr↑)")
-            adjusted = True
+    # ============================================================
+    # 入室条件 ENTRY_THRESHOLD (短列率の閾値)
+    # ============================================================
+    et_pressure = 0  # +なら厳しく、-なら緩める
 
-    # ── 退室条件 (EXIT_DROP3_LIMIT) ──
-    # テレコ寿命が短い → 退室を早める (1回で退室)
-    if avg_dur_3d < 7:
-        new_d3 = max(current.get("exit_drop3_limit", 2) - 1, d3_min)
-        if new_d3 != current.get("exit_drop3_limit", 2):
-            new_params["exit_drop3_limit"] = new_d3
-            changes.append(f"D3 {current.get('exit_drop3_limit', 2)}→{new_d3} (dur↓↓)")
-            adjusted = True
-    # テレコ寿命が長い → もう少し粘る
-    elif avg_dur_3d > 20:
-        new_d3 = min(current.get("exit_drop3_limit", 2) + 1, d3_max)
-        if new_d3 != current.get("exit_drop3_limit", 2):
-            new_params["exit_drop3_limit"] = new_d3
-            changes.append(f"D3 {current.get('exit_drop3_limit', 2)}→{new_d3} (dur↑↑)")
-            adjusted = True
+    # 指標1: テレコ寿命
+    if avg_dur < 8:
+        et_pressure += 2
+    elif avg_dur < 12:
+        et_pressure += 1
+    elif avg_dur > 18:
+        et_pressure -= 1
+    elif avg_dur > 25:
+        et_pressure -= 2
+
+    # 指標3: テレコ出現率
+    if avg_tereko_rate < 35:
+        et_pressure -= 1  # テレコが少ない→緩めないと入れない
+    elif avg_tereko_rate > 50:
+        et_pressure += 1  # テレコが多い→厳しくしても十分入れる
+
+    # 指標4: 短命区間率
+    if avg_short5h > 55:
+        et_pressure += 1  # 短命が多い→厳しくして確実なテレコだけ
+    elif avg_short5h < 25:
+        et_pressure -= 1  # 短命が少ない→緩めてOK
+
+    # 指標6: パターンTop10の平均勝率低下
+    if avg_top10 < 53:
+        et_pressure += 1  # 最強パターンの勝率が落ちた→厳しく
+    elif avg_top10 > 58:
+        et_pressure -= 1  # 最強パターンが強い→緩めてOK
+
+    if et_pressure >= 2:
+        new_et = min(cur_et + 0.05, et_max)
+    elif et_pressure == 1:
+        new_et = min(cur_et + 0.02, et_max)
+    elif et_pressure <= -2:
+        new_et = max(cur_et - 0.05, et_min)
+    elif et_pressure == -1:
+        new_et = max(cur_et - 0.02, et_min)
+    else:
+        new_et = cur_et
+    new_et = round(new_et, 2)
+    if new_et != cur_et:
+        new_params["entry_threshold"] = new_et
+        changes.append(f"ET {cur_et}→{new_et} (p={et_pressure})")
+        adjusted = True
+
+    # ============================================================
+    # 入室ウィンドウ ENTRY_WINDOW (何列で判定するか)
+    # ============================================================
+    ew_pressure = 0
+
+    # 指標2: 勝率
+    if avg_wr < 51:
+        ew_pressure += 2  # 勝率低い→慎重に (長い窓)
+    elif avg_wr < 52:
+        ew_pressure += 1
+    elif avg_wr > 55:
+        ew_pressure -= 1  # 勝率高い→素早く入る (短い窓)
+    elif avg_wr > 57:
+        ew_pressure -= 2
+
+    # 指標5: 時間帯別勝率の分散
+    if avg_spread > 6:
+        ew_pressure += 1  # 時間帯差が大きい→不安定→慎重に
+    elif avg_spread < 2:
+        ew_pressure -= 1  # 安定→攻めてOK
+
+    # 指標7: 3落ち以上の出現率
+    if avg_drop3 > 30:
+        ew_pressure += 1  # 長い列が多い→環境悪化→慎重に
+    elif avg_drop3 < 15:
+        ew_pressure -= 1  # 短い列ばかり→攻めてOK
+
+    if ew_pressure >= 2:
+        new_ew = min(cur_ew + 2, ew_max)
+    elif ew_pressure == 1:
+        new_ew = min(cur_ew + 1, ew_max)
+    elif ew_pressure <= -2:
+        new_ew = max(cur_ew - 2, ew_min)
+    elif ew_pressure == -1:
+        new_ew = max(cur_ew - 1, ew_min)
+    else:
+        new_ew = cur_ew
+    if new_ew != cur_ew:
+        new_params["entry_window"] = new_ew
+        changes.append(f"EW {cur_ew}→{new_ew} (p={ew_pressure})")
+        adjusted = True
+
+    # ============================================================
+    # 退室条件 EXIT_DROP3_LIMIT (3落ち何回で退室か)
+    # ============================================================
+    d3_pressure = 0
+
+    # 指標1: テレコ寿命
+    if avg_dur < 7:
+        d3_pressure -= 2  # 寿命短い→早く逃げる
+    elif avg_dur < 10:
+        d3_pressure -= 1
+    elif avg_dur > 20:
+        d3_pressure += 1  # 寿命長い→粘ってOK
+    elif avg_dur > 30:
+        d3_pressure += 2
+
+    # 指標4: 短命区間率
+    if avg_short5h > 60:
+        d3_pressure -= 1  # 短命多い→早く逃げる
+    elif avg_short5h < 20:
+        d3_pressure += 1  # 短命少ない→粘ってOK
+
+    # 指標7: 3落ち以上の出現率
+    if avg_drop3 > 35:
+        d3_pressure -= 1  # 長い列が多い→早く逃げる
+    elif avg_drop3 < 15:
+        d3_pressure += 1  # 短い列ばかり→粘ってOK
+
+    if d3_pressure <= -2:
+        new_d3 = max(cur_d3 - 1, d3_min)
+    elif d3_pressure >= 2:
+        new_d3 = min(cur_d3 + 1, d3_max)
+    else:
+        new_d3 = cur_d3
+    if new_d3 != cur_d3:
+        new_params["exit_drop3_limit"] = new_d3
+        changes.append(f"D3 {cur_d3}→{new_d3} (p={d3_pressure})")
+        adjusted = True
+
+    # ============================================================
+    # EXIT_DROP5: 5落ち即退室の切替
+    # ============================================================
+    # テレコ寿命が非常に短い → 4落ちで退室 (drop5→drop4)
+    # テレコ寿命が長い → 5落ちのまま
+    if avg_dur < 6 and cur_d5:
+        # 5落ちではなく4落ちで退室すべき状況だが、
+        # drop4_exit のパラメータは現在ないので、drop3_limit=1 で代替
+        pass  # 将来拡張用
+    elif avg_dur > 25 and not cur_d5:
+        new_params["exit_drop5_immediate"] = True
+        changes.append("D5 OFF→ON (dur↑↑)")
+        adjusted = True
 
     # パラメータ変更があればSupabaseに保存
     if adjusted:
-        reason = f"auto: wr3d={avg_wr_3d:.1f}% dur3d={avg_dur_3d:.1f}h"
+        reason = (
+            f"auto: wr={avg_wr:.1f}% dur={avg_dur:.1f}h tereko={avg_tereko_rate:.0f}% "
+            f"short5h={avg_short5h:.0f}% spread={avg_spread:.1f} top10={avg_top10:.1f}% drop3={avg_drop3:.0f}%"
+        )
         save_params(new_params, reason)
         print(f"  [params] Adjusted: {', '.join(changes)}")
+        print(f"  [params] Reason: {reason}")
     else:
-        print(f"  [params] No adjustment needed (wr3d={avg_wr_3d:.1f}% dur3d={avg_dur_3d:.1f}h)")
+        print(f"  [params] No adjustment (wr={avg_wr:.1f}% dur={avg_dur:.1f}h tereko={avg_tereko_rate:.0f}%)")
 
     return changes
 
