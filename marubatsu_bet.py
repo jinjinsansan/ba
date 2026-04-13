@@ -184,7 +184,6 @@ class MaruBatsuBetSession:
 
     def effective_profit(self) -> int:
         """セット完了損益 + 進行中セットの暫定損益 (chip単位)"""
-        from marubatsu_strategy import SEQ
         cp = self.tracker.cumulative_profit
         # Add provisional profit from in-progress set
         turns = self.tracker.current_turns
@@ -273,12 +272,13 @@ class MaruBatsuBetSession:
         if side not in ("player", "banker"):
             side = "player"
         unit_idx = self.tracker.current_unit_idx
-        unit = SEQ[unit_idx]
+        unit = self._active_seq[min(unit_idx, len(self._active_seq)-1)]
         turn_num = len(self.tracker.current_turns) + 1
+        set_size = self.tracker.set_size
 
         logger.info(
             f"BET: ${bet_amount:.0f} {side.upper()} "
-            f"(SEQ[{unit_idx}]={unit}, Set#{self.tracker.current_set_index} Turn{turn_num}/7)"
+            f"(SEQ[{unit_idx}]={unit}, Set#{self.tracker.current_set_index} Turn{turn_num}/{set_size})"
         )
 
         if not self.executor.place_bet(side, bet_amount):

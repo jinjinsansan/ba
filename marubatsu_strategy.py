@@ -81,9 +81,11 @@ def calc_next_unit_idx(
     used_unit_idx: int,
     diff: int,
     new_overshoot: int,
+    seq_len: int = 0,
 ) -> int:
+    _max = (seq_len or len(SEQ)) - 1
     if diff < 0:
-        return min(used_unit_idx + 1, len(SEQ) - 1)
+        return min(used_unit_idx + 1, _max)
 
     # 優先①: 同じovershootの非斜線セットを後ろから探す
     found = -1
@@ -115,7 +117,7 @@ def calc_next_unit_idx(
         return best_above_idx
     # 優先③: 大きい方がない → 小さい方で最も近いの next_unit_idx + 1
     if best_below_idx >= 0:
-        return min(best_below_idx + 1, len(SEQ) - 1)
+        return min(best_below_idx + 1, _max)
 
     return 0
 
@@ -133,7 +135,7 @@ def finalize_set(
     wins, losses, diff = calc_wins_losses(results, set_size)
     new_overshoot = calc_overshoot(prev_overshoot, diff)
     calc_slashed(sets, new_overshoot, diff)
-    next_unit_idx = calc_next_unit_idx(sets, current_unit_idx, diff, new_overshoot)
+    next_unit_idx = calc_next_unit_idx(sets, current_unit_idx, diff, new_overshoot, seq_len=len(_seq))
     set_profit = diff * _seq[current_unit_idx] if current_unit_idx < len(_seq) else diff * _seq[-1]
     cumulative_profit = prev_cumulative_profit + set_profit
 
@@ -229,7 +231,7 @@ class MaruBatsuTracker:
         return (
             f"#{s.set_index:>2}  {marks}  "
             f"{wl}  OS:{s.overshoot}  "
-            f"U:{SEQ[s.next_unit_idx]}  "
+            f"U:{self.seq[min(s.next_unit_idx, len(self.seq)-1)]}  "
             f"P/L:{s.cumulative_profit:+d}{slash}"
         )
 
@@ -248,14 +250,14 @@ class MaruBatsuTracker:
             f"{marks}\n"
             f"勝敗: {new_set.wins}/{new_set.losses} ({outcome})\n"
             f"負け越し: {new_set.overshoot}\n"
-            f"BET単位: {SEQ[new_set.used_unit_idx]} (SEQ[{new_set.used_unit_idx}])\n"
+            f"BET単位: {self.seq[min(new_set.used_unit_idx, len(self.seq)-1)]} (SEQ[{new_set.used_unit_idx}])\n"
             f"セット損益: {new_set.set_profit:+d} chip ({money_set:+.0f}円)\n"
             f"累計損益: {new_set.cumulative_profit:+d} chip ({money_cum:+.0f}円)\n"
         )
 
         # 次セット情報
         msg += (
-            f"次BET単位: {SEQ[new_set.next_unit_idx]} (SEQ[{new_set.next_unit_idx}])\n"
+            f"次BET単位: {self.seq[min(new_set.next_unit_idx, len(self.seq)-1)]} (SEQ[{new_set.next_unit_idx}])\n"
         )
 
         # 〇❌統計
@@ -282,7 +284,7 @@ class MaruBatsuTracker:
 
         marks = "".join("〇" if t == "O" else "✕" for t in self.current_turns)
         remaining = 7 - len(self.current_turns)
-        unit = SEQ[self.current_unit_idx]
+        unit = self.seq[min(self.current_unit_idx, len(self.seq)-1)]
         return (
             f"Set #{self.current_set_index} Turn {len(self.current_turns)}/7: "
             f"{marks}{'_' * remaining} | BET単位:{unit} | 累計:{self.cumulative_profit:+d}"
@@ -293,7 +295,7 @@ class MaruBatsuTracker:
             "set_count": len(self.sets),
             "current_turn": len(self.current_turns),
             "current_unit_idx": self.current_unit_idx,
-            "current_unit": SEQ[self.current_unit_idx],
+            "current_unit": self.seq[min(self.current_unit_idx, len(self.seq)-1)],
             "cumulative_profit": self.cumulative_profit,
             "cumulative_money": self.cumulative_profit * self.chip_base,
             "total_o": self.total_o,
