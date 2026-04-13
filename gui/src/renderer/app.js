@@ -647,6 +647,9 @@ function _driftToCode(os) { return _rndChar(_SIG_OS_PREFIXES) + os; }
 // All O/X results as continuous stream (no set boundaries)
 let _signalStreamAll = '';
 
+let _lastStreamTurn = -1;
+let _lastRoundWon = null;
+
 function updateDevPanel(msg) {
   if (!isDevMode()) return;
   const sc = $('#sigCycle');
@@ -655,7 +658,6 @@ function updateDevPanel(msg) {
   const srd = $('#sigRound');
   if (sc && typeof msg.current_turn === 'number') sc.textContent = _turnToCode(msg.current_turn);
   if (sr) {
-    // pre_wins/pre_losses from server (accurate even after set completion)
     const pw = typeof msg.pre_wins === 'number' ? msg.pre_wins : 0;
     const pl = typeof msg.pre_losses === 'number' ? msg.pre_losses : 0;
     if (pw > 0 || pl > 0) {
@@ -669,17 +671,34 @@ function updateDevPanel(msg) {
   }
   if (sd && typeof msg.overshoot === 'number') sd.textContent = _driftToCode(msg.overshoot);
   if (srd && typeof msg.session_count === 'number') srd.textContent = `#${msg.session_count}`;
+
+  // Stream: add one mark per hand (from pre_wins/pre_losses change)
+  const el = $('#sigStream');
+  if (el && typeof msg.current_turn === 'number' && typeof msg.total_bets === 'number') {
+    if (msg.total_bets !== _lastStreamTurn) {
+      _lastStreamTurn = msg.total_bets;
+      // Determine last result from won field in the most recent round_result
+      if (typeof _lastRoundWon === 'boolean') {
+        const mark = _lastRoundWon
+          ? '<span class="s-o">O</span>'
+          : '<span class="s-x">X</span>';
+        if (el.querySelector('[style]')) el.innerHTML = '';  // Clear "AWAITING SIGNAL"
+        el.innerHTML += mark;
+        el.scrollTop = el.scrollHeight;
+      }
+    }
+  }
 }
 
 function renderDevSets(sets) {
+  // Stream is now updated per-hand in updateDevPanel.
+  // This function only serves as initial load from history.
   if (!isDevMode()) return;
   const el = $('#sigStream');
   if (!el) return;
-  if (!sets || sets.length === 0) {
-    if (!_signalStreamAll) el.innerHTML = '<span style="color:rgba(255,204,0,0.25)">AWAITING SIGNAL</span>';
-    return;
-  }
-  // Build continuous stream from all sets (no boundaries)
+  if (!sets || sets.length === 0) return;
+  // Only rebuild if stream is empty (initial load)
+  if (el.children.length > 0) return;
   let stream = '';
   for (const s of sets) {
     for (const c of (s.results || '')) {
@@ -687,9 +706,10 @@ function renderDevSets(sets) {
       else if (c === 'X') stream += '<span class="s-x">X</span>';
     }
   }
-  _signalStreamAll = stream;
-  el.innerHTML = stream || '<span style="color:rgba(255,204,0,0.25)">AWAITING SIGNAL</span>';
-  el.scrollTop = el.scrollHeight;
+  if (stream) {
+    el.innerHTML = stream;
+    el.scrollTop = el.scrollHeight;
+  }
 }
 
 // --- Log ---
@@ -863,6 +883,7 @@ window.valhalla.onAgentMessage((msg) => {
     case 'round_result': {
       const r = msg.result;
       const won = msg.won;
+      _lastRoundWon = won;
       if (r === 'tie') {
         setAction('Tie -- BET returned');
         addResult('T');
