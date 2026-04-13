@@ -1750,11 +1750,22 @@ def _run_bet_session_inner(config: dict, stop_event: threading.Event, skip_event
             is_tereko_state,
             short_rate,
             should_exit,
+            apply_optimal_params,
             ENTRY_WINDOW,
             FLAT_BET_AMOUNT,
             SEARCH_INTERVAL,
         )
         from regularity_monitor import raw_history_to_results
+
+        # Supabase から最新パラメータを読み込み
+        try:
+            if apply_optimal_params():
+                from counter_logic import ENTRY_WINDOW, ENTRY_THRESHOLD, EXIT_DROP3_LIMIT, EXIT_DROP5_IMMEDIATE
+                send_log(f"[counter] Cloud params loaded: W={ENTRY_WINDOW} T={ENTRY_THRESHOLD} D3={EXIT_DROP3_LIMIT} D5={EXIT_DROP5_IMMEDIATE}")
+            else:
+                send_log("[counter] Using default params (cloud unavailable)")
+        except Exception as e:
+            send_log(f"[counter] Param load error: {e} — using defaults")
 
         is_flat = (_effective_mode_box[0] == "counter_flat")
         counter_session = None

@@ -239,3 +239,45 @@ BEGIN
   UPDATE promo_codes SET used_count = used_count + 1 WHERE code = code_text;
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;
+
+-- ============================================================
+-- LAPLACE Learning System Tables
+-- ============================================================
+
+-- Daily environment metrics (from daily_learning.py)
+CREATE TABLE IF NOT EXISTS daily_metrics (
+  date DATE PRIMARY KEY,
+  tereko_rate NUMERIC,
+  avg_duration NUMERIC,
+  counter_wr NUMERIC,
+  short5h_rate NUMERIC,
+  best_hour INTEGER,
+  worst_hour INTEGER,
+  best_wr NUMERIC,
+  worst_wr NUMERIC,
+  total_shoes INTEGER,
+  total_hands INTEGER,
+  updated_at TIMESTAMPTZ DEFAULT now()
+);
+
+-- Pattern winrate database (from daily_learning.py)
+CREATE TABLE IF NOT EXISTS pattern_winrates (
+  pattern_hash TEXT PRIMARY KEY,
+  window_size INTEGER DEFAULT 10,
+  win_rate NUMERIC,
+  samples INTEGER,
+  last_updated DATE
+);
+
+-- Optimal parameters (updated weekly by learning batch)
+CREATE TABLE IF NOT EXISTS optimal_params (
+  id INTEGER PRIMARY KEY DEFAULT 1,
+  entry_window INTEGER DEFAULT 15,
+  entry_threshold NUMERIC DEFAULT 0.85,
+  exit_drop3_limit INTEGER DEFAULT 2,
+  exit_drop5_immediate BOOLEAN DEFAULT true,
+  profit_target INTEGER DEFAULT 30,
+  status TEXT DEFAULT 'active',
+  reason TEXT,
+  updated_at TIMESTAMPTZ DEFAULT now()
+);
