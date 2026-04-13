@@ -602,7 +602,7 @@ function loadSettings() {
 const DEV_PASSWORD = 'laplace1749';
 
 function isDevMode() {
-  return localStorage.getItem('valhalla_dev_mode') === '1';
+  return true; // Signal Panel is always visible (encrypted)
 }
 
 function setDevMode(on) {
@@ -612,14 +612,13 @@ function setDevMode(on) {
 }
 
 function applyDevMode() {
-  const on = isDevMode();
   const panel = $('#devPanel');
-  const status = $('#devModeStatus');
-  if (panel) panel.classList.toggle('hidden', !on);
-  if (status) status.textContent = `Developer Mode: ${on ? 'ON (click to disable)' : 'OFF'}`;
+  if (panel) panel.classList.remove('hidden');
 }
 
-$('#devModeLink').addEventListener('click', () => {
+// Dev mode link removed from GUI — keep dummy listener to avoid errors
+const _devLink = $('#devModeLink');
+if (_devLink) _devLink.addEventListener('click', () => {
   if (isDevMode()) {
     setDevMode(false);
     addLog('Developer Mode disabled.', 'info');
