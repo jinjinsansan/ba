@@ -613,8 +613,6 @@ def _run_bet_session_inner(config: dict, stop_event: threading.Event, skip_event
     telegram_bot_token = (config.get("telegram_bot_token") or "").strip()
     telegram_chat_id = (config.get("telegram_chat_id") or "").strip()
     table_filter = config.get("table_filter", {})
-    logger.info(f"Table filter: {table_filter}")
-    send_log(f"Table filter: {table_filter}")
 
     # Allow overriding dry_run via environment (safe for CI / first-run testing)
     if os.getenv("LAPLACE_FORCE_DRYRUN", "").strip() in ("1", "true", "True", "yes"):
