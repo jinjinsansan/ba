@@ -64,6 +64,10 @@ export default async function DashboardPage() {
   const hasPackage = latestOrder?.status === 'delivered' || latestOrder?.status === 'confirmed'
   const hasActiveCharge = billing && billing.balance > 0 && !billing.suspended
   const canDownload = !!deliverables?.length
+  const latestDeliverable = deliverables?.[0]
+  const deliverableDate = latestDeliverable?.created_at
+    ? new Date(latestDeliverable.created_at).toISOString().split('T')[0]
+    : ''
 
   let status: 'no_purchase' | 'pending' | 'dry_run' | 'active' | 'suspended'
   if (!latestOrder) status = 'no_purchase'
@@ -159,12 +163,17 @@ export default async function DashboardPage() {
           <div className="p-6 rounded-2xl bg-bg-card border border-white/5">
             <h2 className="text-lg font-bold mb-4">Software Download</h2>
             {canDownload ? (
-              <a
-                href={`/api/download?file=${deliverables![0].file_path}`}
-                className="inline-block px-6 py-3 rounded-xl bg-gradient-to-r from-player to-accent text-white font-bold hover:opacity-90 transition"
-              >
-                Download LAPLACE v{deliverables![0].version}
-              </a>
+              <div className="space-y-3">
+                <a
+                  href={`/api/download?file=${deliverables![0].file_path}`}
+                  className="inline-block px-6 py-3 rounded-xl bg-gradient-to-r from-player to-accent text-white font-bold hover:opacity-90 transition"
+                >
+                  Download LAPLACE v{deliverables![0].version}
+                </a>
+                {deliverableDate && (
+                  <div className="text-xs text-slate-500">Updated: {deliverableDate}</div>
+                )}
+              </div>
             ) : hasPackage ? (
               <p className="text-slate-400">Your download is being prepared...</p>
             ) : (

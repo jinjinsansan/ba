@@ -44,7 +44,7 @@ CREATE TRIGGER on_auth_user_created
 CREATE TABLE orders (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   user_id UUID NOT NULL REFERENCES profiles(id) ON DELETE CASCADE,
-  plan TEXT NOT NULL CHECK (plan IN ('starter', 'pro')),
+  plan TEXT NOT NULL CHECK (plan IN ('standard')),
   amount NUMERIC(12,2) NOT NULL,
   promo_code TEXT,
   status TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'sent', 'confirmed', 'delivered')),

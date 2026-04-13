@@ -30,10 +30,10 @@ export async function POST(req: NextRequest) {
       await admin.from('billing').upsert({ user_id: userId, is_free: false, balance: 0, updated_at: new Date().toISOString() }, { onConflict: 'user_id' })
       break
     case 'activate':
-      await admin.from('billing').upsert({ user_id: userId, status: 'active', updated_at: new Date().toISOString() }, { onConflict: 'user_id' })
+      await admin.from('billing').upsert({ user_id: userId, suspended: false, updated_at: new Date().toISOString() }, { onConflict: 'user_id' })
       break
     case 'deactivate':
-      await admin.from('billing').upsert({ user_id: userId, status: 'inactive', updated_at: new Date().toISOString() }, { onConflict: 'user_id' })
+      await admin.from('billing').upsert({ user_id: userId, suspended: true, updated_at: new Date().toISOString() }, { onConflict: 'user_id' })
       break
     case 'set_bot_config':
       await admin.from('billing').upsert({ user_id: userId, bot_config: value, updated_at: new Date().toISOString() }, { onConflict: 'user_id' })

@@ -1,6 +1,6 @@
 'use client'
 
-import { Suspense, useState } from 'react'
+import { Suspense, useEffect, useState } from 'react'
 import Link from 'next/link'
 import { useSearchParams } from 'next/navigation'
 import { createClient } from '@/lib/supabase-browser'
@@ -14,6 +14,13 @@ function SignupForm() {
   const [error, setError] = useState('')
   const searchParams = useSearchParams()
   const plan = searchParams.get('plan')
+  const ref = searchParams.get('ref')
+
+  useEffect(() => {
+    if (ref && !referralCode) {
+      setReferralCode(ref)
+    }
+  }, [ref, referralCode])
 
   async function handleSignup(e: React.FormEvent) {
     e.preventDefault()

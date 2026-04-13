@@ -19,7 +19,7 @@ export default function UserRow({ user, billing }: { user: any; billing: any }) 
   const [uploading, setUploading] = useState(false)
   const [showUrlInput, setShowUrlInput] = useState(false)
   const [zipUrl, setZipUrl] = useState('')
-  const isActive = billing?.status === 'active'
+  const isActive = !billing?.suspended
 
   async function sendZipUrl() {
     if (!zipUrl.startsWith('http')) { alert('正しいURLを入力してください'); return }

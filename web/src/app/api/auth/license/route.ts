@@ -31,9 +31,9 @@ export async function POST(req: NextRequest) {
   }
 
   // サブスクリプション確認
-  const { data: billing, error: billingError } = await admin
+  const { data: billing } = await admin
     .from('billing')
-    .select('status, bot_config, gui_state, expires_at')
+    .select('bot_paid, balance, suspended, is_free, bot_config, gui_state, expires_at')
     .eq('user_id', profile.id)
     .single()
 
@@ -41,23 +41,22 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ ok: false, reason: 'No subscription found. Please purchase a plan at bafather.uk' })
   }
 
-  if (billing.status !== 'active') {
-    const statusMsg: Record<string, string> = {
-      pending: 'Your subscription is pending confirmation. Please contact admin.',
-      expired: 'Your subscription has expired. Please renew at bafather.uk',
-      suspended: 'Your account has been suspended. Please contact admin.',
-    }
-    return NextResponse.json({
-      ok: false,
-      reason: statusMsg[billing.status] || `Subscription status: ${billing.status}`,
-    })
-  }
-
-  // 有効期限チェック
   if (billing.expires_at && new Date(billing.expires_at) < new Date()) {
     return NextResponse.json({ ok: false, reason: 'Your subscription has expired. Please renew at bafather.uk' })
   }
 
+  if (!billing.bot_paid) {
+    return NextResponse.json({ ok: false, reason: 'License not active. Please complete your purchase.' })
+  }
+
+  if (!billing.is_free) {
+    if (billing.suspended) {
+      return NextResponse.json({ ok: false, reason: 'Your account is suspended. Please contact admin.' })
+    }
+    if ((billing.balance || 0) <= 0) {
+      return NextResponse.json({ ok: false, reason: 'Balance is empty. Please charge to enable live betting.' })
+    }
+  }
   return NextResponse.json({
     ok: true,
     bot_config: billing.bot_config || {},
