@@ -586,6 +586,7 @@ def _run_bet_session_inner(config: dict, stop_event: threading.Event, skip_event
 
     # Remote LAPLACE API mode (VPS-hosted logic engine)
     use_remote = os.getenv("LAPLACE_USE_REMOTE", "0").strip() in ("1", "true", "True", "yes")
+    force_remote = os.getenv("LAPLACE_FORCE_REMOTE", "0").strip() in ("1", "true", "True", "yes")
     RemoteLaplaceSession = None
     RemoteTableSelector = None
     if use_remote:
@@ -593,8 +594,14 @@ def _run_bet_session_inner(config: dict, stop_event: threading.Event, skip_event
             from laplace_client import RemoteLaplaceSession, RemoteTableSelector, LaplaceApiError  # noqa: F401
             send_log(f"LAPLACE Remote mode: API={os.getenv('LAPLACE_API_URL', 'http://127.0.0.1:8000')} user={os.getenv('LAPLACE_USER', 'dev-machine')}")
         except Exception as e:
+            if force_remote:
+                send_log(f"FATAL: remote mode required but client import failed ({e})")
+                return
             send_log(f"Remote mode requested but client import failed ({e}) — falling back to local MaruBatsuBetSession")
             use_remote = False
+    elif force_remote:
+        send_log("FATAL: LAPLACE_FORCE_REMOTE=1 but LAPLACE_USE_REMOTE is disabled")
+        return
 
     chip_base = config.get("chip_base", 1.0)
     profit_target_dollars = config.get("profit_target", 50)
@@ -1758,7 +1765,7 @@ def _run_bet_session_inner(config: dict, stop_event: threading.Event, skip_event
         from table_selector import TableSelector
         selector = TableSelector(scraper)
     humanizer = Humanizer(cfg.HUMANIZE_CONFIG)
-    executor_config = {"demo_mode": dry_run}
+    executor_config = {"demo_mode": dry_run, "video_quality": cfg.VIDEO_QUALITY}
     executor = BetExecutor(scraper.page, scraper.game_ws, executor_config, humanizer=humanizer)
 
     # === Counter mode (テレコ逆張り) ===
@@ -1791,20 +1798,35 @@ def _run_bet_session_inner(config: dict, stop_event: threading.Event, skip_event
         counter_session = None
         if not is_flat:
             try:
-                from marubatsu_bet import MaruBatsuBetSession
-                counter_session = MaruBatsuBetSession(
-                    executor=executor,
-                    notifier=notifier,
-                    chip_base=chip_base,
-                    loss_cut=loss_cut_chips,
-                    profit_stop=profit_stop_chips,
-                    dry_run=dry_run,
-                    resume=resume,
-                    counter_mode=True,
-                    counter_set_size=counter_set_size,
-                )
+                if use_remote:
+                    from laplace_client import RemoteLaplaceSession
+                    counter_session = RemoteLaplaceSession(
+                        executor=executor,
+                        notifier=notifier,
+                        chip_base=chip_base,
+                        loss_cut=loss_cut_chips,
+                        profit_stop=profit_stop_chips,
+                        dry_run=dry_run,
+                        resume=resume,
+                        counter_mode=True,
+                        counter_set_size=counter_set_size,
+                        user_id=user_id,
+                    )
+                else:
+                    from marubatsu_bet import MaruBatsuBetSession
+                    counter_session = MaruBatsuBetSession(
+                        executor=executor,
+                        notifier=notifier,
+                        chip_base=chip_base,
+                        loss_cut=loss_cut_chips,
+                        profit_stop=profit_stop_chips,
+                        dry_run=dry_run,
+                        resume=resume,
+                        counter_mode=True,
+                        counter_set_size=counter_set_size,
+                    )
             except Exception as e:
-                send_log(f"[counter] FATAL: MaruBatsuBetSession init failed: {e}")
+                send_log(f"[counter] FATAL: Session init failed: {e}")
                 return
         # For live config updates UI -> engine
         _active_session = counter_session
@@ -2074,7 +2096,6 @@ def _run_bet_session_inner(config: dict, stop_event: threading.Event, skip_event
             # ── run_round() で BET→結果→GUI送信を一体処理 ──
             # counter_session が None (flat mode) の場合は簡易セッションを使う
             if counter_session is not None:
-                from marubatsu_strategy import SEQ_COUNTER as _SEQ
                 send_log(f"[counter] BET {side.upper()} ${counter_session.get_bet_amount():.0f}")
                 round_result = counter_session.run_round(
                     lambda: not stop_event.is_set(),
@@ -2168,6 +2189,17 @@ def _run_bet_session_inner(config: dict, stop_event: threading.Event, skip_event
 
                         send_result(rr_res, rr_won, rr_ba, bal, ptc, turns_disp, cp, money_pnl, round_profit)
 
+                        current_unit = None
+                        try:
+                            current_unit = getattr(counter_session.tracker, "current_unit_chips", None)
+                        except Exception:
+                            pass
+                        if not current_unit:
+                            try:
+                                from marubatsu_strategy import SEQ_COUNTER as _SEQ
+                                current_unit = _SEQ[min(counter_session.tracker.current_unit_idx, len(_SEQ)-1)]
+                            except Exception:
+                                current_unit = 1
                         send_msg({
                             "type": "status",
                             "wins": counter_session.total_wins,
@@ -2178,7 +2210,7 @@ def _run_bet_session_inner(config: dict, stop_event: threading.Event, skip_event
                             "cumulative_money": money_pnl,
                             "sets": len(counter_session.tracker.sets),
                             "current_turn": ptc,
-                            "current_unit": _SEQ[min(counter_session.tracker.current_unit_idx, len(_SEQ)-1)],
+                            "current_unit": current_unit,
                             "current_unit_idx": counter_session.tracker.current_unit_idx,
                             "overshoot": counter_session.tracker.prev_overshoot,
                             "balance": bal,
@@ -2500,7 +2532,7 @@ def _run_bet_session_inner(config: dict, stop_event: threading.Event, skip_event
         except Exception:
             pass
         # Supabase にセッション状態を保存
-        if counter_session is not None:
+        if counter_session is not None and hasattr(counter_session, "_save_state"):
             try:
                 counter_session._save_state()
                 send_log("[counter] State saved (local)")

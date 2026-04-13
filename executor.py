@@ -22,6 +22,7 @@ class BetExecutor:
         self.current_table_id = ""
         self.current_table_name = ""
         self.demo_mode = config.get("demo_mode", True)
+        self.video_quality = str(config.get("video_quality", "auto") or "auto").lower()
         self._settled_seen = False
         self._pre_bet_balance = 0.0
         self._available_chips = None  # テーブル入場後にスキャン
@@ -32,10 +33,65 @@ class BetExecutor:
         self._last_error_type = None
         self._last_betting_phase_at = 0.0
         self._last_betting_phase_source = None
+        self._last_video_quality_table = None
         try:
             self.page.set_default_timeout(10000)
         except Exception:
             pass
+
+    # ─── Video Quality (best-effort) ───
+
+    def _try_click(self, frame, selector: str, timeout: int = 1000) -> bool:
+        try:
+            loc = frame.locator(selector).first
+            if loc.is_visible(timeout=timeout):
+                loc.click(timeout=timeout)
+                return True
+        except Exception:
+            return False
+        return False
+
+    def _try_click_text(self, frame, pattern: str, timeout: int = 800) -> bool:
+        try:
+            loc = frame.locator(f'text=/{pattern}/i').first
+            if loc.is_visible(timeout=timeout):
+                loc.click(timeout=timeout)
+                return True
+        except Exception:
+            return False
+        return False
+
+    def _apply_video_quality(self) -> None:
+        if self.video_quality not in ("low", "mini"):
+            return
+        if self._last_video_quality_table == self.current_table_id:
+            return
+        inner = self._get_evo_inner()
+        if not inner:
+            return
+        self._last_video_quality_table = self.current_table_id
+        # 1) Settings / Gear
+        settings_selectors = [
+            'button[aria-label*="Settings"]',
+            'button[aria-label*="設定"]',
+            'button[title*="Settings"]',
+            'button[title*="設定"]',
+            'button:has(svg[aria-label*="Settings"])',
+            'button:has(svg[aria-label*="settings"])',
+            '[data-role*="settings"] button',
+        ]
+        opened = False
+        for sel in settings_selectors:
+            if self._try_click(inner, sel):
+                opened = True
+                break
+        if not opened:
+            return
+        # 2) Select low quality
+        for pat in ("Low", "低画質", "低", "SD", "360", "480", "Eco", "Economy"):
+            if self._try_click_text(inner, pat):
+                logger.info(f"Video quality set: {pat}")
+                return
 
     # ─── iframe取得 ───
 
@@ -136,6 +192,7 @@ class BetExecutor:
             self._bead_fail_count = 0
             self._bead_last_ok = time.time()
             self._scan_available_chips()
+            self._apply_video_quality()
             logger.info(f"{table_name} 入場完了")
             return True
 
@@ -648,7 +705,7 @@ class BetExecutor:
                     return False
 
         # BET受理確認: WS BET_CHIP → DOM total-bet の順で検出
-        _confirm_deadline = time.time() + 5.0
+        _confirm_deadline = time.time() + 10.0
         while time.time() < _confirm_deadline:
             # WS で CLIENT_BET_CHIP が来ていれば即受理
             if self.game_ws and self.game_ws.status == "Betting":

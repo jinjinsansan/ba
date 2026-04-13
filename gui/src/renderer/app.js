@@ -29,6 +29,9 @@ function showMain() {
 async function initLicense() {
   const env = await window.valhalla.getEnv();
   const email = env.account_email;
+  SITE_API_KEY = env.api_key || '';
+  UPDATE_URL = env.update_url || '';
+  UPDATE_VERSION = env.update_version || '';
 
   if (!email) {
     showSetup();
@@ -39,6 +42,7 @@ async function initLicense() {
   const result = await window.valhalla.checkLicense(email);
   if (result.ok) {
     showMain();
+    window.valhalla.checkUpdates();
   } else {
     showSetup(result.reason);
   }
@@ -71,6 +75,7 @@ $('#btnActivate').addEventListener('click', async () => {
   await window.valhalla.saveCredentials({ email, stake_username: stakeUser, stake_password: stakePass });
   $('#setupLoading').style.display = 'none';
   showMain();
+  window.valhalla.checkUpdates();
 });
 
 $('#linkBafather').addEventListener('click', () => window.valhalla.openExternal('https://bafather.uk'));
@@ -83,17 +88,30 @@ window.valhalla.onUpdateStatus((data) => {
   const banner = $('#updateBanner');
   const text = $('#updateText');
   const btn = $('#btnInstallUpdate');
+  const indicator = $('#updateIndicator');
   if (data.status === 'available') {
     banner.style.display = 'flex';
-    text.textContent = `新バージョン ${data.version} をダウンロード中...`;
-    btn.style.display = 'none';
+    text.textContent = `Update available: v${data.version}`;
+    btn.style.display = 'inline-flex';
+    if (indicator) indicator.style.display = 'flex';
   } else if (data.status === 'downloading') {
     banner.style.display = 'flex';
-    text.textContent = `ダウンロード中... ${data.percent}%`;
+    text.textContent = `Downloading... ${data.percent}%`;
     btn.style.display = 'none';
+    if (indicator) indicator.style.display = 'flex';
+  } else if (data.status === 'up-to-date') {
+    banner.style.display = 'none';
+    if (indicator) indicator.style.display = 'none';
   }
 });
-$('#btnInstallUpdate').addEventListener('click', () => window.valhalla.openUpdatePage());
+$('#btnInstallUpdate').addEventListener('click', async () => {
+  const res = await window.valhalla.runUpdate();
+  if (!res || !res.ok) {
+    addLog(`Update failed: ${res?.error || 'unknown error'}`, 'lose');
+  } else {
+    addLog('Update started. The app will restart.', 'info');
+  }
+});
 
 // --- Start / Stop ---
 let sessionTotal = 0;
@@ -106,7 +124,7 @@ $('#btnStart').addEventListener('click', async () => {
   await fetchRecommendedTables();
   const config = {
     ...loadSettings(),
-    site_api_key: LAPLACE_API_KEY,
+    site_api_key: SITE_API_KEY,
     resume_results: (typeof results !== 'undefined' && Array.isArray(results)) ? results.slice() : [],
     table_filter: loadTableFilter(),
     recommended_tables: getEnabledRecommendedTables(),
@@ -255,7 +273,9 @@ function normalizeProfitSessionLimit(value) {
 }
 
 const SITE_URL = 'https://bafather.uk';
-const LAPLACE_API_KEY = 'c6gDoe0xIyBOTQ7bvzRaAHNYn4ZE1W9Mriumqkw8Shf5Jlsd';
+let SITE_API_KEY = '';
+let UPDATE_URL = '';
+let UPDATE_VERSION = '';
 
 async function syncTableFilterToServer(email, filter) {
   if (!email) return;
@@ -263,7 +283,7 @@ async function syncTableFilterToServer(email, filter) {
     await fetch(`${SITE_URL}/api/bot-config`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ email, bot_config: filter, api_key: LAPLACE_API_KEY }),
+      body: JSON.stringify({ email, bot_config: filter, api_key: SITE_API_KEY }),
     });
   } catch (e) {
     console.warn('[sync] bot-config sync failed:', e);
@@ -274,8 +294,8 @@ async function syncTableFilterToServer(email, filter) {
 async function fetchRecommendedTables() {
   const email = loadSettings().user_email;
   const qs = email
-    ? `?email=${encodeURIComponent(email)}&api_key=${encodeURIComponent(LAPLACE_API_KEY)}`
-    : `?api_key=${encodeURIComponent(LAPLACE_API_KEY)}`;
+    ? `?email=${encodeURIComponent(email)}&api_key=${encodeURIComponent(SITE_API_KEY)}`
+    : `?api_key=${encodeURIComponent(SITE_API_KEY)}`;
   try {
     const res = await fetch(`${SITE_URL}/api/recommended-tables${qs}`);
     const data = await res.json();
@@ -302,7 +322,7 @@ async function saveRecommendedTablesToServer(tables) {
     await fetch(`${SITE_URL}/api/recommended-tables`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ email, api_key: LAPLACE_API_KEY, tables }),
+      body: JSON.stringify({ email, api_key: SITE_API_KEY, tables }),
     });
   } catch (e) {
     console.warn('[sync] recommended-tables save failed:', e);
@@ -344,7 +364,7 @@ async function syncGuiStateToServer() {
     await fetch(`${SITE_URL}/api/gui-state`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ email, api_key: LAPLACE_API_KEY, gui_state: _getGuiState() }),
+      body: JSON.stringify({ email, api_key: SITE_API_KEY, gui_state: _getGuiState() }),
     });
   } catch (e) {
     console.warn('[sync] gui-state sync failed:', e);
@@ -367,7 +387,7 @@ async function loadGuiStateFromServer() {
   const email = loadSettings().user_email;
   if (!email) return null;
   try {
-    const res = await fetch(`${SITE_URL}/api/gui-state?email=${encodeURIComponent(email)}&api_key=${encodeURIComponent(LAPLACE_API_KEY)}`);
+    const res = await fetch(`${SITE_URL}/api/gui-state?email=${encodeURIComponent(email)}&api_key=${encodeURIComponent(SITE_API_KEY)}`);
     const data = await res.json();
     return data.gui_state || null;
   } catch (e) {
@@ -477,13 +497,17 @@ function initModalTabs() {
     if (active === 'bot') {
       $('#tabBotBtn').classList.add('active');
       $('#tabBotContent').classList.remove('hidden');
-    } else {
+    } else if (active === 'table') {
       $('#tabTableBtn').classList.add('active');
       $('#tabTableContent').classList.remove('hidden');
+    } else {
+      $('#tabSystemBtn').classList.add('active');
+      $('#tabSystemContent').classList.remove('hidden');
     }
   }
   $('#tabBotBtn').addEventListener('click', () => switchTab('bot'));
   $('#tabTableBtn').addEventListener('click', () => switchTab('table'));
+  $('#tabSystemBtn').addEventListener('click', () => switchTab('system'));
 }
 
 function initTableFilterControls() {
@@ -524,7 +548,7 @@ function applyTableFilterToUI(f) {
   if (_toggles['pbTrack']) _toggles['pbTrack'].set(f.require_pb);
 }
 
-$('#btnSettings').addEventListener('click', () => {
+$('#btnSettings').addEventListener('click', async () => {
   $('#settingsModal').classList.remove('hidden');
   const s = loadSettings();
   $('#inputLicense').value = s.license_key || '';
@@ -537,6 +561,10 @@ $('#btnSettings').addEventListener('click', () => {
   $('#inputUserEmail').value = s.user_email || '';
   $('#inputDryRun').checked = !!s.dry_run;
   $('#inputBetMode').value = s.bet_mode || 'counter';
+  try {
+    const env = await window.valhalla.getEnv();
+    $('#inputSupportToggle').checked = ['1', 'true', 'yes'].includes(String(env.support_enabled || '').toLowerCase());
+  } catch {}
   // Load table filter into UI
   applyTableFilterToUI(loadTableFilter());
   // Reset to BOT tab
@@ -585,6 +613,41 @@ $('#btnSaveSettings').addEventListener('click', async () => {
     }
   }
 });
+
+// --- System actions ---
+const _btnUpdate = $('#btnRunUpdate');
+if (_btnUpdate) {
+  _btnUpdate.addEventListener('click', async () => {
+    const res = await window.valhalla.runUpdate();
+    if (!res || !res.ok) addLog(`Update failed: ${res?.error || 'unknown error'}`, 'lose');
+    else addLog('Update started. The app will restart.', 'info');
+  });
+}
+const _btnWatchdog = $('#btnRunWatchdog');
+if (_btnWatchdog) {
+  _btnWatchdog.addEventListener('click', async () => {
+    const res = await window.valhalla.runWatchdog();
+    if (!res || !res.ok) addLog(`Watchdog failed: ${res?.error || 'unknown error'}`, 'lose');
+    else addLog('Watchdog started.', 'info');
+  });
+}
+const _btnInstallDeps = $('#btnInstallDeps');
+if (_btnInstallDeps) {
+  _btnInstallDeps.addEventListener('click', async () => {
+    const res = await window.valhalla.installDeps();
+    if (!res || !res.ok) addLog(`Install failed: ${res?.error || 'unknown error'}`, 'lose');
+    else addLog('Installer started. Please wait...', 'info');
+  });
+}
+const _supportToggle = $('#inputSupportToggle');
+if (_supportToggle) {
+  _supportToggle.addEventListener('change', async (e) => {
+    const enabled = !!e.target.checked;
+    const res = await window.valhalla.toggleSupport(enabled);
+    if (!res || !res.ok) addLog(`Support toggle failed: ${res?.error || 'unknown error'}`, 'lose');
+    else addLog(`Remote support ${enabled ? 'enabled' : 'disabled'}.`, 'info');
+  });
+}
 
 function loadSettings() {
   try {

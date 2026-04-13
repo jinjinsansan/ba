@@ -192,6 +192,30 @@ class BaccaratScraper:
         state.update({"booting": False, "crash_streak": crash_streak, "last_fail_ts": time.time()})
         self._save_profile_state(state)
 
+    def _apply_video_constraints(self) -> None:
+        if not self.page:
+            return
+        try:
+            if config.VIDEO_VIEWPORT_WIDTH > 0 and config.VIDEO_VIEWPORT_HEIGHT > 0:
+                self.page.set_viewport_size({
+                    "width": config.VIDEO_VIEWPORT_WIDTH,
+                    "height": config.VIDEO_VIEWPORT_HEIGHT,
+                })
+                logger.info(f"Video viewport set: {config.VIDEO_VIEWPORT_WIDTH}x{config.VIDEO_VIEWPORT_HEIGHT}")
+        except Exception as e:
+            logger.warning(f"Viewport設定失敗（続行）: {e}")
+        if config.VIDEO_BLOCK_MEDIA:
+            try:
+                def _route_media(route, request):
+                    if request.resource_type == "media":
+                        route.abort()
+                    else:
+                        route.continue_()
+                self.page.route("**/*", _route_media)
+                logger.info("Video media requests blocked")
+            except Exception as e:
+                logger.warning(f"Media block設定失敗（続行）: {e}")
+
     @staticmethod
     def _resolve_executable_path() -> str | None:
         """Windows Store版Python対応: realpathでCamoufox実行パスを解決"""
@@ -231,6 +255,7 @@ class BaccaratScraper:
                 self.page = ctx.pages[0]
             else:
                 self.page = ctx.new_page()
+            self._apply_video_constraints()
 
             # WSは Stake の最初のページロード中に張られることがあるため、
             # login/goto の前に必ずリスナー登録して取りこぼしを防ぐ

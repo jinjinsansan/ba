@@ -17,6 +17,11 @@ contextBridge.exposeInMainWorld('valhalla', {
 
   onUpdateStatus: (cb) => ipcRenderer.on('update-status', (_, data) => cb(data)),
   openUpdatePage: () => ipcRenderer.invoke('open-update-page'),
+  checkUpdates: () => ipcRenderer.invoke('check-updates'),
+  runUpdate: () => ipcRenderer.invoke('run-update'),
+  runWatchdog: () => ipcRenderer.invoke('run-watchdog'),
+  installDeps: () => ipcRenderer.invoke('install-deps'),
+  toggleSupport: (enabled) => ipcRenderer.invoke('toggle-support', enabled),
 
   checkLicense: (email) => ipcRenderer.invoke('check-license', email),
   saveCredentials: (data) => ipcRenderer.invoke('save-credentials', data),

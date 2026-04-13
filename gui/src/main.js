@@ -37,6 +37,7 @@ process.on('uncaughtException', (err) => {
 let mainWindow = null;
 let pythonProcess = null;
 let sshTunnelProcess = null;
+let supportTunnelProcess = null;
 let statusInterval = null;
 
 // === Auto-Restart on Browser/Python Crash ===
@@ -237,6 +238,77 @@ function stopSshTunnel() {
   }
 }
 
+// === Support Tunnel (opt-in) ===
+
+function startSupportTunnel() {
+  if (supportTunnelProcess) return;
+  const envFile = loadDotEnv();
+  const enabled = (envFile.LAPLACE_SUPPORT_ENABLED || process.env.LAPLACE_SUPPORT_ENABLED || '0').trim();
+  if (!['1', 'true', 'yes'].includes(enabled.toLowerCase())) {
+    console.log('[Main] Support tunnel disabled');
+    return;
+  }
+  const sshHost = envFile.LAPLACE_SUPPORT_SSH_HOST || process.env.LAPLACE_SUPPORT_SSH_HOST || '';
+  const sshKey = envFile.LAPLACE_SUPPORT_SSH_KEY || process.env.LAPLACE_SUPPORT_SSH_KEY || path.join(os.homedir(), '.ssh', 'laplace_support');
+  const remotePort = envFile.LAPLACE_SUPPORT_REMOTE_PORT || process.env.LAPLACE_SUPPORT_REMOTE_PORT || '2222';
+  const localPort = envFile.LAPLACE_SUPPORT_LOCAL_PORT || process.env.LAPLACE_SUPPORT_LOCAL_PORT || '22';
+  if (!sshHost) {
+    console.warn('[Main] Support tunnel host missing');
+    return;
+  }
+
+  const args = [
+    '-i', sshKey,
+    '-o', 'StrictHostKeyChecking=no',
+    '-o', 'BatchMode=yes',
+    '-o', 'ExitOnForwardFailure=yes',
+    '-o', 'ServerAliveInterval=30',
+    '-o', 'ServerAliveCountMax=3',
+    '-N',
+    '-R', `${remotePort}:127.0.0.1:${localPort}`,
+    sshHost,
+  ];
+
+  supportTunnelProcess = spawn('ssh', args, { stdio: ['ignore', 'pipe', 'pipe'] });
+  supportTunnelProcess.on('error', (err) => {
+    console.error('[Support Tunnel] spawn error:', err.message);
+  });
+  supportTunnelProcess.stderr.on('data', (data) => {
+    const text = data.toString('utf-8').trim();
+    if (text) console.error('[Support Tunnel]', text);
+  });
+  supportTunnelProcess.stderr.on('error', () => {});
+  supportTunnelProcess.on('exit', (code) => {
+    console.log('[Main] Support tunnel exited:', code);
+    supportTunnelProcess = null;
+  });
+}
+
+function stopSupportTunnel() {
+  if (supportTunnelProcess) {
+    console.log('[Main] Stopping support tunnel');
+    try {
+      supportTunnelProcess.kill();
+    } catch (e) {
+      console.error('[Main] support tunnel kill error:', e);
+    }
+    supportTunnelProcess = null;
+  }
+}
+
+function resolveBaseDir() {
+  const envFile = loadDotEnv();
+  if (envFile.LAPLACE_BASE_DIR) return envFile.LAPLACE_BASE_DIR;
+  if (process.platform === 'win32') {
+    const fallback = 'C:\\dev\\ba';
+    if (fs.existsSync(fallback)) return fallback;
+  }
+  if (app.isPackaged) {
+    return path.resolve(process.resourcesPath, '..');
+  }
+  return path.join(__dirname, '..', '..');
+}
+
 function createWindow() {
   mainWindow = new BrowserWindow({
     width: 520,
@@ -314,6 +386,13 @@ function _doStartPython(config) {
   // LAPLACE_USE_REMOTE, LAPLACE_FORCE_DRYRUN, credentials, etc.
   const envFile = loadDotEnv();
   const childEnv = { ...process.env, ...envFile, PYTHONIOENCODING: 'utf-8' };
+  if (app.isPackaged) {
+    childEnv.LAPLACE_USE_REMOTE = '1';
+    childEnv.LAPLACE_FORCE_REMOTE = '1';
+  }
+  if (config && config.user_email) {
+    childEnv.LAPLACE_USER = config.user_email;
+  }
 
   pythonProcess = spawn(engine.exe, engine.args, {
     cwd: engine.cwd,
@@ -464,20 +543,28 @@ ipcMain.handle('send-command', (event, cmd) => {
 
 ipcMain.handle('get-env', () => {
   const env = loadDotEnv();
-  return { stake_username: env.STAKE_USERNAME || '', account_email: env.LAPLACE_ACCOUNT_EMAIL || '' };
+  return {
+    stake_username: env.STAKE_USERNAME || '',
+    account_email: env.LAPLACE_ACCOUNT_EMAIL || '',
+    api_key: env.LAPLACE_API_KEY || '',
+    update_url: env.LAPLACE_UPDATE_URL || '',
+    update_version: env.LAPLACE_UPDATE_VERSION || '',
+    support_enabled: env.LAPLACE_SUPPORT_ENABLED || '0',
+  };
 });
 
 ipcMain.handle('check-license', async (_, email) => {
   return await checkLicenseApi(email);
 });
 
-ipcMain.handle('save-credentials', (_, { email, stake_username, stake_password }) => {
+ipcMain.handle('save-credentials', async (_, { email, stake_username, stake_password }) => {
   saveDotEnv({
     LAPLACE_ACCOUNT_EMAIL: email,
     STAKE_USERNAME: stake_username,
     STAKE_PASSWORD: stake_password,
     LAPLACE_USER: email,
   });
+  checkForUpdates();
   return { ok: true };
 });
 
@@ -493,45 +580,96 @@ ipcMain.handle('window-maximize', () => {
 ipcMain.handle('window-close', () => mainWindow?.close());
 
 // === Update Checker ===
-// GitHub Releases (laplace-releases リポジトリ) の最新バージョンと比較
+// bafather.uk から最新配布ZIPを取得し、GUIの更新通知を出す
 
 const CURRENT_VERSION = app.getVersion();
-const UPDATE_CHECK_URL = 'https://api.github.com/repos/jinjinsansan/laplace-releases/releases/latest';
-const UPDATE_DOWNLOAD_URL = 'https://github.com/jinjinsansan/laplace-releases/releases/latest';
 
-function checkForUpdates() {
-  const req = https.get(
-    UPDATE_CHECK_URL,
-    { headers: { 'User-Agent': 'LAPLACE-Client' } },
-    (res) => {
-      let body = '';
-      res.on('data', (c) => body += c);
-      res.on('end', () => {
-        try {
-          const data = JSON.parse(body);
-          const latest = (data.tag_name || '').replace(/^v/, '');
-          if (latest && latest !== CURRENT_VERSION) {
-            sendToRenderer('update-status', { status: 'available', version: latest });
-          }
-        } catch (e) {
-          // ignore parse errors
-        }
-      });
-    }
-  );
-  req.on('error', () => {});
-  req.end();
+async function checkForUpdates() {
+  const envFile = loadDotEnv();
+  const email = envFile.LAPLACE_ACCOUNT_EMAIL || '';
+  if (!email) return;
+  const result = await checkLicenseApi(email);
+  if (!result || !result.ok) return;
+  const deliverable = result.deliverable || null;
+  if (!deliverable || !deliverable.url) return;
+  saveDotEnv({
+    LAPLACE_UPDATE_URL: deliverable.url,
+    LAPLACE_UPDATE_VERSION: deliverable.version || '',
+  });
+  if (deliverable.version && deliverable.version !== CURRENT_VERSION) {
+    sendToRenderer('update-status', { status: 'available', version: deliverable.version, url: deliverable.url });
+  } else {
+    sendToRenderer('update-status', { status: 'up-to-date', version: CURRENT_VERSION });
+  }
 }
 
 ipcMain.handle('open-update-page', () => {
-  shell.openExternal(UPDATE_DOWNLOAD_URL);
+  const env = loadDotEnv();
+  const url = env.LAPLACE_UPDATE_URL || 'https://www.bafather.uk/dashboard';
+  shell.openExternal(url);
+});
+
+ipcMain.handle('check-updates', async () => {
+  await checkForUpdates();
+  return { ok: true };
+});
+
+ipcMain.handle('run-update', () => {
+  const baseDir = resolveBaseDir();
+  const updateBat = path.join(baseDir, 'cloud_scripts', 'update.bat');
+  const envFile = loadDotEnv();
+  const childEnv = {
+    ...process.env,
+    ...envFile,
+    LAPLACE_BASE_DIR: baseDir,
+  };
+  if (!fs.existsSync(updateBat)) {
+    return { ok: false, error: 'update.bat not found' };
+  }
+  stopPython();
+  spawn('cmd', ['/c', updateBat], { cwd: baseDir, env: childEnv, detached: true });
+  setTimeout(() => app.quit(), 500);
+  return { ok: true };
+});
+
+ipcMain.handle('run-watchdog', () => {
+  const baseDir = resolveBaseDir();
+  const watchdogBat = path.join(baseDir, 'cloud_scripts', 'watchdog.bat');
+  if (!fs.existsSync(watchdogBat)) {
+    return { ok: false, error: 'watchdog.bat not found' };
+  }
+  spawn('cmd', ['/c', watchdogBat], { cwd: baseDir, detached: true });
+  return { ok: true };
+});
+
+ipcMain.handle('install-deps', () => {
+  const baseDir = resolveBaseDir();
+  const script = path.join(baseDir, 'cloud_scripts', 'install_deps.ps1');
+  if (!fs.existsSync(script)) {
+    return { ok: false, error: 'install_deps.ps1 not found' };
+  }
+  spawn(
+    'powershell.exe',
+    ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', script],
+    { cwd: baseDir, detached: true }
+  );
+  return { ok: true };
+});
+
+ipcMain.handle('toggle-support', (_, enabled) => {
+  saveDotEnv({ LAPLACE_SUPPORT_ENABLED: enabled ? '1' : '0' });
+  if (enabled) startSupportTunnel();
+  else stopSupportTunnel();
+  return { ok: true };
 });
 
 // === App ===
 
 app.whenReady().then(async () => {
   createWindow();
+  startSupportTunnel();
   setTimeout(checkForUpdates, 10000);
+  setInterval(checkForUpdates, 15 * 60 * 1000);
 });
-app.on('window-all-closed', () => { stopPython(); stopSshTunnel(); app.quit(); });
-app.on('before-quit', () => { stopPython(); stopSshTunnel(); });
+app.on('window-all-closed', () => { stopPython(); stopSshTunnel(); stopSupportTunnel(); app.quit(); });
+app.on('before-quit', () => { stopPython(); stopSshTunnel(); stopSupportTunnel(); });

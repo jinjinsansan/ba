@@ -27,7 +27,23 @@ export async function POST(req: NextRequest) {
   // 管理者は無条件で通過
   if (profile.is_admin) {
     const { data: billing } = await admin.from('billing').select('bot_config, gui_state').eq('user_id', profile.id).single()
-    return NextResponse.json({ ok: true, bot_config: billing?.bot_config || {}, gui_state: billing?.gui_state || {} })
+    const { data: deliverables } = await admin
+      .from('deliverables')
+      .select('file_path, version, created_at')
+      .eq('user_id', profile.id)
+      .order('created_at', { ascending: false })
+      .limit(1)
+    const deliverable = Array.isArray(deliverables) && deliverables.length ? deliverables[0] : null
+    return NextResponse.json({
+      ok: true,
+      bot_config: billing?.bot_config || {},
+      gui_state: billing?.gui_state || {},
+      deliverable: deliverable ? {
+        url: deliverable.file_path,
+        version: deliverable.version,
+        updated_at: deliverable.created_at,
+      } : null,
+    })
   }
 
   // サブスクリプション確認
@@ -57,9 +73,21 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ ok: false, reason: 'Balance is empty. Please charge to enable live betting.' })
     }
   }
+  const { data: deliverables } = await admin
+    .from('deliverables')
+    .select('file_path, version, created_at')
+    .eq('user_id', profile.id)
+    .order('created_at', { ascending: false })
+    .limit(1)
+  const deliverable = Array.isArray(deliverables) && deliverables.length ? deliverables[0] : null
   return NextResponse.json({
     ok: true,
     bot_config: billing.bot_config || {},
     gui_state: billing.gui_state || {},
+    deliverable: deliverable ? {
+      url: deliverable.file_path,
+      version: deliverable.version,
+      updated_at: deliverable.created_at,
+    } : null,
   })
 }

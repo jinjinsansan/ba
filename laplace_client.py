@@ -150,6 +150,8 @@ class LaplaceClient:
         profit_stop: int,
         loss_cut: int,
         resume: bool = True,
+        counter_mode: bool = False,
+        counter_set_size: Optional[int] = None,
     ) -> dict:
         body = {
             "user_id": user_id,
@@ -157,6 +159,8 @@ class LaplaceClient:
             "profit_stop": profit_stop,
             "loss_cut": loss_cut,
             "resume": resume,
+            "counter_mode": counter_mode,
+            "counter_set_size": counter_set_size,
         }
         return self._request("POST", "/api/sessions", json=body)
 
@@ -195,9 +199,11 @@ class LaplaceClient:
         finally:
             self.timeout = saved
 
-    def submit_result(self, user_id: str, result: str) -> dict:
+    def submit_result(self, user_id: str, result: str, side: str = "player") -> dict:
         return self._request(
-            "POST", f"/api/sessions/{user_id}/result", json={"result": result}
+            "POST",
+            f"/api/sessions/{user_id}/result",
+            json={"result": result, "side": side},
         )
 
     def reset(self, user_id: str) -> dict:
@@ -304,6 +310,8 @@ class RemoteLaplaceSession:
         api_url: Optional[str] = None,
         api_key: Optional[str] = None,
         user_id: Optional[str] = None,
+        counter_mode: bool = False,
+        counter_set_size: Optional[int] = None,
     ):
         self.executor = executor
         self.notifier = notifier
@@ -318,6 +326,8 @@ class RemoteLaplaceSession:
             "LAPLACE_API_URL", "http://127.0.0.1:8000"
         )
         self.api_key = api_key or os.getenv("LAPLACE_API_KEY", "")
+        self.counter_mode = counter_mode
+        self.counter_set_size = counter_set_size
 
         self.client = LaplaceClient(self.api_url, self.api_key)
         self.tracker = _RemoteTracker(chip_base=chip_base)
@@ -345,6 +355,8 @@ class RemoteLaplaceSession:
             profit_stop=profit_stop,
             loss_cut=loss_cut,
             resume=resume,
+            counter_mode=counter_mode,
+            counter_set_size=counter_set_size,
         )
         self._apply_state(resp["state"])
         logger.info(
@@ -367,6 +379,8 @@ class RemoteLaplaceSession:
         self.loss_cut = state.get("loss_cut", self.loss_cut)
         self.chip_base = state.get("chip_base", self.chip_base)
         self.tracker.chip_base = self.chip_base
+        self.counter_mode = state.get("counter_mode", self.counter_mode)
+        self.counter_set_size = state.get("set_size", self.counter_set_size)
 
     def get_state_dict(self) -> dict:
         return dict(self._last_state) if isinstance(self._last_state, dict) else {}
@@ -422,7 +436,7 @@ class RemoteLaplaceSession:
             pass
         return {"action": "exit"}
 
-    def run_round(self, running_flag) -> dict:
+    def run_round(self, running_flag, side: str = "player") -> dict:
         if not running_flag():
             return self._exit("running_flag=False (stop requested)")
 
@@ -440,7 +454,14 @@ class RemoteLaplaceSession:
                 return self._exit("error_dialog_after_bet_phase_wait")
             return self._exit("bet_phase_timeout")
 
-        # Ask the server for the next BET parameters (always player side)
+        if hasattr(self.executor, "pre_bet_check"):
+            try:
+                if not self.executor.pre_bet_check():
+                    return self._exit("pre_bet_check_failed")
+            except Exception:
+                return self._exit("pre_bet_check_error")
+
+        # Ask the server for the next BET parameters (size/sequence only)
         try:
             decision = self.client.decide(self.user_id)
         except LaplaceApiError as e:
@@ -477,7 +498,8 @@ class RemoteLaplaceSession:
                 )
                 return self._exit(f"insufficient_balance: ${balance:.2f} < ${bet_amount:.2f}")
 
-        side = "player"
+        if side not in ("player", "banker"):
+            side = "player"
         logger.info(
             f"BET: ${bet_amount:.0f} {side.upper()} "
             f"(unit={unit} chips, Set#{set_idx} Turn{turn_num}/7) [remote]"
@@ -532,7 +554,7 @@ class RemoteLaplaceSession:
 
         # Submit to server
         try:
-            resp = self.client.submit_result(self.user_id, result)
+            resp = self.client.submit_result(self.user_id, result, side=side)
         except LaplaceApiError as e:
             return self._exit(f"API submit_result failed: {e}")
 

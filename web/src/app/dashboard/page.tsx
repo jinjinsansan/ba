@@ -174,6 +174,11 @@ export default async function DashboardPage() {
                 {deliverableDate && (
                   <div className="text-xs text-text-muted">Updated: {deliverableDate}</div>
                 )}
+                {latestDeliverable?.file_path && (
+                  <div className="text-xs text-text-dim break-all">
+                    Direct URL: {latestDeliverable.file_path}
+                  </div>
+                )}
               </div>
             ) : hasPackage ? (
               <p className="text-text-muted">Your download is being prepared...</p>

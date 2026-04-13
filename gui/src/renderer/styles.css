@@ -163,6 +163,34 @@ html[data-variant="user"] .os-tag { display: none !important; }
   letter-spacing: 0.22em; color: var(--accent);
   text-shadow: 0 0 12px rgba(0,229,255,0.5), 0 0 24px rgba(0,229,255,0.25), 0 0 48px rgba(0,229,255,0.12);
 }
+.update-indicator {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-left: 10px;
+  padding: 2px 6px;
+  border-radius: 999px;
+  border: 1px solid rgba(0, 255, 136, 0.35);
+  background: rgba(0, 255, 136, 0.08);
+  color: var(--win);
+  font-size: 9px;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  -webkit-app-region: no-drag;
+}
+.update-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--win);
+  box-shadow: 0 0 8px rgba(0,255,136,0.8);
+  animation: update-pulse 1.6s ease-in-out infinite;
+}
+@keyframes update-pulse {
+  0% { transform: scale(0.85); opacity: 0.7; }
+  50% { transform: scale(1); opacity: 1; }
+  100% { transform: scale(0.85); opacity: 0.7; }
+}
 .title-bar-controls { display: flex; gap: 6px; -webkit-app-region: no-drag; }
 .title-btn {
   width: 22px; height: 22px; border: none; border-radius: 50%;

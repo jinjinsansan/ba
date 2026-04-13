@@ -39,7 +39,7 @@ from pydantic import BaseModel, Field
 
 # Ensure we can import marubatsu_strategy from the project root
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from marubatsu_strategy import MaruBatsuTracker, SetData, SEQ
+from marubatsu_strategy import MaruBatsuTracker, SetData, SEQ, SEQ_COUNTER, SET_SIZE_COUNTER
 from bot_manager import get_bot_manager
 
 logging.basicConfig(
@@ -75,6 +75,8 @@ class CreateSessionRequest(BaseModel):
     profit_stop: int = Field(DEFAULT_PROFIT_STOP, gt=0)
     loss_cut: int = Field(DEFAULT_LOSS_CUT, gt=0)
     resume: bool = True
+    counter_mode: bool = False
+    counter_set_size: int | None = None
 
 
 class UpdateConfigRequest(BaseModel):
@@ -89,6 +91,7 @@ class RestoreSessionRequest(BaseModel):
 
 class ResultRequest(BaseModel):
     result: str = Field(..., description="player | banker | tie")
+    side: str = Field("player", description="player | banker (bet side)")
 
 
 class SessionState(BaseModel):
@@ -96,6 +99,8 @@ class SessionState(BaseModel):
     chip_base: float
     profit_stop: int
     loss_cut: int
+    counter_mode: bool
+    set_size: int
     session_count: int
     total_bets: int
     total_wins: int
@@ -545,13 +550,17 @@ class LaplaceSession:
         chip_base: float = DEFAULT_CHIP_BASE,
         profit_stop: int = DEFAULT_PROFIT_STOP,
         loss_cut: int = DEFAULT_LOSS_CUT,
+        counter_mode: bool = False,
+        counter_set_size: int | None = None,
     ):
         self.user_id = user_id
         self.chip_base = chip_base
         self.profit_stop = profit_stop
         self.loss_cut = loss_cut
-
-        self.tracker = MaruBatsuTracker(chip_base=chip_base)
+        self.counter_mode = bool(counter_mode)
+        self.set_size = counter_set_size or (SET_SIZE_COUNTER if self.counter_mode else 7)
+        self.seq = SEQ_COUNTER if self.counter_mode else SEQ
+        self.tracker = MaruBatsuTracker(chip_base=chip_base, seq=self.seq, set_size=self.set_size)
         self.session_count = 0
         self.total_bets = 0
         self.total_wins = 0
@@ -574,6 +583,8 @@ class LaplaceSession:
             "chip_base": self.chip_base,
             "profit_stop": self.profit_stop,
             "loss_cut": self.loss_cut,
+            "counter_mode": self.counter_mode,
+            "set_size": self.set_size,
             "sets": [
                 {
                     "set_index": s.set_index,
@@ -608,6 +619,13 @@ class LaplaceSession:
     def apply_state(self, state: dict) -> None:
         if not isinstance(state, dict):
             return
+        counter_mode = state.get("counter_mode", self.counter_mode)
+        set_size = state.get("set_size", self.set_size)
+        if counter_mode != self.counter_mode or set_size != self.set_size:
+            self.counter_mode = bool(counter_mode)
+            self.set_size = int(set_size or (SET_SIZE_COUNTER if self.counter_mode else 7))
+            self.seq = SEQ_COUNTER if self.counter_mode else SEQ
+            self.tracker = MaruBatsuTracker(chip_base=self.chip_base, seq=self.seq, set_size=self.set_size)
         chip_base = state.get("chip_base")
         if isinstance(chip_base, (int, float)) and chip_base > 0:
             self.chip_base = float(chip_base)
@@ -657,6 +675,8 @@ class LaplaceSession:
             chip_base=data.get("chip_base", DEFAULT_CHIP_BASE),
             profit_stop=data.get("profit_stop", DEFAULT_PROFIT_STOP),
             loss_cut=data.get("loss_cut", DEFAULT_LOSS_CUT),
+            counter_mode=data.get("counter_mode", False),
+            counter_set_size=data.get("set_size"),
         )
         for sd in data.get("sets", []):
             obj.tracker.sets.append(SetData(**sd))
@@ -687,7 +707,7 @@ class LaplaceSession:
         if turns:
             wins = turns.count("O")
             losses = turns.count("X")
-            unit = SEQ[self.tracker.current_unit_idx]
+            unit = self.seq[self.tracker.current_unit_idx]
             cp += (wins - losses) * unit
         return cp
 
@@ -699,23 +719,25 @@ class LaplaceSession:
             return True, "損切り"
         return False, None
 
-    def add_result(self, result: str) -> tuple[Optional[SetData], Optional[bool]]:
+    def add_result(self, result: str, side: str = "player") -> tuple[Optional[SetData], Optional[bool]]:
         """Register a hand result. Returns (completed_set | None, won | None)."""
         if result not in ("player", "banker", "tie"):
             raise ValueError(f"invalid result: {result}")
+        if side not in ("player", "banker"):
+            raise ValueError(f"invalid side: {side}")
 
         self.total_bets += 1
         if result == "tie":
             self.total_ties += 1
             return None, None
 
-        won = result == "player"
+        won = result == side
         if won:
             self.total_wins += 1
         else:
             self.total_losses += 1
 
-        completed = self.tracker.add_result(result)
+        completed = self.tracker.add_result("player" if won else "banker")
         return completed, won
 
     def reset_session(self, reason: str) -> None:
@@ -742,6 +764,8 @@ class LaplaceSession:
             chip_base=self.chip_base,
             profit_stop=self.profit_stop,
             loss_cut=self.loss_cut,
+            counter_mode=self.counter_mode,
+            set_size=self.set_size,
             session_count=self.session_count,
             total_bets=self.total_bets,
             total_wins=self.total_wins,
@@ -750,7 +774,7 @@ class LaplaceSession:
             set_count=len(self.tracker.sets),
             current_turn=len(turns),
             current_unit_idx=self.tracker.current_unit_idx,
-            current_unit=SEQ[self.tracker.current_unit_idx],
+            current_unit=self.seq[self.tracker.current_unit_idx],
             cumulative_profit=cp,
             cumulative_money=cp * self.chip_base,
             effective_profit=ep,
@@ -768,8 +792,8 @@ class LaplaceSession:
                     "slashed": s.slashed,
                     "used_unit_idx": s.used_unit_idx,
                     "next_unit_idx": s.next_unit_idx,
-                    "used_unit_chips": SEQ[s.used_unit_idx],
-                    "next_unit_chips": SEQ[s.next_unit_idx],
+                    "used_unit_chips": self.seq[s.used_unit_idx],
+                    "next_unit_chips": self.seq[s.next_unit_idx],
                     "set_profit": s.set_profit,
                     "cumulative_profit": s.cumulative_profit,
                 }
@@ -981,14 +1005,21 @@ async def create_session(
     with _sessions_lock:
         existing = get_or_load(req.user_id)
         if existing and req.resume:
-            # Update config but keep state
-            existing.chip_base = req.chip_base
-            existing.profit_stop = req.profit_stop
-            existing.loss_cut = req.loss_cut
-            existing.tracker.chip_base = req.chip_base
-            existing.save()
-            logger.info(f"session resumed: {req.user_id}")
-            return {"created": False, "resumed": True, "state": existing.to_state()}
+            mode_changed = existing.counter_mode != req.counter_mode
+            size_changed = req.counter_set_size and existing.set_size != req.counter_set_size
+            if mode_changed or size_changed:
+                existing.delete_state()
+                _SESSIONS.pop(req.user_id, None)
+                existing = None
+            else:
+                # Update config but keep state
+                existing.chip_base = req.chip_base
+                existing.profit_stop = req.profit_stop
+                existing.loss_cut = req.loss_cut
+                existing.tracker.chip_base = req.chip_base
+                existing.save()
+                logger.info(f"session resumed: {req.user_id}")
+                return {"created": False, "resumed": True, "state": existing.to_state()}
 
         # Create fresh (or overwrite)
         if existing and not req.resume:
@@ -1000,6 +1031,8 @@ async def create_session(
             chip_base=req.chip_base,
             profit_stop=req.profit_stop,
             loss_cut=req.loss_cut,
+            counter_mode=req.counter_mode,
+            counter_set_size=req.counter_set_size,
         )
         sess.save()
         _SESSIONS[req.user_id] = sess
@@ -1053,6 +1086,8 @@ async def restore_session(
                 chip_base=req.state.get("chip_base", DEFAULT_CHIP_BASE),
                 profit_stop=req.state.get("profit_stop", DEFAULT_PROFIT_STOP),
                 loss_cut=req.state.get("loss_cut", DEFAULT_LOSS_CUT),
+                counter_mode=req.state.get("counter_mode", False),
+                counter_set_size=req.state.get("set_size"),
             )
         sess.apply_state(req.state)
         sess.save()
@@ -1081,14 +1116,14 @@ async def decide_bet(
                 action="reset",
                 side="player",
                 unit_idx=sess.tracker.current_unit_idx,
-                unit_chips=SEQ[sess.tracker.current_unit_idx],
-                bet_amount=SEQ[sess.tracker.current_unit_idx] * sess.chip_base,
+                unit_chips=sess.seq[sess.tracker.current_unit_idx],
+                bet_amount=sess.seq[sess.tracker.current_unit_idx] * sess.chip_base,
                 turn_number=sess.tracker.current_turn_number,
                 set_index=sess.tracker.current_set_index,
                 state=sess.to_state(),
             )
         unit_idx = sess.tracker.current_unit_idx
-        unit = SEQ[unit_idx]
+        unit = sess.seq[unit_idx]
         return DecideResponse(
             action="bet",
             side="player",
@@ -1111,7 +1146,7 @@ async def submit_result(
     with _sessions_lock:
         sess = get_required(user_id)
         try:
-            completed, won = sess.add_result(req.result)
+            completed, won = sess.add_result(req.result, req.side)
         except ValueError as e:
             raise HTTPException(status_code=400, detail=str(e))
 
@@ -1126,8 +1161,8 @@ async def submit_result(
                 "overshoot": completed.overshoot,
                 "used_unit_idx": completed.used_unit_idx,
                 "next_unit_idx": completed.next_unit_idx,
-                "used_unit_chips": SEQ[completed.used_unit_idx],
-                "next_unit_chips": SEQ[completed.next_unit_idx],
+                "used_unit_chips": sess.seq[completed.used_unit_idx],
+                "next_unit_chips": sess.seq[completed.next_unit_idx],
                 "set_profit": completed.set_profit,
                 "cumulative_profit": completed.cumulative_profit,
             }

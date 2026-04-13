@@ -13,7 +13,7 @@
   <!-- Update Banner -->
   <div id="updateBanner" style="display:none;background:#1a2a1a;border-bottom:1px solid #2a4a2a;padding:6px 16px;font-size:11px;color:#6fbf6f;align-items:center;gap:10px;-webkit-app-region:no-drag;">
     <span id="updateText"></span>
-    <button id="btnInstallUpdate" style="display:none;padding:2px 10px;background:#2a5a2a;color:#9fdf9f;border:1px solid #3a7a3a;border-radius:3px;cursor:pointer;font-size:11px;">ダウンロードページを開く</button>
+    <button id="btnInstallUpdate" style="display:none;padding:2px 10px;background:#2a5a2a;color:#9fdf9f;border:1px solid #3a7a3a;border-radius:3px;cursor:pointer;font-size:11px;">DOWNLOAD &amp; INSTALL</button>
   </div>
 
   <!-- Title Bar -->
@@ -21,6 +21,10 @@
     <div class="title-bar-left">
       <span class="title-bar-logo">&#8747;</span>
       <span class="title-bar-text">LAPLACE</span>
+      <div class="update-indicator" id="updateIndicator" style="display:none;">
+        <span class="update-dot"></span>
+        <span class="update-label">UPDATE AVAILABLE</span>
+      </div>
     </div>
     <div class="title-bar-controls">
       <button class="title-btn" id="btnMinimize">&#x2500;</button>
@@ -194,6 +198,7 @@
         <div class="modal-tabs">
           <span class="modal-tab active" id="tabBotBtn">BOT</span>
           <span class="modal-tab" id="tabTableBtn">TABLE FILTER</span>
+          <span class="modal-tab" id="tabSystemBtn">SYSTEM</span>
         </div>
 
         <!-- BOT Tab -->
@@ -325,6 +330,30 @@
 
           <button class="btn btn-start" id="btnSaveTable" style="width:100%;margin-top:16px;">SAVE TABLE SETTINGS</button>
           <div class="filter-reset-link" id="btnResetTable">Reset to defaults</div>
+        </div>
+
+        <!-- SYSTEM Tab -->
+        <div id="tabSystemContent" class="tab-content hidden">
+          <div class="form-group">
+            <label>Update</label>
+            <button class="btn btn-start" id="btnRunUpdate" style="width:100%;">DOWNLOAD &amp; INSTALL UPDATE</button>
+          </div>
+          <div class="form-group">
+            <label>Watchdog</label>
+            <button class="btn btn-gear" id="btnRunWatchdog" style="width:100%;">START WATCHDOG</button>
+          </div>
+          <div class="form-group">
+            <label>Install Dependencies</label>
+            <button class="btn btn-gear" id="btnInstallDeps" style="width:100%;">INSTALL ON THIS PC</button>
+          </div>
+          <div class="form-group">
+            <label class="checkbox-label">
+              <input type="checkbox" id="inputSupportToggle"> Enable Remote Support (SSH)
+            </label>
+          </div>
+          <div style="font-size:11px;color:var(--text-muted);line-height:1.4;">
+            Remote support opens a secure tunnel only when enabled here.
+          </div>
         </div>
 
       </div>
