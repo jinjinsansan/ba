@@ -865,19 +865,33 @@ def _run_bet_session_inner(config: dict, stop_event: threading.Event, skip_event
             if do.get("date") != today:
                 old_date = do.get("date")
                 old_bal = do.get("balance")
+                
                 # 前日の確定PNLを VPS settlement キューに保存 (データ欠損防止)
+                # balance が不正（0以下）でも、前日データが有効なら保存試行
                 if old_date and isinstance(old_bal, (int, float)) and old_bal > 0:
-                    prev_pnl = balance - float(old_bal)
-                    try:
-                        _enqueue_settlement(old_date, prev_pnl)
-                        logger.info(f"[pnl] Rollover settle {old_date}: ${prev_pnl:+.2f}")
-                    except Exception as _e:
-                        logger.warning(f"[pnl] Rollover settle enqueue failed: {_e}")
-                sess.daily_open = {"date": today, "balance": balance}
-                if old_date:
-                    logger.info(f"[pnl] Date rollover {old_date}→{today}, daily_open=${balance:.2f}")
+                    if balance and balance > 0:
+                        prev_pnl = balance - float(old_bal)
+                        try:
+                            _enqueue_settlement(old_date, prev_pnl)
+                            logger.info(f"[pnl] Rollover settle {old_date}: ${prev_pnl:+.2f}")
+                        except Exception as _e:
+                            logger.warning(f"[pnl] Rollover settle enqueue failed: {_e}")
+                    else:
+                        # balance 不正時: 前日の daily_open をそのまま基準として記録
+                        logger.warning(f"[pnl] Rollover with invalid balance ({balance}), using daily_open as baseline")
+                
+                # daily_open 更新: balance が有効なら更新、無効なら日付のみ進める
+                if balance and balance > 0:
+                    sess.daily_open = {"date": today, "balance": balance}
+                    if old_date:
+                        logger.info(f"[pnl] Date rollover {old_date}→{today}, daily_open=${balance:.2f}")
+                    else:
+                        logger.info(f"[pnl] daily_open initialized: ${balance:.2f} ({today})")
                 else:
-                    logger.info(f"[pnl] daily_open initialized: ${balance:.2f} ({today})")
+                    # balance 不正: 日付だけ進めて前回の balance を保持（無限ループ防止）
+                    sess.daily_open = {"date": today, "balance": old_bal or 0}
+                    logger.warning(f"[pnl] Date rollover with invalid balance, kept old balance: ${old_bal}")
+                
                 try:
                     sess._save_state()
                 except Exception:

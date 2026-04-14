@@ -32,13 +32,23 @@ Usage:
 from __future__ import annotations
 
 import argparse
+import base64
 import csv
+import hashlib
 import os
 import re
 import subprocess
 import sys
 from datetime import datetime, timezone
 from pathlib import Path
+
+try:
+    from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
+    from cryptography.hazmat.backends import default_backend
+    from cryptography.hazmat.primitives import padding
+except ImportError:
+    print("[error] cryptography library required. Install: pip install cryptography", file=sys.stderr)
+    sys.exit(1)
 
 # --- 設定 ---
 REPO_ROOT = Path(__file__).resolve().parent.parent
@@ -60,6 +70,9 @@ AUTHORIZED_KEY_TEMPLATE = (
     'command="/bin/echo tunnel-only" {pubkey}'
 )
 
+# AES暗号化用の固定ソルト (プロジェクト固有、環境変数で上書き可)
+ENCRYPTION_SALT = os.environ.get("LAPLACE_KEY_SALT", "laplace-support-v1-2026").encode('utf-8')
+
 
 def slugify_email(email: str) -> str:
     """email を安全なディレクトリ名に変換 (alice@example.com → alice_at_example_com)"""
@@ -67,6 +80,46 @@ def slugify_email(email: str) -> str:
     s = s.replace("@", "_at_")
     s = re.sub(r"[^a-z0-9_-]", "_", s)
     return s
+
+
+def _derive_key(email: str) -> bytes:
+    """ユーザーメールから AES-256 鍵を導出 (PBKDF2 100,000 iterations)"""
+    return hashlib.pbkdf2_hmac('sha256', email.lower().encode('utf-8'), ENCRYPTION_SALT, 100000)
+
+
+def encrypt_private_key(plaintext: bytes, email: str) -> str:
+    """秘密鍵を AES-256-CBC で暗号化し、Base64エンコードして返す。
+    
+    フォーマット: base64(iv + ciphertext)
+    """
+    key = _derive_key(email)
+    iv = os.urandom(16)
+    cipher = Cipher(algorithms.AES(key), modes.CBC(iv), backend=default_backend())
+    encryptor = cipher.encryptor()
+    
+    # PKCS7 パディング
+    padder = padding.PKCS7(128).padder()
+    padded = padder.update(plaintext) + padder.finalize()
+    
+    ciphertext = encryptor.update(padded) + encryptor.finalize()
+    return base64.b64encode(iv + ciphertext).decode('ascii')
+
+
+def decrypt_private_key(encrypted_b64: str, email: str) -> bytes:
+    """暗号化された秘密鍵を復号 (GUI側で使用)"""
+    key = _derive_key(email)
+    data = base64.b64decode(encrypted_b64)
+    iv = data[:16]
+    ciphertext = data[16:]
+    
+    cipher = Cipher(algorithms.AES(key), modes.CBC(iv), backend=default_backend())
+    decryptor = cipher.decryptor()
+    padded = decryptor.update(ciphertext) + decryptor.finalize()
+    
+    # パディング除去
+    unpadder = padding.PKCS7(128).unpadder()
+    plaintext = unpadder.update(padded) + unpadder.finalize()
+    return plaintext
 
 
 def run_local(cmd: list[str], check: bool = True, capture: bool = True) -> subprocess.CompletedProcess:
@@ -112,38 +165,60 @@ def next_free_port(registry: list[dict]) -> int:
     raise RuntimeError("No free port in range")
 
 
-def generate_keypair(user_dir: Path, comment: str) -> tuple[Path, Path]:
-    priv = user_dir / "support_key"
+def generate_keypair(user_dir: Path, comment: str, email: str) -> tuple[Path, Path]:
+    """鍵ペア生成後、秘密鍵を AES-256 で暗号化して保存。
+    
+    Returns: (暗号化済み秘密鍵パス, 公開鍵パス)
+    """
+    priv_tmp = user_dir / "support_key.tmp"  # 一時的な平文鍵
+    priv_enc = user_dir / "support_key"      # 暗号化済み
     pub = user_dir / "support_key.pub"
-    if priv.exists() or pub.exists():
-        raise FileExistsError(f"Key already exists: {priv}. Use --rotate to regenerate.")
+    
+    if priv_enc.exists() or pub.exists():
+        raise FileExistsError(f"Key already exists: {priv_enc}. Use --rotate to regenerate.")
+    
     user_dir.mkdir(parents=True, exist_ok=True)
-    run_local(["ssh-keygen", "-t", "ed25519", "-f", str(priv), "-N", "", "-C", comment])
+    
+    # 一時ファイルに鍵生成
+    run_local(["ssh-keygen", "-t", "ed25519", "-f", str(priv_tmp), "-N", "", "-C", comment])
+    
+    # 秘密鍵を読み込んで暗号化
+    plaintext = priv_tmp.read_bytes()
+    encrypted_b64 = encrypt_private_key(plaintext, email)
+    
+    # 暗号化済みを保存
+    priv_enc.write_text(encrypted_b64, encoding='utf-8')
+    
+    # 一時平文ファイルを削除
+    priv_tmp.unlink()
+    
     # Windows では chmod が効かないが試みる
     try:
-        os.chmod(priv, 0o600)
+        os.chmod(priv_enc, 0o600)
     except Exception:
         pass
-    return priv, pub
+    
+    return priv_enc, pub
 
 
 def register_pubkey_on_vps(pubkey_content: str, port: int, email: str) -> None:
-    """laplace_support の authorized_keys に行追加 (重複チェック付き)"""
+    """laplace_support の authorized_keys に行追加 (重複チェック付き、flock で排他制御)"""
     line = AUTHORIZED_KEY_TEMPLATE.format(port=port, pubkey=pubkey_content.strip())
-    # 既存エントリにユーザーメール/ポートがあれば削除してから追加 (冪等化)
-    sed_cmd = (
-        f"sudo sed -i '/# user:{email}$/,/{re.escape(email)}$/d' "
-        f"/home/{SUPPORT_USER_ON_VPS}/.ssh/authorized_keys 2>/dev/null || true"
-    )
-    run_vps(sed_cmd, check=False)
-    # 追記
-    append_cmd = (
-        f"echo '# user:{email}' | sudo tee -a /home/{SUPPORT_USER_ON_VPS}/.ssh/authorized_keys > /dev/null && "
-        f"echo '{line}' | sudo tee -a /home/{SUPPORT_USER_ON_VPS}/.ssh/authorized_keys > /dev/null && "
-        f"sudo chown {SUPPORT_USER_ON_VPS}:{SUPPORT_USER_ON_VPS} /home/{SUPPORT_USER_ON_VPS}/.ssh/authorized_keys && "
-        f"sudo chmod 600 /home/{SUPPORT_USER_ON_VPS}/.ssh/authorized_keys"
-    )
-    run_vps(append_cmd)
+    escaped_line = line.replace("'", "'\\''")  # シェル安全化
+    
+    # flock で排他ロックを取得して authorized_keys を原子的に更新
+    # LOCKFILE: /var/lock/laplace_authkeys.lock
+    update_cmd = f"""
+flock /var/lock/laplace_authkeys.lock -c '
+    AUTHKEYS="/home/{SUPPORT_USER_ON_VPS}/.ssh/authorized_keys"
+    sudo sed -i "/# user:{email}$/,/{re.escape(email)}$/d" "$AUTHKEYS" 2>/dev/null || true
+    echo "# user:{email}" | sudo tee -a "$AUTHKEYS" > /dev/null
+    echo '\''{escaped_line}'\'' | sudo tee -a "$AUTHKEYS" > /dev/null
+    sudo chown {SUPPORT_USER_ON_VPS}:{SUPPORT_USER_ON_VPS} "$AUTHKEYS"
+    sudo chmod 600 "$AUTHKEYS"
+'
+"""
+    run_vps(update_cmd.strip())
 
 
 def remove_user_from_vps(email: str) -> None:
@@ -164,6 +239,8 @@ def write_user_env(user_dir: Path, email: str, port: int) -> Path:
         f"LAPLACE_SUPPORT_ENABLED=1",
         f"LAPLACE_SUPPORT_SSH_HOST={SUPPORT_HOST}",
         f"LAPLACE_SUPPORT_SSH_KEY=./support_key",
+        f"LAPLACE_SUPPORT_SSH_KEY_ENCRYPTED=1",
+        f"LAPLACE_SUPPORT_USER_EMAIL={email}",
         f"LAPLACE_SUPPORT_REMOTE_PORT={port}",
         f"LAPLACE_SUPPORT_LOCAL_PORT=22",
         "",
@@ -198,9 +275,9 @@ def cmd_provision(email: str, port: int | None, rotate: bool) -> None:
             raise SystemExit(f"[abort] Port {port_to_use} already in use")
 
     user_dir = USER_BUILD_DIR / slug
-    priv, pub = generate_keypair(user_dir, comment=f"laplace_support:{email}")
+    priv, pub = generate_keypair(user_dir, comment=f"laplace_support:{email}", email=email)
     pubkey = pub.read_text(encoding="utf-8").strip()
-    print(f"[ok] Keypair generated: {priv}")
+    print(f"[ok] Keypair generated (encrypted): {priv}")
 
     register_pubkey_on_vps(pubkey, port_to_use, email)
     print(f"[ok] Registered on VPS laplace_support authorized_keys (port={port_to_use})")

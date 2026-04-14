@@ -22,6 +22,7 @@ const path = require('path');
 const fs = require('fs');
 const os = require('os');
 const { spawn } = require('child_process');
+const crypto = require('crypto');
 const https = require('https');
 const { shell } = require('electron');
 
@@ -255,6 +256,25 @@ function _resolveSupportKeyPath(rawPath) {
   return path.resolve(baseDir, rawPath);
 }
 
+/**
+ * AES-256-CBC で暗号化された秘密鍵を復号
+ * @param {string} encryptedB64 - Base64(IV + ciphertext)
+ * @param {string} email - ユーザーメール (鍵導出用)
+ * @returns {Buffer} 平文の秘密鍵
+ */
+function _decryptSupportKey(encryptedB64, email) {
+  const SALT = Buffer.from(process.env.LAPLACE_KEY_SALT || 'laplace-support-v1-2026', 'utf-8');
+  const key = crypto.pbkdf2Sync(email.toLowerCase(), SALT, 100000, 32, 'sha256');
+  
+  const data = Buffer.from(encryptedB64, 'base64');
+  const iv = data.slice(0, 16);
+  const ciphertext = data.slice(16);
+  
+  const decipher = crypto.createDecipheriv('aes-256-cbc', key, iv);
+  const plaintext = Buffer.concat([decipher.update(ciphertext), decipher.final()]);
+  return plaintext;
+}
+
 function startSupportTunnel() {
   if (supportTunnelProcess) return;
   const envFile = loadDotEnv();
@@ -268,21 +288,43 @@ function startSupportTunnel() {
   }
   const sshHost = envFile.LAPLACE_SUPPORT_SSH_HOST || process.env.LAPLACE_SUPPORT_SSH_HOST || '';
   const rawKey = envFile.LAPLACE_SUPPORT_SSH_KEY || process.env.LAPLACE_SUPPORT_SSH_KEY || path.join(os.homedir(), '.ssh', 'laplace_support');
-  const sshKey = _resolveSupportKeyPath(rawKey);
+  const sshKeyPath = _resolveSupportKeyPath(rawKey);
   const remotePort = envFile.LAPLACE_SUPPORT_REMOTE_PORT || process.env.LAPLACE_SUPPORT_REMOTE_PORT || '2222';
   const localPort = envFile.LAPLACE_SUPPORT_LOCAL_PORT || process.env.LAPLACE_SUPPORT_LOCAL_PORT || '22';
+  const isEncrypted = (envFile.LAPLACE_SUPPORT_SSH_KEY_ENCRYPTED || '0') === '1';
+  const userEmail = envFile.LAPLACE_SUPPORT_USER_EMAIL || '';
+  
   if (!sshHost) {
     console.warn('[Main] Support tunnel host missing');
     return;
   }
   // 鍵ファイル存在チェック (ない場合は警告だけ、spawnしない)
-  if (sshKey && !fs.existsSync(sshKey)) {
-    console.warn('[Main] Support tunnel SSH key not found:', sshKey);
+  if (sshKeyPath && !fs.existsSync(sshKeyPath)) {
+    console.warn('[Main] Support tunnel SSH key not found:', sshKeyPath);
     return;
   }
 
+  let actualKeyPath = sshKeyPath;
+  
+  // 暗号化されている場合: 復号して一時ファイルに保存
+  if (isEncrypted && userEmail) {
+    try {
+      const encryptedB64 = fs.readFileSync(sshKeyPath, 'utf-8').trim();
+      const decrypted = _decryptSupportKey(encryptedB64, userEmail);
+      
+      // 一時ファイルに保存 (Windows: %TEMP%, Unix: /tmp)
+      const tmpDir = os.tmpdir();
+      actualKeyPath = path.join(tmpDir, 'laplace_support_key');
+      fs.writeFileSync(actualKeyPath, decrypted, { mode: 0o600 });
+      console.log('[Main] Decrypted support key to:', actualKeyPath);
+    } catch (err) {
+      console.error('[Main] Failed to decrypt support key:', err.message);
+      return;
+    }
+  }
+
   const args = [
-    '-i', sshKey,
+    '-i', actualKeyPath,
     '-o', 'StrictHostKeyChecking=no',
     '-o', 'BatchMode=yes',
     '-o', 'ExitOnForwardFailure=yes',
@@ -306,6 +348,15 @@ function startSupportTunnel() {
   supportTunnelProcess.on('exit', (code) => {
     console.log('[Main] Support tunnel exited:', code);
     supportTunnelProcess = null;
+    // 一時ファイルを削除
+    if (isEncrypted && actualKeyPath !== sshKeyPath) {
+      try {
+        fs.unlinkSync(actualKeyPath);
+        console.log('[Main] Cleaned up temp key');
+      } catch (e) {
+        // Ignore cleanup errors
+      }
+    }
   });
 }
 
@@ -692,15 +743,23 @@ ipcMain.handle('install-deps', () => {
     if (fs.existsSync(legacy)) {
       spawn('powershell.exe', ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', legacy],
         { cwd: baseDir, detached: true });
+      // GUI にフィードバック送信 (非同期実行のため即座に完了通知)
+      setTimeout(() => {
+        sendToRenderer('install-deps-result', { success: true, mode: 'legacy', message: 'Legacy installer launched. Check system logs for details.' });
+      }, 1000);
       return { ok: true, mode: 'legacy' };
     }
     return { ok: false, error: 'setup-all.ps1 not found' };
   }
 
   const hasKey = fs.existsSync(pubKeyPath);
+  
   // PowerShell 文字列リテラルで安全にエスケープ (' -> '')
+  // パスにスペース・括弧・特殊文字があっても配列渡しで安全に処理
   const psq = (s) => `'${String(s).replace(/'/g, "''")}'`;
+  
   // -ArgumentList を PS 配列として渡す (空白・特殊文字を含むパスでも壊れない)
+  // 例: C:\Program Files\app\setup.ps1 → '-File','C:\Program Files\app\setup.ps1'
   const argElements = [
     "'-NoProfile'",
     "'-ExecutionPolicy'", "'Bypass'",
@@ -709,8 +768,32 @@ ipcMain.handle('install-deps', () => {
   if (hasKey) {
     argElements.push("'-AdminPubKeyPath'", psq(pubKeyPath));
   }
+  
   const elevateCmd = `Start-Process powershell.exe -Verb RunAs -ArgumentList @(${argElements.join(",")})`;
+  
+  // Note: より確実な代替案 (将来的に切り替え可能):
+  // 1. Base64エンコード: -EncodedCommand でスクリプト全体をBase64化
+  // 2. 一時ファイル: 引数を含むスクリプトを%TEMP%に保存して-Fileで実行
+  // 現行の配列渡し方式で十分安全だが、問題が発生した場合は上記を検討。
+  
   spawn('powershell.exe', ['-NoProfile', '-Command', elevateCmd], { detached: true });
+  
+  // GUI にフィードバック送信 (非同期実行のため即座に完了通知)
+  // 実際の完了はログファイルで確認可能: %ProgramData%\LAPLACE\setup-all.log
+  setTimeout(() => {
+    const logPath = path.join(process.env.ProgramData || 'C:\\ProgramData', 'LAPLACE', 'setup-all.log');
+    const message = hasKey 
+      ? `Setup launched with admin SSH key. Check log: ${logPath}`
+      : `Setup launched (no admin key). Check log: ${logPath}`;
+    sendToRenderer('install-deps-result', { 
+      success: true, 
+      mode: 'unified', 
+      adminKey: hasKey,
+      message,
+      logPath
+    });
+  }, 1000);
+  
   return { ok: true, mode: 'unified', adminKey: hasKey };
 });
 

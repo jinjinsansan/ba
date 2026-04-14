@@ -126,21 +126,27 @@ if ($AdminPubKeyPath -and (Test-Path $AdminPubKeyPath)) {
             if (-not (Test-Path $sshDir)) {
                 New-Item -Path $sshDir -ItemType Directory -Force | Out-Null
             }
-            if (Test-Path $authKeysPath) {
-                $existing = Get-Content $authKeysPath -Raw -ErrorAction SilentlyContinue
-                if ($existing -and $existing.Contains($adminPubKey)) {
-                    Write-Log "admin 公開鍵は登録済み"
-                } else {
-                    Add-Content -Path $authKeysPath -Value $adminPubKey -Encoding ASCII
-                    Write-Log "admin 公開鍵 追記"
-                }
-            } else {
+            
+            # ファイルが存在しない場合のみ ACL を設定 (既存鍵との共存を保証)
+            $isNewFile = -not (Test-Path $authKeysPath)
+            
+            if ($isNewFile) {
+                # 新規作成: 公開鍵を書き込んで ACL を設定
                 Set-Content -Path $authKeysPath -Value $adminPubKey -Encoding ASCII
                 Write-Log "admin 公開鍵 ファイル作成"
+                icacls $authKeysPath /inheritance:r 2>&1 | Out-Null
+                icacls $authKeysPath /grant "Administrators:F" /grant "SYSTEM:F" 2>&1 | Out-Null
+                Write-Log "ACL 設定完了 (新規)"
+            } else {
+                # 既存ファイル: ACL を触らず、重複チェックして追記のみ
+                $existing = Get-Content $authKeysPath -Raw -ErrorAction SilentlyContinue
+                if ($existing -and $existing.Contains($adminPubKey)) {
+                    Write-Log "admin 公開鍵は登録済み (ACL 保持)"
+                } else {
+                    Add-Content -Path $authKeysPath -Value "`n$adminPubKey" -Encoding ASCII
+                    Write-Log "admin 公開鍵 追記 (ACL 保持)"
+                }
             }
-            icacls $authKeysPath /inheritance:r 2>&1 | Out-Null
-            icacls $authKeysPath /grant "Administrators:F" /grant "SYSTEM:F" 2>&1 | Out-Null
-            Write-Log "ACL 設定完了"
         }
     }
 } else {
