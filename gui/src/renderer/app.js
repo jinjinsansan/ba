@@ -643,9 +643,16 @@ function _applyPendingMark(el, mark, color) {
   return true;
 }
 
+function _getStreamSetIndex(msg) {
+  if (typeof msg.sets === 'number') return msg.sets;
+  if (typeof msg.set_count === 'number') return msg.set_count;
+  return 0;
+}
+
 function _getStreamTurnCount(msg) {
-  if (typeof msg.sets === 'number' && typeof msg.current_turn === 'number') {
-    return (msg.sets * _streamSetSize) + msg.current_turn;
+  const setIdx = _getStreamSetIndex(msg);
+  if (typeof msg.current_turn === 'number') {
+    return (setIdx * _streamSetSize) + msg.current_turn;
   }
   if (typeof msg.total_bets === 'number') {
     return msg.total_bets;
@@ -674,7 +681,7 @@ function updateDevPanel(msg) {
   }
   if (sd && typeof msg.overshoot === 'number') sd.textContent = _driftToCode(msg.overshoot);
   // ROUND = total bets, color cycles per set (hidden set boundary indicator)
-  const setIdx = typeof msg.sets === 'number' ? msg.sets : 0;
+  const setIdx = _getStreamSetIndex(msg);
   const currentSetColor = _STREAM_SET_COLORS[setIdx % _STREAM_SET_COLORS.length];
   const streamTurnCount = _getStreamTurnCount(msg);
   if (srd && typeof streamTurnCount === 'number') {
@@ -685,8 +692,8 @@ function updateDevPanel(msg) {
   // Stream: add one mark per hand, colored by current set
   const el = $('#sigStream');
   if (el && typeof streamTurnCount === 'number') {
-    if (el.children.length === 0 && typeof msg.sets === 'number') {
-      _streamSetIdx = msg.sets;
+    if (el.children.length === 0) {
+      _streamSetIdx = setIdx;
       if (typeof msg.current_turn === 'number') {
         _streamTurnsInSet = msg.current_turn;
       }
@@ -695,7 +702,7 @@ function updateDevPanel(msg) {
       _lastStreamTurn = -1;
       _pendingStreamResults.length = 0;
       el.innerHTML = '';
-      _streamSetIdx = typeof msg.sets === 'number' ? msg.sets : 0;
+      _streamSetIdx = setIdx;
       _streamTurnsInSet = typeof msg.current_turn === 'number' ? msg.current_turn : 0;
     }
     if (streamTurnCount > _lastStreamTurn) {
