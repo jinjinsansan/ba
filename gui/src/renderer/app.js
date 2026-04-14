@@ -671,6 +671,24 @@ let _signalStreamAll = '';
 
 let _lastStreamTurn = -1;
 let _lastRoundWon = null;
+const _pendingStreamResults = [];
+
+function _appendStreamMark(el, mark, color, pending = false) {
+  const span = document.createElement('span');
+  span.textContent = mark;
+  if (color) span.style.color = color;
+  if (pending) span.classList.add('s-pending');
+  el.appendChild(span);
+  el.scrollTop = el.scrollHeight;
+}
+
+function _applyPendingMark(el, mark) {
+  const pending = el.querySelector('.s-pending');
+  if (!pending) return false;
+  pending.textContent = mark;
+  pending.classList.remove('s-pending');
+  return true;
+}
 
 function updateDevPanel(msg) {
   if (!isDevMode()) return;
@@ -704,21 +722,22 @@ function updateDevPanel(msg) {
   // Stream: add one mark per hand, colored by current set
   const el = $('#sigStream');
   if (el && typeof msg.total_bets === 'number') {
-    if (msg.total_bets !== _lastStreamTurn) {
+    if (msg.total_bets < _lastStreamTurn) {
+      _lastStreamTurn = -1;
+      _pendingStreamResults.length = 0;
+      el.innerHTML = '';
+    }
+    if (msg.total_bets > _lastStreamTurn) {
+      if (el.querySelector('[style*="rgba"]')) el.innerHTML = '';  // Clear "AWAITING SIGNAL"
+      for (let t = _lastStreamTurn + 1; t <= msg.total_bets; t += 1) {
+        const next = _pendingStreamResults.shift();
+        if (next) {
+          _appendStreamMark(el, next, currentSetColor, false);
+        } else {
+          _appendStreamMark(el, '·', currentSetColor, true);
+        }
+      }
       _lastStreamTurn = msg.total_bets;
-      let mark = '';
-      if (_lastRoundWon === true) {
-        mark = `<span style="color:${currentSetColor}">O</span>`;
-      } else if (_lastRoundWon === false) {
-        mark = `<span style="color:${currentSetColor}">X</span>`;
-      } else if (_lastRoundWon === null) {
-        mark = `<span style="color:${currentSetColor}">T</span>`;
-      }
-      if (mark) {
-        if (el.querySelector('[style*="rgba"]')) el.innerHTML = '';  // Clear "AWAITING SIGNAL"
-        el.innerHTML += mark;
-        el.scrollTop = el.scrollHeight;
-      }
     }
   }
 }
@@ -916,6 +935,15 @@ window.valhalla.onAgentMessage((msg) => {
       const r = msg.result;
       const won = msg.won;
       _lastRoundWon = won;
+      const streamMark = (r === 'tie') ? 'T' : (won === true ? 'O' : won === false ? 'X' : '');
+      if (isDevMode() && streamMark) {
+        const el = $('#sigStream');
+        if (el) {
+          if (!_applyPendingMark(el, streamMark)) {
+            _pendingStreamResults.push(streamMark);
+          }
+        }
+      }
       if (r === 'tie') {
         setAction('Tie -- BET returned');
         addResult('T');

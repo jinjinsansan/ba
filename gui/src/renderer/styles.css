@@ -417,6 +417,7 @@ html[data-variant="user"] .os-tag { display: none !important; }
 .signal-stream::-webkit-scrollbar-thumb { background: rgba(255,204,0,0.15); border-radius: 2px; }
 .signal-stream .s-o { color: var(--win); text-shadow: 0 0 4px rgba(0,255,136,0.4); }
 .signal-stream .s-x { color: var(--lose); text-shadow: 0 0 4px rgba(255,51,102,0.4); }
+.signal-stream .s-pending { color: rgba(255, 255, 255, 0.45); text-shadow: none; }
 
 /* ============================================================
    DAILY P&L
