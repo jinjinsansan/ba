@@ -274,6 +274,34 @@ html[data-variant="user"] .os-tag { display: none !important; }
 .phase-betting { background: rgba(0,255,136,0.14); border-color: #00d46a; color: #4ade80; }
 .phase-betting .phase-badge-dot { background: #00ff88; box-shadow: 0 0 10px #00ff88; }
 
+.phase-badge.phase-betting_player {
+  background: rgba(30,120,255,0.35) !important;
+  border-color: #2a90ff !important;
+  color: #ffffff !important;
+}
+.phase-badge.phase-betting_player .phase-badge-dot {
+  background: #3aa0ff !important;
+  box-shadow: 0 0 12px #3aa0ff, 0 0 20px rgba(58,160,255,0.6) !important;
+}
+.phase-badge.phase-betting_player .phase-badge-text {
+  color: #ffffff !important;
+  text-shadow: 0 0 6px rgba(58,160,255,0.8);
+}
+
+.phase-badge.phase-betting_banker {
+  background: rgba(255,40,70,0.35) !important;
+  border-color: #ff3355 !important;
+  color: #ffffff !important;
+}
+.phase-badge.phase-betting_banker .phase-badge-dot {
+  background: #ff4466 !important;
+  box-shadow: 0 0 12px #ff4466, 0 0 20px rgba(255,68,102,0.6) !important;
+}
+.phase-badge.phase-betting_banker .phase-badge-text {
+  color: #ffffff !important;
+  text-shadow: 0 0 6px rgba(255,68,102,0.9);
+}
+
 .phase-waiting_result { background: rgba(255,204,0,0.14); border-color: #e0a000; color: #ffd54a; }
 .phase-waiting_result .phase-badge-dot { background: #ffcc00; box-shadow: 0 0 9px #ffcc00; }
 
