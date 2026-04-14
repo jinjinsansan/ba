@@ -3283,9 +3283,9 @@ def _run_bet_session_inner(config: dict, stop_event: threading.Event, skip_event
             if humanizer.should_take_break(minutes_elapsed):
                 session_start = time.time()  # タイマーリセットのみ
 
-        # User-requested skip takes precedence (only between sets)
+        # User-requested skip takes precedence
         user_skip = False
-        if skip_event is not None and skip_event.is_set() and len(session.tracker.current_turns) == 0:
+        if skip_event is not None and skip_event.is_set():
             user_skip = True
             skip_event.clear()
 
