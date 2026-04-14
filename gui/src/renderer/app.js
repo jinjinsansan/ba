@@ -100,6 +100,7 @@ let sessionTotal = 0;
 let _startedAt = 0;  // START押下時刻 (stopped誤検知防止用)
 let _pnlSynced = false;  // VPS累計PNL同期フラグ（resume時に1回だけ同期）
 let _lastCumulativeMoney = 0;  // 前回の cumulative_money (daily 差分計算用)
+const results = [];  // 'W' | 'L' | 'T'
 
 $('#btnStart').addEventListener('click', async () => {
   // Syncモード用: 起動時にサーバーから最新の推奨テーブルを取得
@@ -619,7 +620,8 @@ function applyDevMode() {
   if (status) status.textContent = `Developer Mode: ${on ? 'ON (click to disable)' : 'OFF'}`;
 }
 
-$('#devModeLink').addEventListener('click', () => {
+const devModeLink = $('#devModeLink');
+if (devModeLink) devModeLink.addEventListener('click', () => {
   if (isDevMode()) {
     setDevMode(false);
     addLog('Developer Mode disabled.', 'info');
@@ -631,11 +633,13 @@ $('#devModeLink').addEventListener('click', () => {
   }
 });
 
-$('#devModeClose').addEventListener('click', () => {
+const devModeClose = $('#devModeClose');
+if (devModeClose) devModeClose.addEventListener('click', () => {
   $('#devModeModal').classList.add('hidden');
 });
 
-$('#btnDevAuth').addEventListener('click', () => {
+const btnDevAuth = $('#btnDevAuth');
+if (btnDevAuth) btnDevAuth.addEventListener('click', () => {
   const pw = $('#inputDevPassword').value;
   if (pw === DEV_PASSWORD) {
     setDevMode(true);
@@ -648,7 +652,8 @@ $('#btnDevAuth').addEventListener('click', () => {
   }
 });
 
-$('#inputDevPassword').addEventListener('keypress', (e) => {
+const inputDevPassword = $('#inputDevPassword');
+if (inputDevPassword) inputDevPassword.addEventListener('keypress', (e) => {
   if (e.key === 'Enter') $('#btnDevAuth').click();
 });
 
@@ -798,7 +803,6 @@ function setAction(text) {
 // - recentGrid: shows last 20
 const MAX_FEED = 10;
 const MAX_RECENT = 100;
-const results = [];  // 'W' | 'L' | 'T'
 
 function addResult(mark) {
   results.push(mark);
