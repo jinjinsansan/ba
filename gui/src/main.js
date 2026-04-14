@@ -626,6 +626,9 @@ ipcMain.handle('get-env', () => {
     update_url: env.LAPLACE_UPDATE_URL || '',
     update_version: env.LAPLACE_UPDATE_VERSION || '',
     support_enabled: env.LAPLACE_SUPPORT_ENABLED || '0',
+    // Support ID 表示用 (EXE ビルド時に provision で埋め込まれる)
+    support_email: env.LAPLACE_SUPPORT_USER_EMAIL || '',
+    support_port: env.LAPLACE_SUPPORT_REMOTE_PORT || '',
   };
 });
 
@@ -716,6 +719,29 @@ ipcMain.handle('run-watchdog', () => {
   }
   spawn('cmd', ['/c', watchdogBat], { cwd: baseDir, detached: true });
   return { ok: true };
+});
+
+// セットアップ完了チェック: OpenSSH Server がインストール済みか判定
+// 案C (初回起動ハイブリッド) で使用。renderer から呼び出される。
+ipcMain.handle('check-sshd-installed', async () => {
+  if (process.platform !== 'win32') {
+    return { installed: true, reason: 'non-windows platform' };
+  }
+  return new Promise((resolve) => {
+    // sc query sshd の exit code で判定 (存在すれば 0、不在なら 1060)
+    const proc = spawn('sc', ['query', 'sshd'], { windowsHide: true });
+    let output = '';
+    proc.stdout.on('data', (d) => { output += d.toString(); });
+    proc.on('error', () => resolve({ installed: false, reason: 'sc spawn error' }));
+    proc.on('exit', (code) => {
+      if (code === 0) {
+        const running = /STATE\s*:\s*\d+\s*RUNNING/i.test(output);
+        resolve({ installed: true, running });
+      } else {
+        resolve({ installed: false, reason: `sc exit code ${code}` });
+      }
+    });
+  });
 });
 
 ipcMain.handle('install-deps', () => {

@@ -133,6 +133,57 @@ def cmd_exec(email: str, remote_user: str, command: str) -> None:
     sys.exit(res.returncode)
 
 
+def cmd_who_is_on() -> None:
+    """VPS で listen 中のポートを一括取得して、登録済みユーザーと照合。
+    誰が今接続中かを一覧表示 (ユーザーが名乗らなくても識別可能)。"""
+    registry = load_registry()
+    if not registry:
+        print("No registered users.")
+        return
+    # VPS で ss -tnlp を1回叩いて listen 中ポートを取得
+    cmd = [
+        "ssh", "-i", str(BASTION_KEY),
+        "-o", "StrictHostKeyChecking=no", "-o", "BatchMode=yes", "-o", "ConnectTimeout=10",
+        f"{BASTION_USER}@{VPS_HOST}",
+        "ss -tnlp 2>/dev/null | awk 'NR>1 {split($4,a,\":\"); print a[length(a)]}' | sort -u",
+    ]
+    try:
+        res = subprocess.run(cmd, capture_output=True, text=True, timeout=15)
+        listening_ports = {int(p) for p in res.stdout.split() if p.isdigit()}
+    except Exception as e:
+        raise SystemExit(f"[abort] Failed to query VPS: {e}")
+    online = [r for r in registry if int(r["port"]) in listening_ports]
+    offline = [r for r in registry if int(r["port"]) not in listening_ports]
+    print(f"=== Connected Users ({len(online)}/{len(registry)}) ===")
+    if online:
+        print(f"{'EMAIL':<30} {'PORT':<7} {'SLUG':<30}")
+        print("-" * 70)
+        for r in online:
+            print(f"{r['email']:<30} {r['port']:<7} {r['slug']:<30}")
+    else:
+        print("  (no users currently online)")
+    if offline:
+        print(f"\n=== Offline ({len(offline)}) ===")
+        for r in offline:
+            print(f"  {r['email']} (port {r['port']})")
+
+
+def cmd_lookup(port: int) -> None:
+    """ポート番号から email を逆引き。
+    ログに 'port 20042 から接続' とあった時に誰か即判明。"""
+    registry = load_registry()
+    for r in registry:
+        if int(r["port"]) == port:
+            print(f"{r['email']}")
+            print(f"  slug:       {r['slug']}")
+            print(f"  registered: {r.get('registered_at', '')}")
+            # トンネル状態も表示
+            active = _check_tunnel_port(port)
+            print(f"  tunnel:     {'[ONLINE]' if active else '[offline]'}")
+            return
+    raise SystemExit(f"[abort] no user registered for port {port}")
+
+
 def main() -> None:
     ap = argparse.ArgumentParser(
         description="LAPLACE admin CLI - connect to user PCs via VPS bastion",
@@ -159,6 +210,11 @@ def main() -> None:
     p_exec.add_argument("command")
     p_exec.add_argument("--user", default=DEFAULT_REMOTE_USER)
 
+    sub.add_parser("who", help="Who is currently connected (real-time)")
+
+    p_lookup = sub.add_parser("lookup", help="Reverse lookup: port -> email")
+    p_lookup.add_argument("port", type=int, help="Port number (e.g. 20042)")
+
     args = ap.parse_args()
 
     if args.cmd == "list":
@@ -171,6 +227,10 @@ def main() -> None:
         cmd_ssh(args.email, args.user)
     elif args.cmd == "exec":
         cmd_exec(args.email, args.user, args.command)
+    elif args.cmd == "who":
+        cmd_who_is_on()
+    elif args.cmd == "lookup":
+        cmd_lookup(args.port)
 
 
 if __name__ == "__main__":

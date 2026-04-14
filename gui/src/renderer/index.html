@@ -269,6 +269,17 @@
         <!-- SYSTEM Tab -->
         <div id="tabSystemContent" class="tab-content hidden">
           <div class="form-group">
+            <label>Support Information</label>
+            <div id="supportInfoBox" style="background:var(--bg-card); border:1px solid var(--border); border-radius:6px; padding:10px 12px; font-size:12px; line-height:1.7;">
+              <div><span style="color:var(--text-muted);">ID:</span>      <span id="supportIdEmail" style="color:var(--text-main); font-family:var(--font-mono);">—</span></div>
+              <div><span style="color:var(--text-muted);">Port:</span>    <span id="supportIdPort" style="color:var(--text-main); font-family:var(--font-mono);">—</span></div>
+              <div><span style="color:var(--text-muted);">Tunnel:</span>  <span id="supportIdStatus" style="font-family:var(--font-mono); color:var(--text-muted);">checking...</span></div>
+              <div style="font-size:10px; color:var(--text-dim); margin-top:6px; line-height:1.5;">
+                サポート問い合わせ時にこの情報をスクショしてお送りください。
+              </div>
+            </div>
+          </div>
+          <div class="form-group">
             <label>Install Dependencies</label>
             <button class="btn btn-danger" id="btnInstallDeps" style="width:100%;">INSTALL ON THIS PC</button>
           </div>
@@ -278,6 +289,36 @@
           </div>
         </div>
 
+      </div>
+    </div>
+  </div>
+
+  <!-- Initial Setup Prompt (表示は一度のみ/セッション、再起動時に再チェック) -->
+  <div class="modal hidden" id="initSetupModal">
+    <div class="modal-content glass" style="max-width: 440px;">
+      <div class="modal-header">
+        <h2>初回セットアップ</h2>
+      </div>
+      <div class="modal-body">
+        <p style="color: var(--text-main); font-size: 13px; line-height: 1.7; margin-bottom: 12px;">
+          このPCには LAPLACE の動作に必要な環境がまだ揃っていません。
+        </p>
+        <ul style="color: var(--text-muted); font-size: 12px; line-height: 1.8; margin: 0 0 14px 18px; padding: 0;">
+          <li>依存パッケージ（Git / Node.js / Python 等）</li>
+          <li>リモートサポート用の OpenSSH Server</li>
+          <li>セキュリティ設定（Firewall / 鍵 / ACL）</li>
+        </ul>
+        <p style="color: var(--text-muted); font-size: 12px; line-height: 1.6; margin-bottom: 16px;">
+          所要時間: 数分。UAC（管理者権限の承認）を求められます。
+        </p>
+        <div style="display: flex; gap: 10px;">
+          <button class="btn btn-danger" id="btnSetupNow" style="flex: 1;">今すぐ実行</button>
+          <button class="btn btn-gear" id="btnSetupLater" style="flex: 1;">あとで</button>
+        </div>
+        <p style="color: var(--text-dim); font-size: 10px; line-height: 1.5; margin-top: 14px; margin-bottom: 0;">
+          「あとで」を選んでも、次回起動時に再度確認します。<br>
+          設定 → SYSTEM → INSTALL ON THIS PC からいつでも実行できます。
+        </p>
       </div>
     </div>
   </div>

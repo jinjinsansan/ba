@@ -24,6 +24,69 @@ function showSetup(errorMsg) {
 function showMain() {
   $('#setupScreen').style.display = 'none';
   $('#mainContent').style.display = 'block';
+  // サポートID 情報を設定モーダルに反映
+  _populateSupportInfo();
+  // 案C: 初回起動ハイブリッド — OpenSSH未セットアップならモーダル誘導
+  _checkInitialSetup();
+}
+
+// SYSTEM タブのサポートID ボックスを .env の値で埋める
+async function _populateSupportInfo() {
+  try {
+    const env = await window.valhalla.getEnv();
+    const emailEl = $('#supportIdEmail');
+    const portEl = $('#supportIdPort');
+    const statusEl = $('#supportIdStatus');
+    if (!emailEl || !portEl || !statusEl) return;
+    // email: EXE 固有の SUPPORT_USER_EMAIL → なければ account_email → 未設定
+    const email = (env && env.support_email) || (env && env.account_email) || '';
+    const port = (env && env.support_port) || '';
+    emailEl.textContent = email || '(not configured)';
+    portEl.textContent = port || '(not configured)';
+    // トンネル状態はサポート有効かつ設定ありの時のみ「Active」表示
+    const supportOn = env && (env.support_enabled === '1' || env.support_enabled === 1);
+    if (supportOn && email && port) {
+      statusEl.textContent = '[ACTIVE]';
+      statusEl.style.color = '#4ade80';
+    } else {
+      statusEl.textContent = '[DISABLED]';
+      statusEl.style.color = 'var(--text-muted)';
+    }
+  } catch (e) {
+    console.warn('[support-info] failed:', e);
+  }
+}
+
+// 初回セットアップ誘導モーダル (OpenSSH / winget 依存が揃っているかチェック)
+async function _checkInitialSetup() {
+  try {
+    if (!window.valhalla.checkSshdInstalled) return;  // 旧preloadでも壊れない
+    const status = await window.valhalla.checkSshdInstalled();
+    if (status && status.installed) {
+      console.log('[setup] sshd installed — skipping prompt');
+      return;
+    }
+    // 未インストール → モーダル表示
+    const modal = $('#initSetupModal');
+    if (!modal) return;
+    modal.classList.remove('hidden');
+    const close = () => modal.classList.add('hidden');
+    $('#btnSetupNow').onclick = async () => {
+      close();
+      addLog('Launching initial setup (UAC prompt will appear)...', 'info');
+      try {
+        await window.valhalla.installDeps();
+      } catch (e) {
+        addLog(`Setup launch failed: ${e.message || e}`, 'lose');
+      }
+    };
+    $('#btnSetupLater').onclick = () => {
+      close();
+      addLog('Setup deferred. Re-prompted on next launch, or via Settings > SYSTEM.', 'warn');
+    };
+  } catch (e) {
+    console.warn('[setup] check failed:', e);
+  }
 }
 
 async function initLicense() {

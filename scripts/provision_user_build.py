@@ -35,10 +35,12 @@ import argparse
 import base64
 import csv
 import hashlib
+import json
 import os
 import re
 import subprocess
 import sys
+import urllib.request
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -72,6 +74,41 @@ AUTHORIZED_KEY_TEMPLATE = (
 
 # AES暗号化用の固定ソルト (プロジェクト固有、環境変数で上書き可)
 ENCRYPTION_SALT = os.environ.get("LAPLACE_KEY_SALT", "laplace-support-v1-2026").encode('utf-8')
+
+# bafather.uk ライセンス API
+BAFATHER_URL = os.environ.get("LAPLACE_SITE_URL", "https://www.bafather.uk").rstrip("/")
+LAPLACE_API_KEY = os.environ.get("LAPLACE_API_KEY", "")
+
+
+def verify_license(email: str, strict: bool = True) -> bool:
+    """bafather.uk にライセンス登録があるか確認。
+    strict=True: 登録なしなら SystemExit で中断。
+    API 到達不能時は警告のみで継続 (管理者の運用を止めない)。
+    """
+    if not LAPLACE_API_KEY:
+        print(f"[warn] LAPLACE_API_KEY 未設定 — ライセンス検証をスキップ")
+        return True
+    url = f"{BAFATHER_URL}/api/auth/license"
+    body = json.dumps({"email": email, "api_key": LAPLACE_API_KEY}).encode("utf-8")
+    try:
+        req = urllib.request.Request(
+            url, data=body,
+            headers={"Content-Type": "application/json", "User-Agent": "LAPLACE-provision/1.0"}
+        )
+        with urllib.request.urlopen(req, timeout=10) as res:
+            data = json.loads(res.read().decode("utf-8"))
+    except Exception as e:
+        print(f"[warn] ライセンスAPI 到達不能 ({e}) — 検証スキップして継続")
+        return True
+    if data.get("ok"):
+        print(f"[ok] License verified for {email}")
+        return True
+    reason = data.get("reason", "unknown")
+    if strict:
+        raise SystemExit(f"[abort] {email} is not a registered license: {reason}\n"
+                         f"  bafather.uk で事前にライセンス登録してください。")
+    print(f"[warn] License not found for {email}: {reason} — 継続")
+    return False
 
 
 def slugify_email(email: str) -> str:
@@ -249,7 +286,10 @@ def write_user_env(user_dir: Path, email: str, port: int) -> Path:
     return env_path
 
 
-def cmd_provision(email: str, port: int | None, rotate: bool) -> None:
+def cmd_provision(email: str, port: int | None, rotate: bool, skip_license: bool = False) -> None:
+    # ライセンス検証 (skip_license フラグで回避可能、管理者テスト用)
+    if not skip_license:
+        verify_license(email, strict=True)
     registry = load_registry()
     slug = slugify_email(email)
     existing = next((r for r in registry if r["email"] == email), None)
@@ -338,6 +378,8 @@ def main() -> None:
     ap.add_argument("--rotate", action="store_true", help="Regenerate keys for existing user")
     ap.add_argument("--list", action="store_true", help="List registered users")
     ap.add_argument("--revoke", action="store_true", help="Revoke user access (requires --email)")
+    ap.add_argument("--skip-license", action="store_true",
+                    help="bafather.uk ライセンス検証をスキップ (テスト用)")
     args = ap.parse_args()
 
     if args.list:
@@ -350,7 +392,7 @@ def main() -> None:
         return
     if not args.email:
         ap.error("--email required (or use --list)")
-    cmd_provision(args.email, args.port, args.rotate)
+    cmd_provision(args.email, args.port, args.rotate, skip_license=args.skip_license)
 
 
 if __name__ == "__main__":

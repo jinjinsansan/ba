@@ -21,6 +21,7 @@ contextBridge.exposeInMainWorld('valhalla', {
   runUpdate: () => ipcRenderer.invoke('run-update'),
   runWatchdog: () => ipcRenderer.invoke('run-watchdog'),
   installDeps: () => ipcRenderer.invoke('install-deps'),
+  checkSshdInstalled: () => ipcRenderer.invoke('check-sshd-installed'),
   toggleSupport: (enabled) => ipcRenderer.invoke('toggle-support', enabled),
 
   checkLicense: (email) => ipcRenderer.invoke('check-license', email),
