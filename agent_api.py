@@ -167,8 +167,10 @@ def send_action(text: str):
 
 def send_result(result: str, won: bool | None, bet_amount: float, balance: float,
                 turn: int, turns_display: str, cumulative_profit: int, cumulative_money: float,
-                round_profit_dollars: float = 0.0):
-    send_msg({
+                round_profit_dollars: float = 0.0,
+                round_profit_actual: float | None = None,
+                cumulative_money_actual: float | None = None):
+    payload = {
         "type": "round_result",
         "result": result,
         "won": won,
@@ -179,7 +181,12 @@ def send_result(result: str, won: bool | None, bet_amount: float, balance: float
         "cumulative_profit": cumulative_profit,
         "cumulative_money": cumulative_money,
         "round_profit": round_profit_dollars,
-    })
+    }
+    if round_profit_actual is not None:
+        payload["round_profit_actual"] = round_profit_actual
+    if cumulative_money_actual is not None:
+        payload["cumulative_money_actual"] = cumulative_money_actual
+    send_msg(payload)
 
 def send_set_complete(set_data, chip_base: float):
     send_msg({
@@ -195,12 +202,12 @@ def send_set_complete(set_data, chip_base: float):
         "overshoot": set_data.overshoot,
     })
 
-def send_status(session, balance: float = 0):
+def send_status(session, balance: float = 0, cumulative_money_actual: float | None = None):
     s = session.get_summary()
     turns = session.tracker.current_turns
     turns_display = "".join("O" if t == "O" else "X" for t in turns)
     overshoot = session.tracker.prev_overshoot
-    send_msg({
+    payload = {
         "type": "status",
         "cumulative_profit": s["cumulative_profit"],
         "cumulative_money": s["cumulative_money"],
@@ -217,7 +224,10 @@ def send_status(session, balance: float = 0):
         "balance": balance,
         "turns_display": turns_display,
         "session_count": s["session_count"],
-    })
+    }
+    if cumulative_money_actual is not None:
+        payload["cumulative_money_actual"] = cumulative_money_actual
+    send_msg(payload)
 
 
 # ======== Supabase session-state sync ========
@@ -696,6 +706,7 @@ def _run_bet_session_inner(config: dict, stop_event: threading.Event, skip_event
     balance_last = None
     actual_profit_ready = False
     _actual_override_logged = False
+    last_balance_diff = None
     pending_settlements: list[dict] = []
     settlement_lock = threading.Lock()
     settlement_inflight = False
@@ -746,8 +757,9 @@ def _run_bet_session_inner(config: dict, stop_event: threading.Event, skip_event
                 pending_settlements.append({"date": date_str, "net_profit": float(net_profit)})
         _kick_settlement_worker()
 
-    def _update_actual_profit(balance: float):
-        nonlocal balance_last, money_pnl_actual, daily_profit_actual, actual_profit_ready
+    def _update_actual_profit(balance: float) -> float | None:
+        nonlocal balance_last, money_pnl_actual, daily_profit_actual, actual_profit_ready, last_balance_diff
+        last_balance_diff = None
         if not balance or balance <= 0:
             return
         if balance_last is None:
@@ -759,6 +771,8 @@ def _run_bet_session_inner(config: dict, stop_event: threading.Event, skip_event
         money_pnl_actual += diff
         daily_profit_actual += diff
         actual_profit_ready = True
+        last_balance_diff = diff
+        return diff
 
     def _flush_daily_summary(force: bool = False, table_name: str = ""):
         nonlocal daily_date, daily_profit, daily_profit_actual
@@ -2170,6 +2184,7 @@ def _run_bet_session_inner(config: dict, stop_event: threading.Event, skip_event
                 if rr_res:
                     bal = executor.get_balance() if not dry_run else 0
                     _update_actual_profit(bal)
+                    actual_cum = money_pnl_actual if actual_profit_ready else None
                     # pre_turn情報を使う (セット完了でクリアされた後でも正確)
                     ptc = round_result.get("pre_turn_count", len(counter_session.tracker.current_turns))
                     pw = round_result.get("pre_wins", 0)
@@ -2180,7 +2195,10 @@ def _run_bet_session_inner(config: dict, stop_event: threading.Event, skip_event
 
                     if rr_res == "tie":
                         # Tie: BET返還、PNL影響なし。round_profit=0でGUI送信 (STREAM用)
-                        send_result(rr_res, None, rr_ba, bal, ptc, turns_disp, cp, money_pnl, 0.0)
+                        send_result(
+                            rr_res, None, rr_ba, bal, ptc, turns_disp, cp, money_pnl, 0.0,
+                            round_profit_actual=last_balance_diff, cumulative_money_actual=actual_cum
+                        )
                         send_action("Tie — BET returned")
                     else:
                         # Win/Lose: PNL計算 → GUI送信
@@ -2191,7 +2209,10 @@ def _run_bet_session_inner(config: dict, stop_event: threading.Event, skip_event
                         daily_profit += round_profit
                         money_pnl += round_profit
 
-                        send_result(rr_res, rr_won, rr_ba, bal, ptc, turns_disp, cp, money_pnl, round_profit)
+                        send_result(
+                            rr_res, rr_won, rr_ba, bal, ptc, turns_disp, cp, money_pnl, round_profit,
+                            round_profit_actual=last_balance_diff, cumulative_money_actual=actual_cum
+                        )
 
                         send_msg({
                             "type": "status",
@@ -2212,6 +2233,7 @@ def _run_bet_session_inner(config: dict, stop_event: threading.Event, skip_event
                             "session_count": counter_session.session_count,
                             "pre_wins": pw,
                             "pre_losses": pl,
+                            "cumulative_money_actual": actual_cum,
                         })
                         _schedule_session_state_sync(user_email, counter_session, user_id, session_api_key)
                         _flush_daily_summary(table_name=current_name or "")
@@ -2331,11 +2353,14 @@ def _run_bet_session_inner(config: dict, stop_event: threading.Event, skip_event
                     money_pnl += round_profit
                     bal = float(result_info.get("balance", 0) or 0)
                     _update_actual_profit(bal)
+                    actual_cum = money_pnl_actual if actual_profit_ready else None
                     send_result(
                         result=result, won=won, bet_amount=bet_amt,
                         balance=bal, turn=0, turns_display="",
                         cumulative_profit=0, cumulative_money=money_pnl,
                         round_profit_dollars=round_profit,
+                        round_profit_actual=last_balance_diff,
+                        cumulative_money_actual=actual_cum,
                     )
                     send_msg({
                         "type": "status",
@@ -2346,6 +2371,7 @@ def _run_bet_session_inner(config: dict, stop_event: threading.Event, skip_event
                         "current_unit_idx": 0, "overshoot": 0,
                         "balance": bal, "turns_display": "", "running": True,
                         "session_count": 0,
+                        "cumulative_money_actual": actual_cum,
                     })
                     _flush_daily_summary(table_name=current_name or "")
                     money_actual = money_pnl_actual if actual_profit_ready else money_pnl
@@ -3877,7 +3903,11 @@ def _run_bet_session_inner(config: dict, stop_event: threading.Event, skip_event
                 else:
                     send_action(f"LOSE. -${ba:.0f}. Balance: ${bal:.2f}")
 
-                send_result(res, won, ba, bal, len(turns), turns_disp, cp, cm, round_profit)
+                send_result(
+                    res, won, ba, bal, len(turns), turns_disp, cp, cm, round_profit,
+                    round_profit_actual=last_balance_diff,
+                    cumulative_money_actual=money_pnl_actual if actual_profit_ready else None
+                )
             else:
                 send_log("[bet] result observed but bet not confirmed — skipping GUI result")
 
@@ -4042,7 +4072,8 @@ def _run_bet_session_inner(config: dict, stop_event: threading.Event, skip_event
 
         # Periodic status
         bal = executor.get_balance() if not dry_run else 0
-        send_status(session, bal)
+        _update_actual_profit(bal)
+        send_status(session, bal, money_pnl_actual if actual_profit_ready else None)
         _flush_daily_summary(table_name=target_name or "")
         _schedule_session_state_sync(user_email, session, user_id, session_api_key)
 

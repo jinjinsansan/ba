@@ -936,12 +936,17 @@ window.valhalla.onAgentMessage((msg) => {
       // round_profit: 各ハンドの BET 額 ($win/-$lose)
       // 1ハンドごとに sessionTotal/daily を更新 → スムーズなUX
       // cumulative_money は status メッセージ受信時の reconciliation 用 (drift 補正)
-      if (typeof msg.round_profit === 'number') {
-        sessionTotal += msg.round_profit;
-        addRoundToDaily(msg.round_profit);
+      const roundDelta = (typeof msg.round_profit_actual === 'number')
+        ? msg.round_profit_actual
+        : msg.round_profit;
+      if (typeof roundDelta === 'number') {
+        sessionTotal += roundDelta;
+        addRoundToDaily(roundDelta);
         updateSessionDisplay();
         // _lastCumulativeMoney は次の cumulative_money を基準にする
-        if (typeof msg.cumulative_money === 'number') {
+        if (typeof msg.cumulative_money_actual === 'number') {
+          _lastCumulativeMoney = msg.cumulative_money_actual;
+        } else if (typeof msg.cumulative_money === 'number') {
           _lastCumulativeMoney = msg.cumulative_money;
         }
         scheduleGuiStateSync();
@@ -1008,22 +1013,25 @@ window.valhalla.onAgentMessage((msg) => {
       // status は定期送信されるため、毎回上書きすると セット途中で sessionTotal が
       // リセットされてしまう。初回のみ同期し、以降は round_profit accumulator に任せる。
       // ドリフト検知: 値が大きく違う場合は警告ログのみ (override しない)
-      if (typeof msg.cumulative_money === 'number') {
+      const cumulativeMoney = (typeof msg.cumulative_money_actual === 'number')
+        ? msg.cumulative_money_actual
+        : msg.cumulative_money;
+      if (typeof cumulativeMoney === 'number') {
         if (!_pnlSynced) {
           // 初回のみ同期 (resume直後)
-          sessionTotal = msg.cumulative_money;
-          _lastCumulativeMoney = msg.cumulative_money;
+          sessionTotal = cumulativeMoney;
+          _lastCumulativeMoney = cumulativeMoney;
           _pnlSynced = true;
           updateSessionDisplay();
           addLog(`Session P&L synced from VPS: $${sessionTotal >= 0 ? '+' : ''}${sessionTotal.toFixed(2)}`, 'info');
         } else {
           // ドリフト検知 (override せず警告のみ)
-          const diff = Math.abs(sessionTotal - msg.cumulative_money);
+          const diff = Math.abs(sessionTotal - cumulativeMoney);
           if (diff > 1.0) {
             // セット途中は cumulative_money が古いので、大きい diff は許容
             // 50以上のズレは異常
             if (diff > 50) {
-              console.warn(`[pnl-drift] sessionTotal=${sessionTotal} vs VPS cm=${msg.cumulative_money} (diff=${diff.toFixed(2)})`);
+              console.warn(`[pnl-drift] sessionTotal=${sessionTotal} vs VPS cm=${cumulativeMoney} (diff=${diff.toFixed(2)})`);
             }
           }
         }
