@@ -661,52 +661,56 @@ function _turnToCode(turn) { return _rndChar(_SIG_PREFIXES) + String.fromCharCod
 function _ratioToCode(w, l) { return _rndChar(_SIG_WL_PREFIXES) + w + _rndChar(_SIG_WL_PREFIXES) + l; }
 function _driftToCode(os) { return _rndChar(_SIG_OS_PREFIXES) + os; }
 
+// =============================================================
+// Signal Stream — シンプル版 (タイ無視 / ROUNDと色同期)
+//
+// 唯一の真実: ローカルの _streamSetIdx / _streamTurnsInSet。
+//  - Stream は round_result (O/X) のみで追加。Tieは完全無視。
+//  - 色は _STREAM_SET_COLORS[_streamSetIdx % 6]。セット完了で +1。
+//  - ROUND 表示色も同じローカル state を参照 → 必ず同期。
+//  - shoe_history で履歴を再構築する時、同じルールで色付け。
+// =============================================================
 const _STREAM_SET_COLORS = ['#ff3366', '#ffcc00', '#00b8d4', '#ffffff', '#00ff88', '#c084fc'];
 function _setSizeForMode(mode) { return mode === 'counter_seq7' ? 7 : 5; }
 let _streamSetSize = _setSizeForMode(loadSettings().bet_mode || 'counter');
 let _streamSetIdx = 0;
 let _streamTurnsInSet = 0;
-
-// All O/X results as continuous stream (no set boundaries)
-let _signalStreamAll = '';
-
-let _lastStreamTurn = -1;
 let _lastRoundWon = null;
-const _pendingStreamResults = [];
 
-function _appendStreamMark(el, mark, color, pending = false) {
+function _currentSetColor() {
+  return _STREAM_SET_COLORS[_streamSetIdx % _STREAM_SET_COLORS.length];
+}
+
+function _appendStreamMark(el, mark, color) {
   const span = document.createElement('span');
   span.textContent = mark;
   if (color) span.style.color = color;
-  if (pending) span.classList.add('s-pending');
   el.appendChild(span);
-  el.scrollTop = el.scrollHeight;
+  const panel = el.parentElement;
+  if (panel) panel.scrollTop = panel.scrollHeight;
+  else el.scrollTop = el.scrollHeight;
 }
 
-function _applyPendingMark(el, mark, color) {
-  const pending = el.querySelector('.s-pending');
-  if (!pending) return false;
-  pending.textContent = mark;
-  pending.classList.remove('s-pending');
-  if (color) pending.style.color = color;
-  return true;
-}
-
-function _getStreamSetIndex(msg) {
-  if (typeof msg.sets === 'number') return msg.sets;
-  if (typeof msg.set_count === 'number') return msg.set_count;
-  return 0;
-}
-
-function _getStreamTurnCount(msg) {
-  const setIdx = _getStreamSetIndex(msg);
-  if (typeof msg.current_turn === 'number') {
-    return (setIdx * _streamSetSize) + msg.current_turn;
+// O/X を 1つ Stream に追加してローカル状態を進める (Tie は呼ばれない)
+function _pushStreamMark(mark) {
+  if (mark !== 'O' && mark !== 'X') return;
+  if (!isDevMode()) {
+    _streamTurnsInSet += 1;
+    if (_streamTurnsInSet >= _streamSetSize) {
+      _streamTurnsInSet = 0;
+      _streamSetIdx += 1;
+    }
+    return;
   }
-  if (typeof msg.total_bets === 'number') {
-    return msg.total_bets;
+  const el = $('#sigStream');
+  if (el && el.querySelector('[style*="rgba"]')) el.innerHTML = '';  // Clear "AWAITING SIGNAL"
+  const color = _currentSetColor();
+  if (el) _appendStreamMark(el, mark, color);
+  _streamTurnsInSet += 1;
+  if (_streamTurnsInSet >= _streamSetSize) {
+    _streamTurnsInSet = 0;
+    _streamSetIdx += 1;
   }
-  return 0;
 }
 
 function updateDevPanel(msg) {
@@ -729,82 +733,34 @@ function updateDevPanel(msg) {
     }
   }
   if (sd && typeof msg.overshoot === 'number') sd.textContent = _driftToCode(msg.overshoot);
-  // ROUND = total bets, color cycles per set (hidden set boundary indicator)
-  const setIdx = _getStreamSetIndex(msg);
-  const currentSetColor = _STREAM_SET_COLORS[setIdx % _STREAM_SET_COLORS.length];
-  const streamTurnCount = _getStreamTurnCount(msg);
-  if (srd && typeof streamTurnCount === 'number') {
-    srd.textContent = `#${streamTurnCount}`;
-    srd.style.color = currentSetColor;
+  // ROUND = 累計O/X数, 色は Stream と同じローカル state
+  if (srd) {
+    const roundNum = _streamSetIdx * _streamSetSize + _streamTurnsInSet;
+    srd.textContent = `#${roundNum}`;
+    srd.style.color = _currentSetColor();
   }
-
-  // Stream: add one mark per hand, colored by current set
-  const el = $('#sigStream');
-  if (el && typeof streamTurnCount === 'number') {
-    if (el.children.length === 0) {
-      _streamSetIdx = setIdx;
-      if (typeof msg.current_turn === 'number') {
-        _streamTurnsInSet = msg.current_turn;
-      }
-    }
-    if (streamTurnCount < _lastStreamTurn) {
-      _lastStreamTurn = -1;
-      _pendingStreamResults.length = 0;
-      el.innerHTML = '';
-      _streamSetIdx = setIdx;
-      _streamTurnsInSet = typeof msg.current_turn === 'number' ? msg.current_turn : 0;
-    }
-    if (streamTurnCount > _lastStreamTurn) {
-      if (el.querySelector('[style*="rgba"]')) el.innerHTML = '';  // Clear "AWAITING SIGNAL"
-      for (let t = _lastStreamTurn + 1; t <= streamTurnCount; t += 1) {
-        const next = _pendingStreamResults.shift();
-        if (next) {
-          const color = _commitStreamMark(next);
-          _appendStreamMark(el, next, color, false);
-        } else {
-          const color = _STREAM_SET_COLORS[_streamSetIdx % _STREAM_SET_COLORS.length];
-          _appendStreamMark(el, '·', color, true);
-        }
-      }
-      _lastStreamTurn = streamTurnCount;
-    }
-  }
-}
-
-function _commitStreamMark(mark) {
-  const color = _STREAM_SET_COLORS[_streamSetIdx % _STREAM_SET_COLORS.length];
-  if (mark === 'O' || mark === 'X') {
-    _streamTurnsInSet += 1;
-    if (_streamTurnsInSet >= _streamSetSize) {
-      _streamTurnsInSet = 0;
-      _streamSetIdx += 1;
-    }
-  }
-  return color;
 }
 
 function renderDevSets(sets) {
-  // Stream is now updated per-hand in updateDevPanel.
-  // This function only serves as initial load from history.
+  // shoe_history: Python からの完了セット履歴で Stream を再同期。
+  // ローカル state を履歴の最後に合わせる（信頼できる真実の源）。
   if (!isDevMode()) return;
   const el = $('#sigStream');
   if (!el) return;
-  if (!sets || sets.length === 0) return;
-  // Only rebuild if stream is empty (initial load)
-  if (el.children.length > 0) return;
-  let stream = '';
-  for (const s of sets) {
-    for (const c of (s.results || '')) {
-      if (c === 'O') stream += '<span class="s-o">O</span>';
-      else if (c === 'X') stream += '<span class="s-x">X</span>';
+  const list = Array.isArray(sets) ? sets : [];
+  // ライブ更新で既に反映済みなら何もしない (全再構築は不要)
+  if (el.children.length > 0 && _streamSetIdx === list.length && _streamTurnsInSet === 0) return;
+  // 完全再構築
+  el.innerHTML = '';
+  for (let i = 0; i < list.length; i += 1) {
+    const results = (list[i] && list[i].results) || '';
+    const color = _STREAM_SET_COLORS[i % _STREAM_SET_COLORS.length];
+    for (const c of results) {
+      if (c === 'O' || c === 'X') _appendStreamMark(el, c, color);
     }
   }
-  if (stream) {
-    el.innerHTML = stream;
-    el.scrollTop = el.scrollHeight;
-    _streamSetIdx = sets.length;
-    _streamTurnsInSet = 0;
-  }
+  _streamSetIdx = list.length;
+  _streamTurnsInSet = 0;
 }
 
 // --- Log ---
@@ -986,17 +942,10 @@ window.valhalla.onAgentMessage((msg) => {
       const r = msg.result;
       const won = msg.won;
       _lastRoundWon = won;
-      const streamMark = (r === 'tie') ? '' : (won === true ? 'O' : won === false ? 'X' : '');
-      if (isDevMode() && streamMark) {
-        const el = $('#sigStream');
-        if (el) {
-          if (el.querySelector('.s-pending')) {
-            const color = _commitStreamMark(streamMark);
-            _applyPendingMark(el, streamMark, color);
-          } else {
-            _pendingStreamResults.push(streamMark);
-          }
-        }
+      // Tieは完全無視。O/Xのみストリームへ即append (ローカル state で色決定)。
+      if (r !== 'tie') {
+        const streamMark = won === true ? 'O' : won === false ? 'X' : '';
+        if (streamMark) _pushStreamMark(streamMark);
       }
       if (r === 'tie') {
         setAction('Tie -- BET returned');
