@@ -226,6 +226,12 @@ if (_installDepsBtn) {
       } else {
         addLog(`Setup launched. Check log: ${result.logPath || 'C:\\ProgramData\\LAPLACE\\setup-all.log'}`, 'info');
         setAction('Installer launched');
+        // Make progress visible for non-technical users: open the log automatically.
+        if (window.valhalla.openSetupLog) {
+          setTimeout(async () => {
+            try { await window.valhalla.openSetupLog(); } catch {}
+          }, 1200);
+        }
         // Re-enable after a short delay so the user can click again if they cancelled UAC.
         setTimeout(() => {
           _installDepsBtn.disabled = false;
@@ -237,6 +243,22 @@ if (_installDepsBtn) {
       setAction('Install error');
       _installDepsBtn.disabled = false;
       _installDepsBtn.textContent = 'INSTALL ON THIS PC';
+    }
+  });
+}
+
+const _openSetupLogBtn = $('#btnOpenSetupLog');
+if (_openSetupLogBtn) {
+  _openSetupLogBtn.addEventListener('click', async () => {
+    try {
+      const result = await window.valhalla.openSetupLog();
+      if (!result || !result.ok) {
+        addLog(`Setup log not available yet: ${result?.error || 'Unknown error'}`, 'warn');
+      } else {
+        addLog(`Opened setup log: ${result.logPath}`, 'info');
+      }
+    } catch (e) {
+      addLog(`Open setup log failed: ${e.message || e}`, 'lose');
     }
   });
 }
@@ -304,8 +326,17 @@ function _jstDateStrNow() {
   return `${jst.getFullYear()}-${String(jst.getMonth()+1).padStart(2,'0')}-${String(jst.getDate()).padStart(2,'0')}`;
 }
 
+// 残高として妥当 (正数) かチェック。0 や負値は「不明」扱い。
+// これを通らなければ _currentBalance 等に代入されない。
+function _isValidBalance(v) {
+  return typeof v === 'number' && Number.isFinite(v) && v > 0;
+}
+
 function _computePnl() {
-  if (_currentBalance === null) return { session: 0, daily: 0 };
+  // 残高が未確定 (null / 0 / 負値) の場合は PNL=0 扱い
+  // これで GUI 開いた直後に古いスナップショットの dailyOpen と 0 残高で
+  // -$XXXX が出る事故を防ぐ。最初の status 到達で正しい値に回復する。
+  if (!_isValidBalance(_currentBalance)) return { session: 0, daily: 0 };
   // Daily: 日付ロールオーバーチェック (GUI側でもフォールバック処理)
   const today = _jstDateStrNow();
   if (_dailyOpenDate !== today) {
@@ -314,20 +345,30 @@ function _computePnl() {
     _dailyOpenBalance = _currentBalance;
     _persistBalanceSnapshot();
   }
-  const session = (_sessionOpenBalance !== null) ? (_currentBalance - _sessionOpenBalance) : 0;
-  const daily = (_dailyOpenBalance !== null) ? (_currentBalance - _dailyOpenBalance) : 0;
+  const session = _isValidBalance(_sessionOpenBalance) ? (_currentBalance - _sessionOpenBalance) : 0;
+  const daily = _isValidBalance(_dailyOpenBalance) ? (_currentBalance - _dailyOpenBalance) : 0;
   sessionTotal = session;  // 互換用
   return { session, daily };
 }
 
 function _persistBalanceSnapshot() {
   try {
-    localStorage.setItem('valhalla_balance_snapshot', JSON.stringify({
-      current: _currentBalance,
-      session_open: _sessionOpenBalance,
-      daily_open: _dailyOpenBalance,
-      daily_date: _dailyOpenDate,
-    }));
+    // 無効値 (0 / null) は保存しない。古い有効データを壊さないため。
+    const payload = {};
+    if (_isValidBalance(_currentBalance)) payload.current = _currentBalance;
+    if (_isValidBalance(_sessionOpenBalance)) payload.session_open = _sessionOpenBalance;
+    if (_isValidBalance(_dailyOpenBalance)) payload.daily_open = _dailyOpenBalance;
+    if (typeof _dailyOpenDate === 'string' && _dailyOpenDate) payload.daily_date = _dailyOpenDate;
+    // 何も有効値が無ければそもそも書かない (既存データ保持)
+    if (Object.keys(payload).length === 0) return;
+    // 既存データとマージ (他フィールドを消さない)
+    try {
+      const existing = JSON.parse(localStorage.getItem('valhalla_balance_snapshot') || '{}');
+      Object.assign(existing, payload);
+      localStorage.setItem('valhalla_balance_snapshot', JSON.stringify(existing));
+    } catch {
+      localStorage.setItem('valhalla_balance_snapshot', JSON.stringify(payload));
+    }
   } catch {}
 }
 
@@ -336,10 +377,10 @@ function _restoreBalanceSnapshot() {
     const raw = localStorage.getItem('valhalla_balance_snapshot');
     if (!raw) return;
     const s = JSON.parse(raw);
-    if (typeof s.current === 'number') _currentBalance = s.current;
-    if (typeof s.session_open === 'number') _sessionOpenBalance = s.session_open;
-    if (typeof s.daily_open === 'number') _dailyOpenBalance = s.daily_open;
-    if (typeof s.daily_date === 'string') _dailyOpenDate = s.daily_date;
+    if (_isValidBalance(s.current)) _currentBalance = s.current;
+    if (_isValidBalance(s.session_open)) _sessionOpenBalance = s.session_open;
+    if (_isValidBalance(s.daily_open)) _dailyOpenBalance = s.daily_open;
+    if (typeof s.daily_date === 'string' && s.daily_date) _dailyOpenDate = s.daily_date;
   } catch {}
 }
 
@@ -610,19 +651,21 @@ let _guiSyncTimer = null;
 let _guiSyncPending = false;
 
 function _getGuiState() {
-  return {
-    // 残高スナップショット (GUI再起動/別端末からの復元用)
-    current_balance: _currentBalance,
-    session_open_balance: _sessionOpenBalance,
-    daily_open_balance: _dailyOpenBalance,
-    daily_open_date: _dailyOpenDate,
-    // 互換: 旧フィールドも残す (読み取り側の既存コード向け)
+  // 無効値 (null/0/負値) は送らない。サーバーの有効データを 0 で上書きして
+  // 再起動時に -$XXXX を発生させないため。
+  const payload = {
+    // 互換: 旧フィールド
     session_total: sessionTotal,
     daily_pnl: loadDailyPnl(),
     results: results.slice(-200),
     bet_mode: (loadSettings().bet_mode || 'counter'),
     updated_at: new Date().toISOString(),
   };
+  if (_isValidBalance(_currentBalance)) payload.current_balance = _currentBalance;
+  if (_isValidBalance(_sessionOpenBalance)) payload.session_open_balance = _sessionOpenBalance;
+  if (_isValidBalance(_dailyOpenBalance)) payload.daily_open_balance = _dailyOpenBalance;
+  if (typeof _dailyOpenDate === 'string' && _dailyOpenDate) payload.daily_open_date = _dailyOpenDate;
+  return payload;
 }
 
 async function syncGuiStateToServer() {
@@ -668,10 +711,11 @@ async function restoreGuiStateFromServer() {
   const state = await loadGuiStateFromServer();
   if (!state) return false;
   // サーバに保存されている残高スナップショットを復元 (Python から最新値が届くまでの暫定表示)
-  if (typeof state.current_balance === 'number') _currentBalance = state.current_balance;
-  if (typeof state.session_open_balance === 'number') _sessionOpenBalance = state.session_open_balance;
-  if (typeof state.daily_open_balance === 'number') _dailyOpenBalance = state.daily_open_balance;
-  if (typeof state.daily_open_date === 'string') _dailyOpenDate = state.daily_open_date;
+  // _isValidBalance で 0/負値を除外。古い有効値を 0 で上書きしない (デイリーPNL -$XXXX バグ防止)。
+  if (_isValidBalance(state.current_balance)) _currentBalance = state.current_balance;
+  if (_isValidBalance(state.session_open_balance)) _sessionOpenBalance = state.session_open_balance;
+  if (_isValidBalance(state.daily_open_balance)) _dailyOpenBalance = state.daily_open_balance;
+  if (typeof state.daily_open_date === 'string' && state.daily_open_date) _dailyOpenDate = state.daily_open_date;
   if (state.daily_pnl && typeof state.daily_pnl === 'object') {
     saveDailyPnl(state.daily_pnl);
   }
