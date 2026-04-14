@@ -1,5 +1,3 @@
-import logging
-from logging.handlers import RotatingFileHandler
 import os
 import subprocess
 import time
@@ -7,7 +5,6 @@ import time
 BASE_DIR = r"C:\dev\ba"
 GUI_DIR = os.path.join(BASE_DIR, "gui")
 LOG_PATH = os.path.join(BASE_DIR, "agent.log")
-WATCHDOG_LOG_PATH = os.path.join(BASE_DIR, "cloud_scripts", "watchdog.log")
 RUN_BAT = os.path.join(BASE_DIR, "cloud_scripts", "run.bat")
 PROCESS_NAME = "electron.exe"
 CHECK_INTERVAL = 30
@@ -16,26 +13,6 @@ RESTART_COOLDOWN = 60
 NOFRAME_WINDOW = 5 * 60
 NOFRAME_LIMIT = 3
 BROWSER_CLOSED_LIMIT = 3
-
-
-def setup_logger() -> logging.Logger:
-    logger = logging.getLogger("laplace_watchdog")
-    if logger.handlers:
-        return logger
-    logger.setLevel(logging.INFO)
-    formatter = logging.Formatter("%(asctime)s [watchdog] %(levelname)s: %(message)s")
-    file_handler = RotatingFileHandler(
-        WATCHDOG_LOG_PATH,
-        maxBytes=2 * 1024 * 1024,
-        backupCount=3,
-        encoding="utf-8",
-    )
-    file_handler.setFormatter(formatter)
-    stream_handler = logging.StreamHandler()
-    stream_handler.setFormatter(formatter)
-    logger.addHandler(file_handler)
-    logger.addHandler(stream_handler)
-    return logger
 
 
 def is_process_running() -> bool:
@@ -137,76 +114,65 @@ def read_new_log_lines(state: dict) -> list[str]:
 
 
 def main():
-    logger = setup_logger()
-    logger.info("watchdog started")
     last_restart = 0.0
     last_no_frame_reset = time.time()
     no_frame_hits = 0
     browser_closed_hits = 0
     log_state = {"pos": 0}
-    last_state = {"running": None, "stale": None}
     while True:
-        try:
-            running = is_process_running()
-            stale = log_stale()
-            now = time.time()
-            if running != last_state["running"] or stale != last_state["stale"]:
-                logger.info("status running=%s stale=%s", running, stale)
-                last_state["running"] = running
-                last_state["stale"] = stale
-            if now - last_no_frame_reset > NOFRAME_WINDOW:
-                no_frame_hits = 0
-                browser_closed_hits = 0
-                last_no_frame_reset = now
+        running = is_process_running()
+        stale = log_stale()
+        now = time.time()
+        if now - last_no_frame_reset > NOFRAME_WINDOW:
+            no_frame_hits = 0
+            browser_closed_hits = 0
+            last_no_frame_reset = now
 
-            for line in read_new_log_lines(log_state):
-                if "no frames" in line or "iframe 不健全" in line:
-                    no_frame_hits += 1
-                if "Browser closed" in line or "Target page, context or browser has been closed" in line:
-                    browser_closed_hits += 1
+        for line in read_new_log_lines(log_state):
+            if "no frames" in line or "iframe 不健全" in line:
+                no_frame_hits += 1
+            if "Browser closed" in line or "Target page, context or browser has been closed" in line:
+                browser_closed_hits += 1
 
-            hard_restart = (
-                no_frame_hits >= NOFRAME_LIMIT or browser_closed_hits >= BROWSER_CLOSED_LIMIT
-            )
+        hard_restart = (
+            no_frame_hits >= NOFRAME_LIMIT or browser_closed_hits >= BROWSER_CLOSED_LIMIT
+        )
 
-            if (not running) or stale:
-                if now - last_restart >= RESTART_COOLDOWN:
-                    if not running:
-                        logger.info("gui down - restarting gui")
-                        stop_camoufox()
-                        stop_agent()
-                        start_gui()
-                    elif stale:
-                        if find_agent_pids():
-                            logger.info("log stale - restarting agent")
-                            stop_camoufox()
-                            stop_agent()
-                        else:
-                            logger.info("log stale + no agent - restarting gui")
-                            stop_camoufox()
-                            stop_gui()
-                            time.sleep(3)
-                            start_gui()
-                    last_restart = now
-            elif hard_restart and now - last_restart >= RESTART_COOLDOWN:
-                if find_agent_pids():
-                    logger.info("recovery loop/browser closed - restarting agent")
+        if (not running) or stale:
+            if now - last_restart >= RESTART_COOLDOWN:
+                if not running:
+                    print("[watchdog] gui down - restarting gui")
                     stop_camoufox()
                     stop_agent()
-                else:
-                    logger.info("recovery loop + no agent - restarting gui")
-                    stop_camoufox()
-                    stop_gui()
-                    time.sleep(3)
                     start_gui()
-                no_frame_hits = 0
-                browser_closed_hits = 0
-                last_no_frame_reset = now
+                elif stale:
+                    if find_agent_pids():
+                        print("[watchdog] log stale - restarting agent")
+                        stop_camoufox()
+                        stop_agent()
+                    else:
+                        print("[watchdog] log stale + no agent - restarting gui")
+                        stop_camoufox()
+                        stop_gui()
+                        time.sleep(3)
+                        start_gui()
                 last_restart = now
-            time.sleep(CHECK_INTERVAL)
-        except Exception as exc:
-            logger.exception("watchdog loop error: %s", exc)
-            time.sleep(CHECK_INTERVAL)
+        elif hard_restart and now - last_restart >= RESTART_COOLDOWN:
+            if find_agent_pids():
+                print("[watchdog] recovery loop/browser closed - restarting agent")
+                stop_camoufox()
+                stop_agent()
+            else:
+                print("[watchdog] recovery loop + no agent - restarting gui")
+                stop_camoufox()
+                stop_gui()
+                time.sleep(3)
+                start_gui()
+            no_frame_hits = 0
+            browser_closed_hits = 0
+            last_no_frame_reset = now
+            last_restart = now
+        time.sleep(CHECK_INTERVAL)
 
 
 if __name__ == "__main__":
