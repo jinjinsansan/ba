@@ -179,15 +179,32 @@ const _runUpdateBtn = $('#btnRunUpdate');
 if (_runUpdateBtn) {
   _runUpdateBtn.addEventListener('click', async () => {
     try {
+      setAction('Opening update…');
       addLog('Launching update...', 'info');
+      const prevText = _runUpdateBtn.textContent;
+      _runUpdateBtn.disabled = true;
+      _runUpdateBtn.textContent = 'OPENING...';
       const result = await window.valhalla.runUpdate();
       if (!result || !result.ok) {
         addLog(`Update failed: ${result?.error || 'Unknown error'}`, 'lose');
+        setAction('Update failed');
+        _runUpdateBtn.disabled = false;
+        _runUpdateBtn.textContent = prevText;
       } else {
-        addLog('Update launched. GUI will close...', 'info');
+        if (result.mode === 'open-page') {
+          addLog('Opened the update download page in your browser.', 'info');
+          setAction('Update page opened');
+          _runUpdateBtn.disabled = false;
+          _runUpdateBtn.textContent = prevText;
+        } else {
+          addLog('Update launched. GUI will close...', 'info');
+        }
       }
     } catch (e) {
       addLog(`Update error: ${e.message || e}`, 'lose');
+      setAction('Update error');
+      _runUpdateBtn.disabled = false;
+      _runUpdateBtn.textContent = 'DOWNLOAD & INSTALL UPDATE';
     }
   });
 }
@@ -195,15 +212,31 @@ const _installDepsBtn = $('#btnInstallDeps');
 if (_installDepsBtn) {
   _installDepsBtn.addEventListener('click', async () => {
     try {
+      setAction('Launching installer…');
       addLog('Launching dependency installer (UAC prompt will appear)...', 'info');
+      const prevText = _installDepsBtn.textContent;
+      _installDepsBtn.disabled = true;
+      _installDepsBtn.textContent = 'LAUNCHING...';
       const result = await window.valhalla.installDeps();
       if (!result || !result.ok) {
         addLog(`Install failed: ${result?.error || 'Unknown error'}`, 'lose');
+        setAction('Install failed');
+        _installDepsBtn.disabled = false;
+        _installDepsBtn.textContent = prevText;
       } else {
         addLog(`Setup launched. Check log: ${result.logPath || 'C:\\ProgramData\\LAPLACE\\setup-all.log'}`, 'info');
+        setAction('Installer launched');
+        // Re-enable after a short delay so the user can click again if they cancelled UAC.
+        setTimeout(() => {
+          _installDepsBtn.disabled = false;
+          _installDepsBtn.textContent = prevText;
+        }, 4000);
       }
     } catch (e) {
       addLog(`Install error: ${e.message || e}`, 'lose');
+      setAction('Install error');
+      _installDepsBtn.disabled = false;
+      _installDepsBtn.textContent = 'INSTALL ON THIS PC';
     }
   });
 }

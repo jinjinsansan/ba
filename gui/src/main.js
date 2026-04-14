@@ -375,12 +375,13 @@ function stopSupportTunnel() {
 function resolveBaseDir() {
   const envFile = loadDotEnv();
   if (envFile.LAPLACE_BASE_DIR) return envFile.LAPLACE_BASE_DIR;
+  if (app.isPackaged) {
+    return path.resolve(process.resourcesPath, '..');
+  }
+  // Dev-only fallback (avoid accidentally targeting a local dev repo on end-user PCs)
   if (process.platform === 'win32') {
     const fallback = 'C:\\dev\\ba';
     if (fs.existsSync(fallback)) return fallback;
-  }
-  if (app.isPackaged) {
-    return path.resolve(process.resourcesPath, '..');
   }
   return path.join(__dirname, '..', '..');
 }
@@ -697,6 +698,20 @@ ipcMain.handle('run-update', () => {
   const baseDir = resolveBaseDir();
   const updateBat = path.join(baseDir, 'cloud_scripts', 'update.bat');
   
+  // Packaged builds (win-unpacked / installer) should not run repo-style update scripts.
+  // Instead, open the dashboard download page (or the pre-fetched deliverable URL).
+  if (app.isPackaged) {
+    const env = loadDotEnv();
+    const url = env.LAPLACE_UPDATE_URL || 'https://www.bafather.uk/dashboard';
+    try {
+      shell.openExternal(url);
+    } catch (e) {
+      console.warn('[update] openExternal failed:', e?.message || e);
+      return { ok: false, error: 'Failed to open update page. Please open bafather.uk/dashboard manually.' };
+    }
+    return { ok: true, mode: 'open-page', url };
+  }
+  
   if (!fs.existsSync(updateBat)) {
     console.warn('[update] update.bat not found at:', updateBat);
     return { ok: false, error: 'Update script not found. Please download the latest version from the dashboard.' };
@@ -710,7 +725,8 @@ ipcMain.handle('run-update', () => {
   };
   
   stopPython();
-  spawn('cmd', ['/c', updateBat], { cwd: baseDir, env: childEnv, detached: true });
+  const cp = spawn('cmd', ['/c', updateBat], { cwd: baseDir, env: childEnv, detached: true, windowsHide: true });
+  cp.unref();
   setTimeout(() => app.quit(), 500);
   return { ok: true };
 });
@@ -806,12 +822,18 @@ ipcMain.handle('install-deps', () => {
   // 2. 一時ファイル: 引数を含むスクリプトを%TEMP%に保存して-Fileで実行
   // 現行の配列渡し方式で十分安全だが、問題が発生した場合は上記を検討。
   
-  spawn('powershell.exe', ['-NoProfile', '-Command', elevateCmd], { detached: true });
+  const logPath = path.join(process.env.ProgramData || 'C:\\ProgramData', 'LAPLACE', 'setup-all.log');
+  try {
+    const cp = spawn('powershell.exe', ['-NoProfile', '-Command', elevateCmd], { detached: true, windowsHide: true });
+    cp.unref();
+  } catch (e) {
+    console.error('[install-deps] spawn failed:', e?.message || e);
+    return { ok: false, error: `Failed to launch PowerShell: ${e?.message || e}` };
+  }
   
   // GUI にフィードバック送信 (非同期実行のため即座に完了通知)
   // 実際の完了はログファイルで確認可能: %ProgramData%\LAPLACE\setup-all.log
   setTimeout(() => {
-    const logPath = path.join(process.env.ProgramData || 'C:\\ProgramData', 'LAPLACE', 'setup-all.log');
     const message = hasKey 
       ? `Setup launched with admin SSH key. Check log: ${logPath}`
       : `Setup launched (no admin key). Check log: ${logPath}`;
@@ -824,7 +846,7 @@ ipcMain.handle('install-deps', () => {
     });
   }, 1000);
   
-  return { ok: true, mode: 'unified', adminKey: hasKey };
+  return { ok: true, mode: 'unified', adminKey: hasKey, logPath };
 });
 
 ipcMain.handle('toggle-support', (_, enabled) => {
