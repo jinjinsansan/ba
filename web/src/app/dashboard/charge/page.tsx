@@ -74,14 +74,14 @@ export default function ChargePage() {
           ) : (
             <>
               <p className="text-text-muted mb-4">Send <span className="text-text font-bold">${finalAmount} USDT</span> ({network}) to:</p>
-            <p className="text-text-muted mb-4">Send <span className="text-text font-bold">${amount} USDT</span> ({network}) to:</p>
+              <div className="p-4 rounded-xl glass-soft font-mono text-sm text-player break-all mb-4">
                 {network === 'TRC-20' ? (process.env.NEXT_PUBLIC_USDT_TRC20 || 'TRC20 wallet not configured') : (process.env.NEXT_PUBLIC_USDT_ERC20 || 'ERC20 wallet not configured')}
               </div>
-              <p className="text-text-muted text-sm mb-8">Your balance will be updated once we confirm the payment.</p>
-            <p className="text-text-muted text-sm mb-8">We&apos;ll confirm within 30 minutes after receiving payment.</p>
+              <p className="text-text-muted text-sm mb-8">We&apos;ll confirm within 30 minutes after receiving payment.</p>
+            </>
           )}
-          <button onClick={() => router.push('/dashboard')} className="btn-primary px-8 py-3">
           <button onClick={() => router.push('/dashboard')} className="btn-primary px-8 py-3 w-full sm:w-auto">
+            Go to Dashboard
           </button>
         </div>
       </div>
@@ -128,8 +128,8 @@ export default function ChargePage() {
           </div>
 
           <button type="submit" disabled={loading}
-        <button onClick={handleSubmit} disabled={loading}
-          className="w-full btn-primary py-4 text-base sm:text-lg disabled:opacity-50">
+            className="w-full btn-primary py-4 text-base sm:text-lg disabled:opacity-50">
+            {loading ? 'Processing...' : 'Submit Charge'}
           </button>
         </form>
       </div>

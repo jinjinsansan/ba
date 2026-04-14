@@ -1760,8 +1760,9 @@ def _run_bet_session_inner(config: dict, stop_event: threading.Event, skip_event
         from table_selector import TableSelector
         selector = TableSelector(scraper)
     humanizer = Humanizer(cfg.HUMANIZE_CONFIG)
-    executor_config = {"demo_mode": dry_run}
+    executor_config = {"demo_mode": dry_run, "video_quality": cfg.VIDEO_QUALITY}
     executor = BetExecutor(scraper.page, scraper.game_ws, executor_config, humanizer=humanizer)
+    executor.gui_log = send_log
 
     # === Counter mode (テレコ逆張り) ===
     if _effective_mode_box[0] in ("counter", "counter_flat", "counter_seq7"):
@@ -1846,6 +1847,7 @@ def _run_bet_session_inner(config: dict, stop_event: threading.Event, skip_event
                 pass
             time.sleep(12)
             executor = BetExecutor(scraper.page, scraper.game_ws, executor_config, humanizer=humanizer)
+            executor.gui_log = send_log
             try:
                 if counter_session is not None:
                     counter_session.executor = executor
@@ -2593,6 +2595,7 @@ def _run_bet_session_inner(config: dict, stop_event: threading.Event, skip_event
             selector = TableSelector(scraper)
 
         executor = BetExecutor(scraper.page, scraper.game_ws, executor_config, humanizer=humanizer)
+        executor.gui_log = send_log
         try:
             session.executor = executor
         except Exception:
