@@ -1696,34 +1696,34 @@ def _run_bet_session_inner(config: dict, stop_event: threading.Event, skip_event
         try:
             iframe_alive, _hr = _iframe_healthy()
             if iframe_alive:
-                send_log(f"[recovery] ✅ iframe 健全性 OK ({_hr})")
+                send_log(f"[recovery] ✅ iframe healthy ({_hr})")
             else:
                 if ENABLE_CASINO_DETOUR:
-                    send_log(f"[recovery] ⚠️ Evolution iframe 不健全 ({_hr}) → detourで復活試行")
+                    send_log(f"[recovery] ⚠️ Evolution iframe unhealthy ({_hr}) → attempting detour recovery")
                     send_action("Evolution iframe unhealthy — trying detour")
                     # Evolution game URL を順番に試行
                     for revival_url in EVOLUTION_GAME_URLS:
                         game_name = revival_url.split('/')[-1]
-                        send_log(f"[recovery] 復活試行: {game_name}")
+                        send_log(f"[recovery] attempting via: {game_name}")
                         if casino_detour(reason=f"iframe復活({game_name})", target_url=revival_url):
                             time.sleep(3)
                             h, hr = _iframe_healthy()
                             if h:
-                                send_log(f"[recovery] ✅ {game_name} 経由で iframe 復活 ({hr})")
+                                send_log(f"[recovery] ✅ iframe recovered via {game_name} ({hr})")
                                 iframe_alive = True
                                 break
                             else:
-                                send_log(f"[recovery] ⚠️ {game_name} 経由でも不健全 ({hr}) — 次を試す")
+                                send_log(f"[recovery] ⚠️ still unhealthy via {game_name} ({hr}) — trying next")
                 else:
-                    send_log(f"[recovery] ⚠️ Evolution iframe 不健全 ({_hr}) → detour無効のためLv4aへ")
+                    send_log(f"[recovery] ⚠️ Evolution iframe unhealthy ({_hr}) → detour disabled, falling back to Lv4a")
 
                 # === casino_detour 失敗 → Lv4a (Page rebuild) を強制実行 ===
                 if not iframe_alive:
-                    send_log("[recovery] ❌ 全 casino_detour 失敗 → Lv4a (Page rebuild) を強制実行")
-                    send_action("🔧 Lv4a: Page rebuild — iframe復活のため強制実行")
+                    send_log("[recovery] ❌ all casino_detour failed → forcing Lv4a (page rebuild)")
+                    send_action("🔧 Lv4a: Page rebuild — forced for iframe recovery")
                     try:
                         if scraper.rebuild_page():
-                            send_log("[recovery-lv4a] ✅ 新規ページ作成成功 — ロビー再訪問")
+                            send_log("[recovery-lv4a] ✅ new page created — re-visiting lobby")
                             try:
                                 scraper.page.goto(BACCARAT_LOBBY_URL, wait_until="domcontentloaded", timeout=60000)
                                 time.sleep(10)  # SPA hydration 待機
@@ -1735,19 +1735,19 @@ def _run_bet_session_inner(config: dict, stop_event: threading.Event, skip_event
                                 # WS 再接続
                                 try:
                                     scraper.setup_ws_intercept()
-                                    send_log("[recovery-lv4a] Lobby WS 再接続完了")
+                                    send_log("[recovery-lv4a] Lobby WS reconnected")
                                 except Exception as _wse:
-                                    send_log(f"[recovery-lv4a] WS 再接続例外: {_wse}")
+                                    send_log(f"[recovery-lv4a] WS reconnect exception: {_wse}")
                                 time.sleep(3)
                                 # iframe 健全性確認 (機能チェック)
                                 lv4a_h, lv4a_hr = _iframe_healthy()
                                 if lv4a_h:
-                                    send_log(f"[recovery-lv4a] ✅ rebuild 後に iframe 健全 ({lv4a_hr})")
+                                    send_log(f"[recovery-lv4a] ✅ iframe healthy after rebuild ({lv4a_hr})")
                                     iframe_alive = True
                                 else:
                                     if ENABLE_CASINO_DETOUR:
                                         # rebuild 後でも不健全 → もう一度 casino_detour
-                                        send_log(f"[recovery-lv4a] ⚠️ rebuild 後も不健全 ({lv4a_hr}) — detour 試行")
+                                        send_log(f"[recovery-lv4a] ⚠️ still unhealthy after rebuild ({lv4a_hr}) — attempting detour")
                                         for revival_url in EVOLUTION_GAME_URLS:
                                             if stop_event.is_set():
                                                 return None
@@ -1755,23 +1755,23 @@ def _run_bet_session_inner(config: dict, stop_event: threading.Event, skip_event
                                                 time.sleep(3)
                                                 redet_h, redet_hr = _iframe_healthy()
                                                 if redet_h:
-                                                    send_log(f"[recovery-lv4a] ✅ rebuild + detour で iframe 健全 ({redet_hr})")
+                                                    send_log(f"[recovery-lv4a] ✅ iframe healthy via rebuild + detour ({redet_hr})")
                                                     iframe_alive = True
                                                     break
                             except Exception as _gse:
-                                send_log(f"[recovery-lv4a] lobby goto 例外: {_gse}")
+                                send_log(f"[recovery-lv4a] lobby goto exception: {_gse}")
                     except Exception as _re:
-                        send_log(f"[recovery-lv4a] rebuild_page 例外: {_re}")
+                        send_log(f"[recovery-lv4a] rebuild_page exception: {_re}")
 
                     if not iframe_alive:
-                        send_log("[recovery] ❌ Lv4a も失敗 — full_recovery 中断 (stale テーブル選定を防止)")
+                        send_log("[recovery] ❌ Lv4a failed too — aborting full_recovery (prevent stale table)")
                         send_action("Recovery failed — iframe revival impossible")
                         rb = restart_browser("iframe revival failed (Lv4a)")
                         if rb:
                             return rb
                         return None
         except Exception as _eve:
-            send_log(f"[recovery] iframe 確認例外: {_eve}")
+            send_log(f"[recovery] iframe check exception: {_eve}")
 
         if stop_event.is_set():
             return None
@@ -1808,11 +1808,11 @@ def _run_bet_session_inner(config: dict, stop_event: threading.Event, skip_event
         # === Lv4a: Page 破棄 + 新規 Page (最終手段) ===
         # 通常の full_recovery で復活できなかった場合、
         # ページ自体を破棄して新規作成 (Cookie は Browser context 側で維持)
-        send_action("🔧 Lv4a: Page rebuild — 新規ページ作成試行")
-        send_log("[recovery-lv4a] Page rebuild を試行")
+        send_action("🔧 Lv4a: Page rebuild — attempting new page")
+        send_log("[recovery-lv4a] attempting page rebuild")
         try:
             if scraper.rebuild_page():
-                send_log("[recovery-lv4a] ✅ 新規ページ作成成功 — ロビー再訪問")
+                send_log("[recovery-lv4a] ✅ new page created — re-visiting lobby")
                 # 新しいページで lobby にアクセス
                 try:
                     scraper.page.goto(BACCARAT_LOBBY_URL, wait_until="domcontentloaded", timeout=60000)
@@ -1825,13 +1825,13 @@ def _run_bet_session_inner(config: dict, stop_event: threading.Event, skip_event
                             break
                         time.sleep(1)
                     if not logged_in_retry:
-                        send_log("[recovery-lv4a] ⚠️ 新ページでログイン未確認 — 続行")
+                        send_log("[recovery-lv4a] ⚠️ login unconfirmed on new page — continuing")
                     # WS 再接続
                     try:
                         scraper.setup_ws_intercept()
-                        send_log("[recovery-lv4a] Lobby WS 再接続完了")
+                        send_log("[recovery-lv4a] Lobby WS reconnected")
                     except Exception as _wse:
-                        send_log(f"[recovery-lv4a] WS 再接続例外: {_wse}")
+                        send_log(f"[recovery-lv4a] WS reconnect exception: {_wse}")
                     # テーブル選定リトライ
                     time.sleep(3)
                     for _rt in range(3):
@@ -1846,16 +1846,16 @@ def _run_bet_session_inner(config: dict, stop_event: threading.Event, skip_event
                                 scraper._target_table_names[target_tid] = target_name
                                 scraper._new_shoe_signals[target_tid] = False
                                 scraper._shoe_epochs[target_tid] = int(time.time())
-                            send_action(f"✅ Lv4a 成功 — {target_name}")
+                            send_action(f"✅ Lv4a success — {target_name}")
                             send_log(f"[recovery-lv4a] ✅ Table selected: {target_name}")
                             return target_tid, target_name
                         if stop_event.wait(5):
                             return None
                 except Exception as _gse:
-                    send_log(f"[recovery-lv4a] lobby goto 例外: {_gse}")
+                    send_log(f"[recovery-lv4a] lobby goto exception: {_gse}")
         except Exception as _re:
-            send_log(f"[recovery-lv4a] rebuild_page 例外: {_re}")
-        send_log("[recovery-lv4a] ❌ Lv4a も失敗 — 完全に諦める")
+            send_log(f"[recovery-lv4a] rebuild_page exception: {_re}")
+        send_log("[recovery-lv4a] ❌ Lv4a failed too — giving up entirely")
         rb = restart_browser("full_recovery exhausted")
         if rb:
             return rb
@@ -3119,8 +3119,8 @@ def _run_bet_session_inner(config: dict, stop_event: threading.Event, skip_event
         Returns: True=成功, False=失敗 (main loop break)
         """
         nonlocal target_tid, target_name, _last_recovery_time, _last_iframe_health_check
-        send_action(f"🔄 予防リカバリ: {reason}")
-        send_log(f"[proactive-recovery] 発動: {reason}")
+        send_action(f"🔄 Proactive recovery: {reason}")
+        send_log(f"[proactive-recovery] triggered: {reason}")
         fr = full_recovery()
         if not fr:
             return False
@@ -3157,7 +3157,7 @@ def _run_bet_session_inner(config: dict, stop_event: threading.Event, skip_event
             detour_targets = list(EVOLUTION_GAME_URLS)
             target_url = _rand_d.choice(detour_targets)
         send_action(f"🎰 Casino detour: {reason}")
-        send_log(f"[detour] 寄り道開始 → {target_url}")
+        send_log(f"[detour] starting detour → {target_url}")
         try:
             scraper.page.goto(target_url, wait_until="domcontentloaded", timeout=30000)
             # 人間らしく10-15秒滞在 (Evolution iframe ロード待ちも兼ねる)
@@ -3166,25 +3166,25 @@ def _run_bet_session_inner(config: dict, stop_event: threading.Event, skip_event
             try:
                 temp_frames = executor._get_evo_frames()
                 if temp_frames:
-                    send_log(f"[detour] 寄り道先で Evolution iframe ロード確認 ({len(temp_frames)}個)")
+                    send_log(f"[detour] Evolution iframe load confirmed at detour ({len(temp_frames)} frames)")
                 else:
-                    send_log("[detour] 寄り道先で Evolution iframe 未確認")
+                    send_log("[detour] Evolution iframe not confirmed at detour")
             except Exception:
                 pass
-            send_log("[detour] バカラロビーに復帰")
+            send_log("[detour] returning to baccarat lobby")
             scraper.page.goto(BACCARAT_LOBBY_URL, wait_until="domcontentloaded", timeout=30000)
             # lobby復帰後 Evolution iframe が再ロードされるまで待機 (15秒)
             time.sleep(15)
             try:
                 scraper.setup_ws_intercept()
             except Exception as _wse:
-                send_log(f"[detour] WS再接続例外: {_wse}")
+                send_log(f"[detour] WS reconnect exception: {_wse}")
             _last_iframe_health_check = time.time()
             _last_recovery_time = time.time()
-            send_log("[detour] ✅ 完了")
+            send_log("[detour] ✅ complete")
             return True
         except Exception as e:
-            send_log(f"[detour] ❌ 失敗: {e}")
+            send_log(f"[detour] ❌ failed: {e}")
             return False
 
     while not stop_event.is_set() and round_count < MAX_ROUNDS:
@@ -3303,20 +3303,20 @@ def _run_bet_session_inner(config: dict, stop_event: threading.Event, skip_event
             try:
                 evo_frames = executor._get_evo_frames()
                 if not evo_frames:
-                    send_log("[health] Evolution iframe 消失検知 → 予防リカバリ")
+                    send_log("[health] Evolution iframe disappeared → proactive recovery")
                     if not proactive_full_recovery("iframe消失"):
                         break
                     _awaiting_sync_confirm = (_effective_mode_box[0] in ("sync", "sync_pause", "pattern", "pattern_test"))
                     continue
             except Exception as _hce:
-                send_log(f"[health] iframe チェック例外: {_hce}")
+                send_log(f"[health] iframe check exception: {_hce}")
 
         # ── B.5 bead road 連続失敗チェック (iframe 劣化早期検知) ──
         try:
             if executor.in_table and executor.get_bead_fail_count() >= BEAD_FAIL_LIMIT:
                 if executor.get_table_uptime() >= BEAD_FAIL_GRACE_SEC:
                     send_action(f"⚠️ Bead road fail x{executor.get_bead_fail_count()} — recovery")
-                    send_log(f"[health] bead road {executor.get_bead_fail_count()}連続失敗 → full_recovery")
+                    send_log(f"[health] bead road {executor.get_bead_fail_count()} consecutive failures → full_recovery")
                     executor.reset_bead_fail_count()
                     try:
                         executor.exit_table()
@@ -3594,7 +3594,7 @@ def _run_bet_session_inner(config: dict, stop_event: threading.Event, skip_event
                             scraper._target_table_names[target_tid] = target_name
                             scraper._new_shoe_signals[target_tid] = False
                             scraper._shoe_epochs[target_tid] = int(time.time())
-                        send_action(f"🚪 {target_name} に入場中...")
+                        send_action(f"🚪 Entering {target_name}...")
                         if not executor.enter_table(target_tid, target_name):
                             send_log("[Sync-Entry] ⚠️ 入場失敗 → full_recovery")
                             fr = full_recovery()
@@ -3644,7 +3644,7 @@ def _run_bet_session_inner(config: dict, stop_event: threading.Event, skip_event
                         scraper._target_table_names[target_tid] = target_name
                         scraper._new_shoe_signals[target_tid] = False
                         scraper._shoe_epochs[target_tid] = int(time.time())
-                    send_action(f"🚪 {target_name} に入場中...")
+                    send_action(f"🚪 Entering {target_name}...")
                     if not executor.enter_table(target_tid, target_name):
                         send_log("[Sync-Entry] ⚠️ 入場失敗 → full_recovery")
                         fr = full_recovery()
@@ -3938,8 +3938,8 @@ def _run_bet_session_inner(config: dict, stop_event: threading.Event, skip_event
             # Phase 1: wait_for_result 連続失敗 (2回) → シャッフル中と判断 → 即テーブル退避
             _consec_wait_result_fail += 1
             if _consec_wait_result_fail >= WAIT_RESULT_FAIL_LIMIT:
-                send_action(f"⚠️ wait_for_result {_consec_wait_result_fail}回連続失敗 — シャッフル中と判断 → テーブル退避")
-                send_log(f"[shuffle-detect] wait_for_result 連続失敗{_consec_wait_result_fail}回 → cooldown + 別テーブル")
+                send_action(f"⚠️ wait_for_result {_consec_wait_result_fail} consecutive failures — assuming shuffle → exit table")
+                send_log(f"[shuffle-detect] wait_for_result {_consec_wait_result_fail} consecutive failures → cooldown + different table")
                 _consec_wait_result_fail = 0
                 mark_table_exited(target_name)
                 executor.exit_table()
@@ -4179,7 +4179,7 @@ def _run_bet_session_inner(config: dict, stop_event: threading.Event, skip_event
             # detour は不安定化要因になりうるためデフォルト無効
             if ENABLE_CASINO_DETOUR and time.time() - _last_recovery_time > PROACTIVE_RECOVERY_INTERVAL:
                 elapsed_min = (time.time() - _last_recovery_time) / 60
-                send_log(f"[proactive-detour] 30分経過 ({elapsed_min:.0f}分) → casino detour")
+                send_log(f"[proactive-detour] 30min elapsed ({elapsed_min:.0f}min) → casino detour")
                 # 一旦テーブルを抜けてから detour
                 executor.exit_table()
                 time.sleep(2)
@@ -4279,7 +4279,7 @@ def _run_bet_session_inner(config: dict, stop_event: threading.Event, skip_event
                     send_log(f"[profit-limit] reached {profit_sessions_done}/{limit} — stopping")
                     stop_event.set()
                     break
-            send_log(f"[proactive-recovery] {reason_en} → リカバリ")
+            send_log(f"[proactive-recovery] {reason_en} → recovery")
             money_pnl_actual = 0.0
             _actual_override_logged = False
             if bal_now > 0:
@@ -4334,7 +4334,7 @@ def _run_bet_session_inner(config: dict, stop_event: threading.Event, skip_event
                         scraper.setup_ws_intercept()
                     except Exception:
                         pass
-                send_action("🔍 次の推奨テーブルを探しています...")
+                send_action("🔍 Searching for next recommended table...")
                 res_sync = find_table()
                 if not res_sync:
                     break
@@ -4344,7 +4344,7 @@ def _run_bet_session_inner(config: dict, stop_event: threading.Event, skip_event
                     scraper._target_table_names[target_tid] = target_name
                     scraper._new_shoe_signals[target_tid] = False
                     scraper._shoe_epochs[target_tid] = int(time.time())
-                send_action(f"🚪 {target_name} に入場中...")
+                send_action(f"🚪 Entering {target_name}...")
                 if not executor.enter_table(target_tid, target_name):
                     send_log("[Sync] ⚠️ 入場失敗 → フルリカバリ")
                     fr = full_recovery()

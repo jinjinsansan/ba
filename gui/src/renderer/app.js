@@ -160,12 +160,12 @@ window.valhalla.onUpdateStatus((data) => {
   const runUpdateBtn = $('#btnRunUpdate');
   if (data.status === 'available') {
     banner.style.display = 'flex';
-    text.textContent = `新バージョン ${data.version} をダウンロード中...`;
+    text.textContent = `New version ${data.version} downloading...`;
     btn.style.display = 'none';
     if (runUpdateBtn) runUpdateBtn.classList.add('update-needed');
   } else if (data.status === 'downloading') {
     banner.style.display = 'flex';
-    text.textContent = `ダウンロード中... ${data.percent}%`;
+    text.textContent = `Downloading... ${data.percent}%`;
     btn.style.display = 'none';
     if (runUpdateBtn) runUpdateBtn.classList.add('update-needed');
   } else if (data.status === 'up-to-date' || data.status === 'not-available' || data.status === 'installed') {
