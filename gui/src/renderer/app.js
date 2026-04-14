@@ -666,6 +666,12 @@ function _turnToCode(turn) { return _rndChar(_SIG_PREFIXES) + String.fromCharCod
 function _ratioToCode(w, l) { return _rndChar(_SIG_WL_PREFIXES) + w + _rndChar(_SIG_WL_PREFIXES) + l; }
 function _driftToCode(os) { return _rndChar(_SIG_OS_PREFIXES) + os; }
 
+const _STREAM_SET_COLORS = ['#ff3366', '#ffcc00', '#00b8d4', '#ffffff', '#00ff88', '#c084fc'];
+function _setSizeForMode(mode) { return mode === 'counter_seq7' ? 7 : 5; }
+let _streamSetSize = _setSizeForMode(loadSettings().bet_mode || 'counter');
+let _streamSetIdx = 0;
+let _streamTurnsInSet = 0;
+
 // All O/X results as continuous stream (no set boundaries)
 let _signalStreamAll = '';
 
@@ -682,11 +688,12 @@ function _appendStreamMark(el, mark, color, pending = false) {
   el.scrollTop = el.scrollHeight;
 }
 
-function _applyPendingMark(el, mark) {
+function _applyPendingMark(el, mark, color) {
   const pending = el.querySelector('.s-pending');
   if (!pending) return false;
   pending.textContent = mark;
   pending.classList.remove('s-pending');
+  if (color) pending.style.color = color;
   return true;
 }
 
@@ -711,9 +718,8 @@ function updateDevPanel(msg) {
   }
   if (sd && typeof msg.overshoot === 'number') sd.textContent = _driftToCode(msg.overshoot);
   // ROUND = total bets, color cycles per set (hidden set boundary indicator)
-  const _setColors = ['#ff3366', '#ffcc00', '#00b8d4', '#ffffff', '#00ff88', '#c084fc'];
   const setIdx = typeof msg.sets === 'number' ? msg.sets : 0;
-  const currentSetColor = _setColors[setIdx % _setColors.length];
+  const currentSetColor = _STREAM_SET_COLORS[setIdx % _STREAM_SET_COLORS.length];
   if (srd && typeof msg.total_bets === 'number') {
     srd.textContent = `#${msg.total_bets}`;
     srd.style.color = currentSetColor;
@@ -722,24 +728,46 @@ function updateDevPanel(msg) {
   // Stream: add one mark per hand, colored by current set
   const el = $('#sigStream');
   if (el && typeof msg.total_bets === 'number') {
+    if (el.children.length === 0 && typeof msg.sets === 'number') {
+      _streamSetIdx = msg.sets;
+      if (typeof msg.current_turn === 'number') {
+        _streamTurnsInSet = msg.current_turn;
+      }
+    }
     if (msg.total_bets < _lastStreamTurn) {
       _lastStreamTurn = -1;
       _pendingStreamResults.length = 0;
       el.innerHTML = '';
+      _streamSetIdx = typeof msg.sets === 'number' ? msg.sets : 0;
+      _streamTurnsInSet = typeof msg.current_turn === 'number' ? msg.current_turn : 0;
     }
     if (msg.total_bets > _lastStreamTurn) {
       if (el.querySelector('[style*="rgba"]')) el.innerHTML = '';  // Clear "AWAITING SIGNAL"
       for (let t = _lastStreamTurn + 1; t <= msg.total_bets; t += 1) {
         const next = _pendingStreamResults.shift();
         if (next) {
-          _appendStreamMark(el, next, currentSetColor, false);
+          const color = _commitStreamMark(next);
+          _appendStreamMark(el, next, color, false);
         } else {
-          _appendStreamMark(el, '·', currentSetColor, true);
+          const color = _STREAM_SET_COLORS[_streamSetIdx % _STREAM_SET_COLORS.length];
+          _appendStreamMark(el, '·', color, true);
         }
       }
       _lastStreamTurn = msg.total_bets;
     }
   }
+}
+
+function _commitStreamMark(mark) {
+  const color = _STREAM_SET_COLORS[_streamSetIdx % _STREAM_SET_COLORS.length];
+  if (mark === 'O' || mark === 'X') {
+    _streamTurnsInSet += 1;
+    if (_streamTurnsInSet >= _streamSetSize) {
+      _streamTurnsInSet = 0;
+      _streamSetIdx += 1;
+    }
+  }
+  return color;
 }
 
 function renderDevSets(sets) {
@@ -761,6 +789,8 @@ function renderDevSets(sets) {
   if (stream) {
     el.innerHTML = stream;
     el.scrollTop = el.scrollHeight;
+    _streamSetIdx = sets.length;
+    _streamTurnsInSet = 0;
   }
 }
 
@@ -939,7 +969,10 @@ window.valhalla.onAgentMessage((msg) => {
       if (isDevMode() && streamMark) {
         const el = $('#sigStream');
         if (el) {
-          if (!_applyPendingMark(el, streamMark)) {
+          if (el.querySelector('.s-pending')) {
+            const color = _commitStreamMark(streamMark);
+            _applyPendingMark(el, streamMark, color);
+          } else {
             _pendingStreamResults.push(streamMark);
           }
         }
@@ -1122,6 +1155,7 @@ window.valhalla.onAgentMessage((msg) => {
     case 'mode_changed': {
       const nextMode = normalizeBetMode(msg.mode);
       if ($('#inputBetMode')) $('#inputBetMode').value = nextMode;
+      _streamSetSize = _setSizeForMode(nextMode);
       addLog(`BET mode → ${nextMode}`, 'info');
       break;
     }
