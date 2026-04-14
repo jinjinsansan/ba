@@ -390,8 +390,8 @@ class MaruBatsuBetSession:
         _spnl = self._telegram_pnl
         _spnl_sign = "+" if _spnl >= 0 else ""
         self.notifier.send(
-            f"{'WIN' if won else 'LOSE'} | {result.upper()} | ${bet_amount:.0f}\n"
-            f"{_cp}{_turn_letter} {_wp}{pre_wins}{_lp}{pre_losses} {_vp}{_os} | {_spnl_sign}${_spnl:.0f} | ${balance:.2f}"
+            f"{'WIN' if won else 'LOSE'} | {result.upper()} | ${bet_amount:.2f}\n"
+            f"{_cp}{_turn_letter} {_wp}{pre_wins}{_lp}{pre_losses} {_vp}{_os} | {_spnl_sign}${_spnl:.2f} | ${balance:.2f}"
         )
 
         need_reset = self.should_reset()
