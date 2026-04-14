@@ -94,7 +94,7 @@ window.valhalla.onUpdateStatus((data) => {
     text.textContent = `ダウンロード中... ${data.percent}%`;
     btn.style.display = 'none';
     if (runUpdateBtn) runUpdateBtn.classList.add('update-needed');
-  } else if (data.status === 'not-available' || data.status === 'installed') {
+  } else if (data.status === 'up-to-date' || data.status === 'not-available' || data.status === 'installed') {
     if (runUpdateBtn) runUpdateBtn.classList.remove('update-needed');
   }
 });
@@ -184,6 +184,7 @@ $('#btnStart').addEventListener('click', async () => {
   config.resume_results = Array.isArray(results) ? results.slice() : [];
   _startedAt = Date.now();
   setRunning(true);
+  setPhase('scanning', 'starting...');
   addLog('Bot starting...', 'info');
   try {
     await window.valhalla.startBot(config);
@@ -823,6 +824,64 @@ function setAction(text) {
   $('#actionText').textContent = text;
 }
 
+// --- Phase Badge (状態バッジ) ---
+const _PHASE_LABELS = {
+  idle: 'IDLE',
+  scanning: 'SCANNING',
+  entering: 'ENTERING',
+  waiting_entry: 'WAIT ENTRY',
+  betting: 'BETTING',
+  waiting_result: 'WAIT RESULT',
+  skipping: 'SKIPPING',
+  ws_stall: 'WS STALL',
+  error: 'ERROR',
+  stopped: 'STOPPED',
+};
+const _PHASE_VALID = new Set(Object.keys(_PHASE_LABELS));
+let _currentPhase = 'idle';
+let _currentPhaseDetail = '';
+let _lastPhaseUpdate = Date.now();
+let _phaseStaleCheckTimer = null;
+
+function setPhase(name, detail) {
+  if (!_PHASE_VALID.has(name)) name = 'idle';
+  _currentPhase = name;
+  _currentPhaseDetail = detail || '';
+  _lastPhaseUpdate = Date.now();
+  _renderPhaseBadge(false);
+}
+
+function _renderPhaseBadge(isStale) {
+  const badge = $('#phaseBadge');
+  const textEl = $('#phaseBadgeText');
+  if (!badge || !textEl) return;
+  // Reset all phase-* classes
+  badge.className = 'phase-badge';
+  const phaseCls = isStale ? 'stale' : _currentPhase;
+  badge.classList.add('phase-' + phaseCls);
+  const label = _PHASE_LABELS[_currentPhase] || _currentPhase.toUpperCase();
+  if (isStale) {
+    const ageSec = Math.round((Date.now() - _lastPhaseUpdate) / 1000);
+    textEl.textContent = `${label} · STALE ${ageSec}s`;
+  } else {
+    textEl.textContent = _currentPhaseDetail ? `${label} · ${_currentPhaseDetail}` : label;
+  }
+}
+
+// 60秒以上 phase 更新がなければ STALE 表示。Bot実行中のみ監視。
+function _startPhaseStaleMonitor() {
+  if (_phaseStaleCheckTimer) return;
+  _phaseStaleCheckTimer = setInterval(() => {
+    const age = Date.now() - _lastPhaseUpdate;
+    const isRunning = !['idle', 'stopped', 'error'].includes(_currentPhase);
+    if (isRunning && age > 60000) {
+      _renderPhaseBadge(true);
+    }
+  }, 5000);
+}
+_startPhaseStaleMonitor();
+setPhase('idle', '');
+
 // --- Result Buffer (W/L/T list) ---
 // Append-only list of individual hand results.
 // - feedRow: shows last 5
@@ -936,6 +995,10 @@ window.valhalla.onAgentMessage((msg) => {
   switch (msg.type) {
     case 'action':
       setAction(msg.message || '');
+      break;
+
+    case 'phase':
+      setPhase(msg.name || 'idle', msg.detail || '');
       break;
 
     case 'round_result': {
@@ -1095,6 +1158,7 @@ window.valhalla.onAgentMessage((msg) => {
 
     case 'error':
       addLog(`Error: ${msg.message}`, 'lose');
+      setPhase('error', (msg.message || '').slice(0, 40));
       break;
 
     case 'stopped':
@@ -1105,6 +1169,7 @@ window.valhalla.onAgentMessage((msg) => {
       }
       setRunning(false);
       setAction('Stopped');
+      setPhase('stopped', '');
       addLog('Bot stopped.');
       syncGuiStateToServer(); // 停止時に即時保存
       break;

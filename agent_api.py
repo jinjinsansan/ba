@@ -165,6 +165,17 @@ def send_action(text: str):
     """Send browser action status for GUI display"""
     send_msg({"type": "action", "message": text})
 
+# 状態バッジ用 Phase メッセージ
+# Phase名: idle | scanning | entering | waiting_entry | betting | waiting_result | skipping | error | stopped
+_LAST_PHASE = [""]
+def send_phase(name: str, detail: str = ""):
+    """GUIの状態バッジを更新。同じ name+detail が連続する時は送らない(ノイズ低減)。"""
+    key = f"{name}|{detail}"
+    if _LAST_PHASE[0] == key:
+        return
+    _LAST_PHASE[0] = key
+    send_msg({"type": "phase", "name": name, "detail": detail, "ts": time.time()})
+
 def _parse_bool(value) -> bool:
     if isinstance(value, bool):
         return value
@@ -597,6 +608,7 @@ def run_bet_session(config: dict, stop_event: threading.Event, skip_event: threa
             pass
         try:
             send_msg({"type": "error", "message": f"BET session crashed: {_err}"})
+            send_phase("error", str(_err)[:60])
             send_msg({"type": "stopped", "code": -1})
         except Exception:
             pass
@@ -2011,6 +2023,7 @@ def _run_bet_session_inner(config: dict, stop_event: threading.Event, skip_event
         while not stop_event.is_set():
             # Table selection / entry
             if current_tid is None:
+                send_phase("scanning")
                 send_log("[counter] Scanning...")
                 # Lobby WS health
                 if not scraper.get_all_table_configs():
@@ -2041,6 +2054,7 @@ def _run_bet_session_inner(config: dict, stop_event: threading.Event, skip_event
 
                 send_log(f"[counter] Entered: {current_name} ({current_short_rate:.0%})")
                 send_action(f"Entering {current_name}...")
+                send_phase("entering", current_name)
                 if not executor.enter_table(current_tid, current_name):
                     send_log(f"[counter] Entry failed: {current_name}")
                     entry_fail_streak += 1
@@ -2159,7 +2173,9 @@ def _run_bet_session_inner(config: dict, stop_event: threading.Event, skip_event
             # counter_session が None (flat mode) の場合は簡易セッションを使う
             if counter_session is not None:
                 from marubatsu_strategy import SEQ_COUNTER as _SEQ
-                send_log(f"[counter] BET {side.upper()} ${counter_session.get_bet_amount():.0f}")
+                _bet_amt = counter_session.get_bet_amount()
+                send_log(f"[counter] BET {side.upper()} ${_bet_amt:.0f}")
+                send_phase("betting", f"{side.upper()} ${_bet_amt:.0f}")
                 round_result = counter_session.run_round(
                     lambda: not stop_event.is_set(),
                     side=side,
@@ -3215,12 +3231,15 @@ def _run_bet_session_inner(config: dict, stop_event: threading.Event, skip_event
         # 段階的警戒ログ (ユーザーが "動いていないのか待っているだけか" を判別できるように)
         if ws_idle >= 60 and _ws_warn_level[0] < 1:
             send_log(f"[ws-wait] WS silent {ws_idle:.0f}s — still waiting (watchdog at {_FREEZE_TIMEOUT:.0f}s)")
+            send_phase("ws_stall", f"{ws_idle:.0f}s")
             _ws_warn_level[0] = 1
         elif ws_idle >= 180 and _ws_warn_level[0] < 2:
             send_log(f"[ws-wait] WS silent {ws_idle:.0f}s ⚠ — unusually long, may be shuffle/stall")
+            send_phase("ws_stall", f"{ws_idle:.0f}s ⚠")
             _ws_warn_level[0] = 2
         elif ws_idle >= 360 and _ws_warn_level[0] < 3:
             send_log(f"[ws-wait] WS silent {ws_idle:.0f}s 🔴 — approaching freeze threshold ({_FREEZE_TIMEOUT:.0f}s)")
+            send_phase("ws_stall", f"{ws_idle:.0f}s 🔴")
             _ws_warn_level[0] = 3
         elif ws_idle < 30 and _ws_warn_level[0] != 0:
             _ws_warn_level[0] = 0  # 通信回復 → リセット

@@ -235,7 +235,62 @@ html[data-variant="user"] .os-tag { display: none !important; }
   font-family: var(--font-mono); font-size: 13px;
   color: rgba(108,243,255,0.85); letter-spacing: 0.04em;
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  flex: 1;
 }
+
+/* ============================================================
+   PHASE BADGE (状態バッジ)
+   ============================================================ */
+.phase-badge {
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 4px 10px;
+  font-family: var(--font-hud); font-size: 10px; font-weight: 700;
+  letter-spacing: 0.12em; text-transform: uppercase;
+  border-radius: 12px; border: 1px solid;
+  flex-shrink: 0;
+  transition: background 0.2s, border-color 0.2s, color 0.2s;
+}
+.phase-badge-dot {
+  width: 6px; height: 6px; border-radius: 50%;
+  animation: phase-pulse 1.4s ease-in-out infinite;
+}
+@keyframes phase-pulse {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50%      { opacity: 0.35; transform: scale(0.7); }
+}
+/* Phase color variants */
+.phase-idle { background: rgba(140,150,170,0.12); border-color: #6a7280; color: #a0a8b8; }
+.phase-idle .phase-badge-dot { background: #8a96a8; box-shadow: 0 0 6px #8a96a8; }
+
+.phase-scanning { background: rgba(0,229,255,0.12); border-color: #00b8d4; color: #6dd5ed; }
+.phase-scanning .phase-badge-dot { background: #00e5ff; box-shadow: 0 0 8px #00e5ff; }
+
+.phase-entering { background: rgba(192,132,252,0.14); border-color: #a855f7; color: #c084fc; }
+.phase-entering .phase-badge-dot { background: #c084fc; box-shadow: 0 0 8px #c084fc; }
+
+.phase-waiting_entry { background: rgba(0,229,255,0.1); border-color: #00b8d4; color: #6dd5ed; }
+.phase-waiting_entry .phase-badge-dot { background: #00e5ff; box-shadow: 0 0 8px #00e5ff; }
+
+.phase-betting { background: rgba(0,255,136,0.14); border-color: #00d46a; color: #4ade80; }
+.phase-betting .phase-badge-dot { background: #00ff88; box-shadow: 0 0 10px #00ff88; }
+
+.phase-waiting_result { background: rgba(255,204,0,0.14); border-color: #e0a000; color: #ffd54a; }
+.phase-waiting_result .phase-badge-dot { background: #ffcc00; box-shadow: 0 0 9px #ffcc00; }
+
+.phase-skipping { background: rgba(255,136,0,0.16); border-color: #ff8800; color: #ffaa44; }
+.phase-skipping .phase-badge-dot { background: #ff8800; box-shadow: 0 0 9px #ff8800; }
+
+.phase-ws_stall { background: rgba(255,204,0,0.2); border-color: #e0a000; color: #ffd54a; }
+.phase-ws_stall .phase-badge-dot { background: #ffcc00; box-shadow: 0 0 10px #ffcc00; }
+
+.phase-error { background: rgba(255,51,102,0.2); border-color: #ff3366; color: #ff7070; }
+.phase-error .phase-badge-dot { background: #ff3366; box-shadow: 0 0 10px #ff3366; animation: phase-pulse 0.7s ease-in-out infinite; }
+
+.phase-stopped { background: rgba(110,110,120,0.18); border-color: #555; color: #888; }
+.phase-stopped .phase-badge-dot { background: #666; box-shadow: none; animation: none; }
+
+.phase-stale { background: rgba(180,120,60,0.18); border-color: #d08040; color: #e0a070; }
+.phase-stale .phase-badge-dot { background: #d08040; box-shadow: 0 0 8px #d08040; }
 
 /* ============================================================
    STATS ROW
