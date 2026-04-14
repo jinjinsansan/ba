@@ -30,9 +30,6 @@ class BetExecutor:
         self._bead_last_ok = 0.0
         self._entered_at = 0.0
         self._last_error_type = None
-        self.video_quality = str(config.get("video_quality", "auto") or "auto").lower()
-        self._last_video_quality_table = None
-        self.gui_log = None
         try:
             self.page.set_default_timeout(10000)
         except Exception:
@@ -137,7 +134,6 @@ class BetExecutor:
             self._bead_fail_count = 0
             self._bead_last_ok = time.time()
             self._scan_available_chips()
-            self._apply_video_quality_quick()
             logger.info(f"{table_name} 入場完了")
             return True
 
@@ -206,61 +202,6 @@ class BetExecutor:
             logger.info("スクリーンネーム設定完了")
         except Exception:
             pass
-
-    def _gui_log(self, message: str) -> None:
-        if not callable(self.gui_log):
-            return
-        try:
-            self.gui_log(message)
-        except Exception:
-            pass
-
-    # ─── Video Quality (best-effort, non-blocking) ───
-
-    def _apply_video_quality_quick(self) -> None:
-        if self.video_quality not in ("low", "mini"):
-            self._gui_log(f"[video] skip (video_quality={self.video_quality})")
-            return
-        if self._last_video_quality_table == self.current_table_id:
-            self._gui_log("[video] skip (already applied)")
-            return
-        inner = self._get_evo_inner()
-        if not inner:
-            self._gui_log("[video] skip (no iframe)")
-            return
-        self._last_video_quality_table = self.current_table_id
-        table_label = self.current_table_name or self.current_table_id or "unknown"
-        try:
-            result = inner.evaluate("""
-            () => {
-              const click = (el) => { if (!el) return false; try { el.click(); return true; } catch { return false; } };
-              const byText = (re) => {
-                const els = Array.from(document.querySelectorAll('button, div, span'));
-                for (const el of els) {
-                  const t = (el.textContent || '').trim();
-                  if (t && re.test(t)) return el;
-                }
-                return null;
-              };
-              // show controls (video click)
-              click(document.querySelector('video')) || click(document.querySelector('[data-role*="video"]'));
-              const settings = document.querySelector('button[aria-label*="Settings"],button[aria-label*="設定"],button[title*="Settings"],button[title*="設定"],button:has(svg[aria-label*="Settings"])') ||
-                              byText(/settings|設定/i);
-              if (!settings) return { step: 'no-settings' };
-              click(settings);
-              const quality = byText(/quality|画質|video/i);
-              if (quality) click(quality);
-              const low = byText(/low|低|360|480|sd|eco|economy/i);
-              if (!low) return { step: 'no-low' };
-              click(low);
-              return { step: 'low' };
-            }
-            """)
-            logger.info(f"Video quality attempt: {result}")
-            self._gui_log(f"[video] {table_label} quality attempt: {result}")
-        except Exception as e:
-            logger.warning(f"Video quality attempt failed: {e}")
-            self._gui_log(f"[video] {table_label} quality attempt failed: {e}")
 
     # ─── BETフェーズ待機 ───
 
