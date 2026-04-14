@@ -687,10 +687,15 @@ def _run_bet_session_inner(config: dict, stop_event: threading.Event, skip_event
 
     daily_date = _jst_date_str()
     daily_profit = 0.0
+    daily_profit_actual = 0.0
     daily_sessions = 0
     daily_profit_sessions = 0
     daily_loss_sessions = 0
     profit_sessions_done = 0
+    money_pnl_actual = 0.0
+    balance_last = None
+    actual_profit_ready = False
+    _actual_override_logged = False
     pending_settlements: list[dict] = []
     settlement_lock = threading.Lock()
     settlement_inflight = False
@@ -741,34 +746,51 @@ def _run_bet_session_inner(config: dict, stop_event: threading.Event, skip_event
                 pending_settlements.append({"date": date_str, "net_profit": float(net_profit)})
         _kick_settlement_worker()
 
+    def _update_actual_profit(balance: float):
+        nonlocal balance_last, money_pnl_actual, daily_profit_actual, actual_profit_ready
+        if not balance or balance <= 0:
+            return
+        if balance_last is None:
+            balance_last = balance
+            actual_profit_ready = True
+            return
+        diff = balance - balance_last
+        balance_last = balance
+        money_pnl_actual += diff
+        daily_profit_actual += diff
+        actual_profit_ready = True
+
     def _flush_daily_summary(force: bool = False, table_name: str = ""):
-        nonlocal daily_date, daily_profit, daily_sessions, daily_profit_sessions, daily_loss_sessions
+        nonlocal daily_date, daily_profit, daily_profit_actual
+        nonlocal daily_sessions, daily_profit_sessions, daily_loss_sessions, actual_profit_ready
         today = _jst_date_str()
         if not force and today == daily_date:
             if pending_settlements:
                 _kick_settlement_worker()
             return
-        if daily_sessions > 0 or abs(daily_profit) >= 0.01:
+        summary_profit = daily_profit_actual if actual_profit_ready else daily_profit
+        if daily_sessions > 0 or abs(summary_profit) >= 0.01:
             try:
                 composite.on_daily_summary(
                     daily_date,
                     daily_sessions,
                     daily_profit_sessions,
                     daily_loss_sessions,
-                    daily_profit,
+                    summary_profit,
                     table_name,
                 )
             except Exception as e:
                 logger.warning(f"Daily summary notify failed: {e}")
             try:
                 if user_email and session_api_key:
-                    _enqueue_settlement(daily_date, daily_profit)
+                    _enqueue_settlement(daily_date, summary_profit)
                 else:
                     send_log("[settle] skipped (missing user_email/api_key)")
             except Exception as e:
                 logger.warning(f"Daily settlement post failed: {e}")
         daily_date = today
         daily_profit = 0.0
+        daily_profit_actual = 0.0
         daily_sessions = 0
         daily_profit_sessions = 0
         daily_loss_sessions = 0
@@ -2149,6 +2171,7 @@ def _run_bet_session_inner(config: dict, stop_event: threading.Event, skip_event
 
                 if rr_res:
                     bal = executor.get_balance() if not dry_run else 0
+                    _update_actual_profit(bal)
                     # pre_turn情報を使う (セット完了でクリアされた後でも正確)
                     ptc = round_result.get("pre_turn_count", len(counter_session.tracker.current_turns))
                     pw = round_result.get("pre_wins", 0)
@@ -2309,6 +2332,7 @@ def _run_bet_session_inner(config: dict, stop_event: threading.Event, skip_event
                     daily_profit += round_profit
                     money_pnl += round_profit
                     bal = float(result_info.get("balance", 0) or 0)
+                    _update_actual_profit(bal)
                     send_result(
                         result=result, won=won, bet_amount=bet_amt,
                         balance=bal, turn=0, turns_display="",
@@ -2326,17 +2350,18 @@ def _run_bet_session_inner(config: dict, stop_event: threading.Event, skip_event
                         "session_count": 0,
                     })
                     _flush_daily_summary(table_name=current_name or "")
-                    if money_pnl >= profit_target_dollars or money_pnl <= -loss_cut_dollars:
-                        is_profit = money_pnl >= profit_target_dollars
+                    money_actual = money_pnl_actual if actual_profit_ready else money_pnl
+                    if money_actual >= profit_target_dollars or money_actual <= -loss_cut_dollars:
+                        is_profit = money_actual >= profit_target_dollars
                         reason_en = "PROFIT TARGET" if is_profit else "LOSS CUT"
                         send_msg({
                             "type": "session_reset",
                             "is_profit": is_profit,
-                            "amount": money_pnl,
+                            "amount": money_actual,
                             "reason": reason_en,
                         })
-                        send_action(f"{reason_en} HIT! {'+$' if money_pnl >= 0 else '-$'}{abs(money_pnl):.0f} locked in -- new session starting")
-                        send_log(f"[{reason_en}] Session ended at {'+$' if money_pnl >= 0 else '-$'}{abs(money_pnl):.0f}")
+                        send_action(f"{reason_en} HIT! {'+$' if money_actual >= 0 else '-$'}{abs(money_actual):.0f} locked in -- new session starting")
+                        send_log(f"[{reason_en}] Session ended at {'+$' if money_actual >= 0 else '-$'}{abs(money_actual):.0f}")
                         daily_sessions += 1
                         if is_profit:
                             daily_profit_sessions += 1
@@ -2347,12 +2372,14 @@ def _run_bet_session_inner(config: dict, stop_event: threading.Event, skip_event
                             hands_count = flat_total_bets
                             if is_profit:
                                 composite.on_profit_target(
-                                    user_label, flat_session_count, money_pnl, hands_count, daily_profit,
+                                    user_label, flat_session_count, money_actual, hands_count,
+                                    daily_profit_actual if actual_profit_ready else daily_profit,
                                     verification_mode, current_name or ""
                                 )
                             else:
                                 composite.on_loss_cut(
-                                    user_label, flat_session_count, money_pnl, hands_count, daily_profit,
+                                    user_label, flat_session_count, money_actual, hands_count,
+                                    daily_profit_actual if actual_profit_ready else daily_profit,
                                     verification_mode, current_name or ""
                                 )
                         except Exception as e:
@@ -2365,6 +2392,14 @@ def _run_bet_session_inner(config: dict, stop_event: threading.Event, skip_event
                                 send_log(f"[profit-limit] reached {profit_sessions_done}/{limit} — stopping")
                                 stop_event.set()
                         money_pnl = 0.0
+                        money_pnl_actual = 0.0
+                        _actual_override_logged = False
+                        if bal > 0:
+                            balance_last = bal
+                            actual_profit_ready = True
+                        else:
+                            balance_last = None
+                            actual_profit_ready = False
                         if stop_event.is_set():
                             break
                 if chip_fail_streak >= 2:
@@ -2437,52 +2472,84 @@ def _run_bet_session_inner(config: dict, stop_event: threading.Event, skip_event
             if counter_session is not None:
                 _schedule_session_state_sync(user_email, counter_session, user_id, session_api_key)
 
-            # 利確/損切チェック (counter_session使用時はrun_round内で処理済み)
-            if counter_session is not None and round_result.get("should_reset"):
-                cp = counter_session.effective_profit()
-                is_profit = cp >= 0
-                reason = "profit" if is_profit else "losscut"
-                money = cp * chip_base
-                reason_en = "PROFIT TARGET" if is_profit else "LOSS CUT"
-                send_msg({
-                    "type": "session_reset",
-                    "is_profit": is_profit,
-                    "amount": money_pnl,
-                    "reason": reason_en,
-                })
-                send_action(f"{reason_en} HIT! {'+$' if money_pnl >= 0 else '-$'}{abs(money_pnl):.0f} locked in -- new session starting")
-                send_log(f"[{reason_en}] Session ended at {'+$' if money_pnl >= 0 else '-$'}{abs(money_pnl):.0f}")
-                daily_sessions += 1
-                if is_profit:
-                    daily_profit_sessions += 1
-                else:
-                    daily_loss_sessions += 1
-                try:
-                    sess_num = counter_session.session_count + 1
-                    hands_count = counter_session.total_bets
-                    if is_profit:
-                        composite.on_profit_target(
-                            user_label, sess_num, money, hands_count, daily_profit,
-                            verification_mode, current_name or ""
+            # 利確/損切チェック (actual balance優先)
+            if counter_session is not None:
+                should_reset = bool(round_result.get("should_reset"))
+                actual_hit = False
+                if actual_profit_ready:
+                    actual_hit = (money_pnl_actual >= profit_target_dollars or money_pnl_actual <= -loss_cut_dollars)
+                    if should_reset and not actual_hit and not _actual_override_logged:
+                        send_log(
+                            f"[profit] chip target hit but actual ${money_pnl_actual:.2f} < target ${profit_target_dollars:.0f} — continue"
                         )
+                        _actual_override_logged = True
+
+                trigger_reset = actual_hit if actual_profit_ready else should_reset
+                if trigger_reset:
+                    if actual_profit_ready:
+                        is_profit = money_pnl_actual >= profit_target_dollars
+                        money = money_pnl_actual
                     else:
-                        composite.on_loss_cut(
-                            user_label, sess_num, money, hands_count, daily_profit,
-                            verification_mode, current_name or ""
-                        )
-                except Exception as e:
-                    logger.warning(f"Reset notify failed (counter): {e}")
-                counter_session.reset_session(reason)
-                if is_profit:
-                    profit_sessions_done += 1
-                    limit = _profit_session_limit_box[0]
-                    if limit and profit_sessions_done >= limit:
-                        send_action("Profit session limit reached — stopping")
-                        send_log(f"[profit-limit] reached {profit_sessions_done}/{limit} — stopping")
-                        stop_event.set()
-                money_pnl = 0.0
-                if stop_event.is_set():
-                    break
+                        cp = counter_session.effective_profit()
+                        is_profit = cp >= 0
+                        money = cp * chip_base
+                    reason = "profit" if is_profit else "losscut"
+                    reason_en = "PROFIT TARGET" if is_profit else "LOSS CUT"
+                    send_msg({
+                        "type": "session_reset",
+                        "is_profit": is_profit,
+                        "amount": money,
+                        "reason": reason_en,
+                    })
+                    send_action(
+                        f"{reason_en} HIT! {'+$' if money >= 0 else '-$'}{abs(money):.0f} locked in -- new session starting"
+                    )
+                    send_log(f"[{reason_en}] Session ended at {'+$' if money >= 0 else '-$'}{abs(money):.0f}")
+                    daily_sessions += 1
+                    if is_profit:
+                        daily_profit_sessions += 1
+                    else:
+                        daily_loss_sessions += 1
+                    try:
+                        sess_num = counter_session.session_count + 1
+                        hands_count = counter_session.total_bets
+                        if is_profit:
+                            composite.on_profit_target(
+                                user_label, sess_num, money, hands_count,
+                                daily_profit_actual if actual_profit_ready else daily_profit,
+                                verification_mode, current_name or ""
+                            )
+                        else:
+                            composite.on_loss_cut(
+                                user_label, sess_num, money, hands_count,
+                                daily_profit_actual if actual_profit_ready else daily_profit,
+                                verification_mode, current_name or ""
+                            )
+                    except Exception as e:
+                        logger.warning(f"Reset notify failed (counter): {e}")
+                    bal_now = executor.get_balance() if not dry_run else 0
+                    try:
+                        counter_session.reset_session(reason, actual_amount=money, balance=bal_now)
+                    except TypeError:
+                        counter_session.reset_session(reason)
+                    if is_profit:
+                        profit_sessions_done += 1
+                        limit = _profit_session_limit_box[0]
+                        if limit and profit_sessions_done >= limit:
+                            send_action("Profit session limit reached — stopping")
+                            send_log(f"[profit-limit] reached {profit_sessions_done}/{limit} — stopping")
+                            stop_event.set()
+                    money_pnl = 0.0
+                    money_pnl_actual = 0.0
+                    _actual_override_logged = False
+                    if bal_now > 0:
+                        balance_last = bal_now
+                        actual_profit_ready = True
+                    else:
+                        balance_last = None
+                        actual_profit_ready = False
+                    if stop_event.is_set():
+                        break
 
         # === Shutdown (counter mode) ===
         send_action("Stopping...")
@@ -3766,6 +3833,7 @@ def _run_bet_session_inner(config: dict, stop_event: threading.Event, skip_event
             won = result.get("won")
             ba = result.get("bet_amount", 0)
             bal = executor.get_balance() if not dry_run else 0
+            _update_actual_profit(bal)
             turns = session.tracker.current_turns
             turns_disp = "".join("O" if t == "O" else "X" for t in turns)
             cp = session.tracker.cumulative_profit
@@ -3882,11 +3950,26 @@ def _run_bet_session_inner(config: dict, stop_event: threading.Event, skip_event
                             target_tid, target_name = fr
                 continue
 
-        # Profit/loss reset
-        if result.get("should_reset"):
-            cp = session.effective_profit()
-            money = cp * chip_base
-            is_win = cp >= session.profit_stop
+        # Profit/loss reset (actual balance優先)
+        should_reset = bool(result.get("should_reset"))
+        actual_hit = False
+        if actual_profit_ready:
+            actual_hit = (money_pnl_actual >= profit_target_dollars or money_pnl_actual <= -loss_cut_dollars)
+            if should_reset and not actual_hit and not _actual_override_logged:
+                send_log(
+                    f"[profit] chip target hit but actual ${money_pnl_actual:.2f} < target ${profit_target_dollars:.0f} — continue"
+                )
+                _actual_override_logged = True
+
+        trigger_reset = actual_hit if actual_profit_ready else should_reset
+        if trigger_reset:
+            if actual_profit_ready:
+                is_win = money_pnl_actual >= profit_target_dollars
+                money = money_pnl_actual
+            else:
+                cp = session.effective_profit()
+                money = cp * chip_base
+                is_win = cp >= session.profit_stop
             reason_en = "PROFIT TARGET" if is_win else "LOSS CUT"
             send_msg({
                 "type": "session_reset",
@@ -3906,12 +3989,24 @@ def _run_bet_session_inner(config: dict, stop_event: threading.Event, skip_event
                 hands_count = session.total_bets
                 sess_num = session.session_count + 1
                 if is_win:
-                    composite.on_profit_target(user_label, sess_num, money, hands_count, daily_profit, verification_mode, target_name or "")
+                    composite.on_profit_target(
+                        user_label, sess_num, money, hands_count,
+                        daily_profit_actual if actual_profit_ready else daily_profit,
+                        verification_mode, target_name or ""
+                    )
                 else:
-                    composite.on_loss_cut(user_label, sess_num, money, hands_count, daily_profit, verification_mode, target_name or "")
+                    composite.on_loss_cut(
+                        user_label, sess_num, money, hands_count,
+                        daily_profit_actual if actual_profit_ready else daily_profit,
+                        verification_mode, target_name or ""
+                    )
             except Exception as e:
                 logger.warning(f"Reset notify failed: {e}")
-            session.reset_session("profit" if is_win else "losscut")
+            bal_now = executor.get_balance() if not dry_run else 0
+            try:
+                session.reset_session("profit" if is_win else "losscut", actual_amount=money, balance=bal_now)
+            except TypeError:
+                session.reset_session("profit" if is_win else "losscut")
             send_shoe_history(session.tracker.sets, chip_base)
 
             # ── D'. 利確/損切り後の予防リカバリ ──
@@ -3926,6 +4021,14 @@ def _run_bet_session_inner(config: dict, stop_event: threading.Event, skip_event
                     stop_event.set()
                     break
             send_log(f"[proactive-recovery] {reason_en} → リカバリ")
+            money_pnl_actual = 0.0
+            _actual_override_logged = False
+            if bal_now > 0:
+                balance_last = bal_now
+                actual_profit_ready = True
+            else:
+                balance_last = None
+                actual_profit_ready = False
             if not proactive_full_recovery(reason_en):
                 break
             _awaiting_sync_confirm = (_effective_mode_box[0] in ("sync", "sync_pause", "pattern", "pattern_test"))

@@ -216,19 +216,22 @@ class MaruBatsuBetSession:
             return True
         return False
 
-    def reset_session(self, reason: str):
+    def reset_session(self, reason: str, actual_amount: float | None = None, balance: float | None = None):
         """セッションリセット (利確/損切り)"""
         cp = self.effective_profit()
         self.session_count += 1
         money = cp * self.chip_base
-        balance = self.executor.get_balance() if not self.dry_run else 0
+        if balance is None:
+            balance = self.executor.get_balance() if not self.dry_run else 0
+
+        display_amount = actual_amount if actual_amount is not None else money
 
         is_profit = reason in ("利確", "profit")
         emoji = "🎉" if is_profit else "🛑"
         label = "TARGET REACHED" if is_profit else "LIMIT REACHED"
         msg = (
             f"{emoji} {label} #{self.session_count}\n"
-            f"${money:+.2f} | {self.total_wins}W/{self.total_losses}L | ${balance:.2f}"
+            f"${display_amount:+.2f} | {self.total_wins}W/{self.total_losses}L | ${balance:.2f}"
         )
         logger.info(msg)
         self.notifier.send(msg)
