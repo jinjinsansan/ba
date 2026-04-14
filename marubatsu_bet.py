@@ -256,19 +256,22 @@ class MaruBatsuBetSession:
         }
         """
         if not running_flag():
-            return {"action": "exit"}
+            return {"action": "exit", "reason": "stop_requested"}
 
         if not self.executor.check_and_dismiss_error():
             logger.warning("エラーダイアログ検出 → セッション中断")
-            return {"action": "exit"}
+            return {"action": "exit", "reason": "error_dialog"}
 
         # BETフェーズ待ち
         is_first = (self.total_bets == 0 and len(self.tracker.current_turns) == 0)
-        if not self.executor.wait_for_betting_phase(timeout=180 if is_first else 120, skip_round=is_first):
+        _phase_timeout = 180 if is_first else 120
+        _phase_t0 = time.time()
+        if not self.executor.wait_for_betting_phase(timeout=_phase_timeout, skip_round=is_first):
             if not self.executor.check_and_dismiss_error():
-                return {"action": "exit"}
-            logger.warning("BETフェーズ待ちタイムアウト")
-            return {"action": "exit"}
+                return {"action": "exit", "reason": "error_dialog_after_phase"}
+            _elapsed = time.time() - _phase_t0
+            logger.warning(f"BETフェーズ待ちタイムアウト ({_elapsed:.1f}s/{_phase_timeout}s)")
+            return {"action": "exit", "reason": "phase_timeout", "elapsed": _elapsed, "timeout": _phase_timeout}
 
         # 残高チェック
         bet_amount = self.get_bet_amount()
@@ -281,7 +284,7 @@ class MaruBatsuBetSession:
                     f"必要: ${bet_amount:.2f} (SEQ[{self.tracker.current_unit_idx}]={self._active_seq[min(self.tracker.current_unit_idx, len(self._active_seq)-1)]})\n"
                     f"残高: ${balance:.2f}"
                 )
-                return {"action": "exit"}
+                return {"action": "exit", "reason": "insufficient_balance"}
 
         # BET実行 (デフォルトはPlayer)
         if side not in ("player", "banker"):
@@ -326,10 +329,13 @@ class MaruBatsuBetSession:
         self.total_bets += 1
 
         # 結果待ち
-        result_info = self.executor.wait_for_result(timeout=90, bet_amount=bet_amount)
+        _result_timeout = 90
+        _result_t0 = time.time()
+        result_info = self.executor.wait_for_result(timeout=_result_timeout, bet_amount=bet_amount)
+        _result_elapsed = time.time() - _result_t0
         if not result_info or not result_info.get("result"):
-            logger.error("結果取得失敗")
-            return {"action": "exit"}
+            logger.error(f"結果取得失敗 ({_result_elapsed:.1f}s/{_result_timeout}s)")
+            return {"action": "exit", "reason": "result_timeout", "elapsed": _result_elapsed, "timeout": _result_timeout}
 
         result = result_info["result"]
         balance = result_info.get("balance", 0)

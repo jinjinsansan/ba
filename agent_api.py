@@ -2165,7 +2165,18 @@ def _run_bet_session_inner(config: dict, stop_event: threading.Event, skip_event
                     side=side,
                 )
                 if round_result.get("action") == "exit":
-                    send_log("[counter] Round exit — re-scanning")
+                    _reason = round_result.get("reason", "unknown")
+                    _el = round_result.get("elapsed")
+                    _to = round_result.get("timeout")
+                    _reason_msg = {
+                        "stop_requested": "stop requested",
+                        "error_dialog": "error dialog",
+                        "error_dialog_after_phase": "error dialog (after phase)",
+                        "phase_timeout": f"BET phase timeout ({_el:.1f}s/{_to}s, late data or WS stall)" if _el is not None else "BET phase timeout",
+                        "result_timeout": f"result timeout ({_el:.1f}s/{_to}s, WS delayed or shuffle)" if _el is not None else "result timeout",
+                        "insufficient_balance": "insufficient balance",
+                    }.get(_reason, _reason)
+                    send_log(f"[counter] Round exit — {_reason_msg} → re-scanning")
                     try:
                         mark_table_exited(current_name)
                         executor.exit_table()
@@ -2308,8 +2319,10 @@ def _run_bet_session_inner(config: dict, stop_event: threading.Event, skip_event
             else:
                 # flat mode: 直接BET
                 send_log(f"[counter] BET {side.upper()} ${FLAT_BET_AMOUNT:.0f} (flat)")
+                _pt0 = time.time()
                 if not executor.wait_for_betting_phase(timeout=120, skip_round=False):
-                    send_log("[counter] Phase timeout — exiting")
+                    _el = time.time() - _pt0
+                    send_log(f"[counter] Phase timeout ({_el:.1f}s/120s, late data or WS stall) — exiting")
                     try:
                         mark_table_exited(current_name)
                         executor.exit_table()
@@ -2323,12 +2336,14 @@ def _run_bet_session_inner(config: dict, stop_event: threading.Event, skip_event
                 if not placed:
                     actual = executor._get_total_bet()
                     if not actual or actual < 0.5:
-                        send_log("[counter] BET failed — continuing")
+                        send_log("[counter] BET failed (place_bet returned False, no chips detected) — continuing")
                         continue
 
+                _rt0 = time.time()
                 result_info = executor.wait_for_result(timeout=90, bet_amount=FLAT_BET_AMOUNT)
+                _rel = time.time() - _rt0
                 if not result_info or result_info.get("result") in (None, "unknown"):
-                    send_log("[counter] Result unknown — exiting")
+                    send_log(f"[counter] Result unknown ({_rel:.1f}s/90s, WS delayed or shuffle) — exiting")
                     try:
                         mark_table_exited(current_name)
                         executor.exit_table()
@@ -2948,6 +2963,7 @@ def _run_bet_session_inner(config: dict, stop_event: threading.Event, skip_event
     OBSERVE_FAIL_LIMIT = 5         # N回連続失敗 → テーブル死亡疑い → full_recovery
     _pattern_unknown_count = 0     # Pattern モード: 連続「不明」カウンタ
     PATTERN_UNKNOWN_LIMIT = 1      # 1回でも不明 → 新シュー/シャッフル疑い → 即退避
+    _ws_warn_level = [0]            # WS無通信の段階的警戒レベル (mutable list で closure から更新)
                                     # (流れがわからないテーブルで時間を浪費しない)
     # Pattern Test モード用カウンタ ($1 固定 BET、VPS 記録なし、ローカル W/L カウント)
     _test_wins = 0
@@ -3196,6 +3212,18 @@ def _run_bet_session_inner(config: dict, stop_event: threading.Event, skip_event
 
         # ── フリーズ検出ウォッチドッグ ──
         ws_idle = scraper.game_ws.seconds_since_last_message() if hasattr(scraper, 'game_ws') and scraper.game_ws else 0
+        # 段階的警戒ログ (ユーザーが "動いていないのか待っているだけか" を判別できるように)
+        if ws_idle >= 60 and _ws_warn_level[0] < 1:
+            send_log(f"[ws-wait] WS silent {ws_idle:.0f}s — still waiting (watchdog at {_FREEZE_TIMEOUT:.0f}s)")
+            _ws_warn_level[0] = 1
+        elif ws_idle >= 180 and _ws_warn_level[0] < 2:
+            send_log(f"[ws-wait] WS silent {ws_idle:.0f}s ⚠ — unusually long, may be shuffle/stall")
+            _ws_warn_level[0] = 2
+        elif ws_idle >= 360 and _ws_warn_level[0] < 3:
+            send_log(f"[ws-wait] WS silent {ws_idle:.0f}s 🔴 — approaching freeze threshold ({_FREEZE_TIMEOUT:.0f}s)")
+            _ws_warn_level[0] = 3
+        elif ws_idle < 30 and _ws_warn_level[0] != 0:
+            _ws_warn_level[0] = 0  # 通信回復 → リセット
         if ws_idle > _FREEZE_TIMEOUT and target_tid:
             send_action(f"Browser freeze detected ({ws_idle:.0f}s no WS) — reloading...")
             send_log(f"[watchdog] WS silent {ws_idle:.0f}s — page reload")
