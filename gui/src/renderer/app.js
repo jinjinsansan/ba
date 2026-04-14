@@ -6,6 +6,17 @@ const $$ = (sel) => document.querySelectorAll(sel);
 let isRunning = false;
 let logVisible = true;
 
+// 周回ネオンアニメーションは GUI ウィンドウがアクティブな時のみ動かす。
+// Camoufox (Evolution動画) と GPU を競合させないため。
+// ウィンドウフォーカス → body.animations-on / blur → 解除
+function _setAnimationsActive(active) {
+  document.body.classList.toggle('animations-on', active);
+}
+window.addEventListener('focus', () => _setAnimationsActive(true));
+window.addEventListener('blur', () => _setAnimationsActive(false));
+// 初期状態: 起動直後はフォーカス想定で ON
+if (document.hasFocus()) _setAnimationsActive(true);
+
 // --- Title Bar ---
 $('#btnMinimize').addEventListener('click', () => window.valhalla.windowMinimize());
 $('#btnMaximize').addEventListener('click', () => window.valhalla.windowMaximize());

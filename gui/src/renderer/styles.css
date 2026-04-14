@@ -842,3 +842,107 @@ html[data-variant="user"] .os-tag { display: none !important; }
    UTILITY
    ============================================================ */
 .hidden { display: none !important; }
+
+/* ============================================================
+   DEPTH & NEON  (重厚感 + 周回ネオン)
+   ============================================================
+   方針:
+   - 多層シャドウ(外影+内側ハイライト+内側沈み)で立体感
+   - グラス効果は既存 backdrop-filter を強化
+   - 周回ネオンは body.animations-on の時のみ動作 (ウィンドウ非アクティブ時は停止)
+   - filter:blur は使わない (Camoufox の動画と GPU を競合させない)
+   ============================================================ */
+
+/* 多層シャドウ: stat-card / action-bar / log-panel に深さ */
+.stat-card {
+  box-shadow:
+    0 8px 18px rgba(0, 0, 0, 0.55),                   /* 外側落影 (深い) */
+    0 2px 6px rgba(0, 0, 0, 0.35),                    /* 近接影 */
+    inset 0 1px 0 rgba(255, 255, 255, 0.08),          /* 上端ハイライト */
+    inset 0 -1px 0 rgba(0, 0, 0, 0.55) !important;    /* 下端の沈み込み */
+}
+.stat-card:hover {
+  box-shadow:
+    0 10px 24px rgba(0, 0, 0, 0.60),
+    0 3px 10px rgba(0, 229, 255, 0.18),
+    inset 0 1px 0 rgba(0, 229, 255, 0.18),
+    inset 0 -1px 0 rgba(0, 0, 0, 0.45) !important;
+}
+.stat-card.accent {
+  box-shadow:
+    0 8px 22px rgba(0, 0, 0, 0.55),
+    0 0 24px rgba(0, 229, 255, 0.20),
+    inset 0 1px 0 rgba(0, 229, 255, 0.22),
+    inset 0 -1px 0 rgba(0, 0, 0, 0.40) !important;
+}
+.action-bar {
+  box-shadow:
+    0 6px 16px rgba(0, 0, 0, 0.50),
+    0 0 14px rgba(0, 229, 255, 0.10),
+    inset 0 1px 0 rgba(255, 255, 255, 0.08),
+    inset 0 -1px 0 rgba(0, 0, 0, 0.45) !important;
+}
+.log-panel {
+  box-shadow:
+    0 10px 26px rgba(0, 0, 0, 0.60),
+    0 0 22px rgba(0, 229, 255, 0.10),
+    inset 0 1px 0 rgba(255, 255, 255, 0.05),
+    inset 0 -1px 0 rgba(0, 0, 0, 0.55) !important;
+}
+
+/* グラスモーフィズム強化 (modal-content) */
+.modal-content.glass {
+  backdrop-filter: blur(18px) saturate(170%);
+  -webkit-backdrop-filter: blur(18px) saturate(170%);
+  background: linear-gradient(
+    135deg,
+    rgba(20, 30, 50, 0.78) 0%,
+    rgba(10, 15, 25, 0.85) 100%
+  );
+  box-shadow:
+    0 20px 60px rgba(0, 0, 0, 0.7),
+    0 0 30px rgba(0, 229, 255, 0.12),
+    inset 0 1px 0 rgba(255, 255, 255, 0.08),
+    inset 0 -1px 0 rgba(0, 0, 0, 0.5);
+}
+
+/* === 周回ネオン === */
+@property --neon-angle {
+  syntax: '<angle>';
+  initial-value: 0deg;
+  inherits: false;
+}
+.neon-frame {
+  position: fixed;
+  inset: 6px;
+  border-radius: 14px;
+  padding: 2px;
+  pointer-events: none;
+  z-index: 50;
+  opacity: 0;
+  transition: opacity 0.4s ease-out;
+}
+body.animations-on .neon-frame {
+  opacity: 1;
+  background: conic-gradient(
+    from var(--neon-angle, 0deg),
+    transparent 0%,
+    #00e5ff 8%,
+    transparent 22%,
+    transparent 50%,
+    #1d7bff 58%,
+    transparent 72%,
+    transparent 100%
+  );
+  /* mask で内側を抜いて、枠 (padding領域) だけ残す */
+  -webkit-mask:
+    linear-gradient(#000 0 0) content-box,
+    linear-gradient(#000 0 0);
+  -webkit-mask-composite: xor;
+  mask-composite: exclude;
+  animation: rotate-neon 6s linear infinite;
+  will-change: --neon-angle;
+}
+@keyframes rotate-neon {
+  to { --neon-angle: 360deg; }
+}
