@@ -247,6 +247,13 @@
               <option value="counter_seq7">Reversal II</option>
 </select>
           </div>
+          <div class="form-group">
+            <label>Optimal Params (Top 3)</label>
+            <select id="inputParamCandidate" style="width:100%;padding:8px;background:var(--bg-card);color:var(--text-main);border:1px solid var(--border);border-radius:6px;">
+              <option value="auto">Auto (cloud)</option>
+            </select>
+            <div class="filter-hint" id="paramCandidateHint">Fetches top-3 from auto learning (no server overwrite).</div>
+          </div>
           <button class="btn btn-start" id="btnSaveSettings" style="width:100%;margin-top:12px;">SAVE</button>
         </div>
 

@@ -281,3 +281,15 @@ CREATE TABLE IF NOT EXISTS optimal_params (
   reason TEXT,
   updated_at TIMESTAMPTZ DEFAULT now()
 );
+
+CREATE TABLE IF NOT EXISTS optimal_params_history (
+  id BIGSERIAL PRIMARY KEY,
+  entry_window INTEGER DEFAULT 15,
+  entry_threshold NUMERIC DEFAULT 0.85,
+  exit_drop3_limit INTEGER DEFAULT 2,
+  exit_drop5_immediate BOOLEAN DEFAULT true,
+  profit_target INTEGER DEFAULT 30,
+  status TEXT DEFAULT 'active',
+  reason TEXT,
+  updated_at TIMESTAMPTZ DEFAULT now()
+);

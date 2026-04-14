@@ -243,6 +243,8 @@ const DEFAULT_SETTINGS = {
   user_email: '',
   dry_run: false,
   bet_mode: 'counter',
+  counter_params: null,
+  param_candidate: 'auto',
 };
 const ALLOWED_BET_MODES = new Set(['counter', 'counter_seq7']);
 
@@ -257,6 +259,49 @@ function normalizeProfitSessionLimit(value) {
 
 const SITE_URL = 'https://bafather.uk';
 const LAPLACE_API_KEY = 'c6gDoe0xIyBOTQ7bvzRaAHNYn4ZE1W9Mriumqkw8Shf5Jlsd';
+
+let _paramCandidates = [];
+
+function _formatParamCandidate(c, idx) {
+  const t = typeof c.entry_threshold === 'number' ? Math.round(c.entry_threshold * 100) : '--';
+  const w = c.entry_window ?? '--';
+  const d3 = c.exit_drop3_limit ?? '--';
+  const d5 = c.exit_drop5_immediate ? 'ON' : 'OFF';
+  return `#${idx + 1} T=${t}% W=${w} D3=${d3} D5=${d5}`;
+}
+
+function _renderParamCandidates(selected) {
+  const select = $('#inputParamCandidate');
+  if (!select) return;
+  const hint = $('#paramCandidateHint');
+  select.innerHTML = '<option value="auto">Auto (cloud)</option>';
+  if (_paramCandidates.length === 0) {
+    if (hint) hint.textContent = 'No candidates from server.';
+    return;
+  }
+  _paramCandidates.forEach((c, idx) => {
+    const opt = document.createElement('option');
+    opt.value = String(idx);
+    opt.textContent = _formatParamCandidate(c, idx);
+    select.appendChild(opt);
+  });
+  if (typeof selected === 'string' || typeof selected === 'number') {
+    select.value = String(selected);
+  }
+  if (hint) hint.textContent = 'Choose a candidate to apply for this session only.';
+}
+
+async function loadParamCandidates(selected) {
+  try {
+    const res = await fetch(`${SITE_URL}/api/optimal-params/candidates?api_key=${encodeURIComponent(LAPLACE_API_KEY)}`);
+    const data = await res.json();
+    _paramCandidates = Array.isArray(data.candidates) ? data.candidates : [];
+    _renderParamCandidates(selected);
+  } catch (e) {
+    _paramCandidates = [];
+    _renderParamCandidates(selected);
+  }
+}
 
 async function syncTableFilterToServer(email, filter) {
   if (!email) return;
@@ -538,6 +583,7 @@ $('#btnSettings').addEventListener('click', () => {
   $('#inputUserEmail').value = s.user_email || '';
   $('#inputDryRun').checked = !!s.dry_run;
   $('#inputBetMode').value = s.bet_mode || 'counter';
+  loadParamCandidates(s.param_candidate || 'auto');
   // Load table filter into UI
   applyTableFilterToUI(loadTableFilter());
   // Reset to BOT tab
@@ -559,7 +605,26 @@ $('#btnSaveSettings').addEventListener('click', async () => {
     user_email: $('#inputUserEmail').value.trim(),
     dry_run: $('#inputDryRun').checked,
     bet_mode: $('#inputBetMode').value || '1drop',
+    counter_params: null,
+    param_candidate: 'auto',
   };
+  const paramSelect = $('#inputParamCandidate');
+  let useCloudParams = false;
+  if (paramSelect && paramSelect.value && paramSelect.value !== 'auto') {
+    const idx = Number(paramSelect.value);
+    const candidate = _paramCandidates[idx];
+    if (candidate) {
+      settings.counter_params = {
+        entry_window: candidate.entry_window,
+        entry_threshold: candidate.entry_threshold,
+        exit_drop3_limit: candidate.exit_drop3_limit,
+        exit_drop5_immediate: candidate.exit_drop5_immediate,
+      };
+      settings.param_candidate = paramSelect.value;
+    }
+  } else if (paramSelect && paramSelect.value === 'auto') {
+    useCloudParams = true;
+  }
   localStorage.setItem('valhalla_settings', JSON.stringify(settings));
   $('#settingsModal').classList.add('hidden');
   addLog(`Settings saved. Base:$${settings.chip_base} Target:$${settings.profit_target} ProfitSessions:${settings.profit_session_limit} LossCut:$${settings.loss_cut}`, 'info');
@@ -567,13 +632,22 @@ $('#btnSaveSettings').addEventListener('click', async () => {
   // Live-update profit_target & loss_cut if session is running
   if (isRunning) {
     try {
+      const updateCfg = {
+        profit_target: settings.profit_target,
+        profit_session_limit: settings.profit_session_limit,
+        loss_cut: settings.loss_cut,
+      };
+      if (settings.counter_params) {
+        updateCfg.entry_window = settings.counter_params.entry_window;
+        updateCfg.entry_threshold = settings.counter_params.entry_threshold;
+        updateCfg.exit_drop3_limit = settings.counter_params.exit_drop3_limit;
+        updateCfg.exit_drop5_immediate = settings.counter_params.exit_drop5_immediate;
+      } else if (useCloudParams) {
+        updateCfg.use_cloud_params = true;
+      }
       await window.valhalla.sendCommand({
         type: 'update_config',
-        config: {
-          profit_target: settings.profit_target,
-          profit_session_limit: settings.profit_session_limit,
-          loss_cut: settings.loss_cut,
-        },
+        config: updateCfg,
       });
       // Live BET mode switch
       await window.valhalla.sendCommand({

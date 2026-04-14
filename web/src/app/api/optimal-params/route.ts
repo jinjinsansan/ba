@@ -55,5 +55,16 @@ export async function POST(req: NextRequest) {
   if (error) {
     return NextResponse.json({ error: error.message }, { status: 500 })
   }
+
+  await admin.from('optimal_params_history').insert({
+    entry_window: body.entry_window,
+    entry_threshold: body.entry_threshold,
+    exit_drop3_limit: body.exit_drop3_limit,
+    exit_drop5_immediate: body.exit_drop5_immediate,
+    profit_target: body.profit_target,
+    status: body.status || 'active',
+    reason: body.reason || 'manual_update',
+    updated_at: new Date().toISOString(),
+  })
   return NextResponse.json({ ok: true })
 }

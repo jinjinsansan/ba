@@ -165,6 +165,44 @@ def send_action(text: str):
     """Send browser action status for GUI display"""
     send_msg({"type": "action", "message": text})
 
+def _parse_bool(value) -> bool:
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, (int, float)):
+        return bool(value)
+    if isinstance(value, str):
+        return value.strip().lower() in ("1", "true", "yes", "y", "on")
+    return False
+
+def _apply_counter_params(cfg: dict, source: str = "config") -> bool:
+    if not cfg:
+        return False
+    try:
+        import counter_logic as _cl
+    except Exception as e:
+        send_log(f"[counter] Param update skipped ({e})")
+        return False
+    updated = False
+    if "entry_window" in cfg:
+        _cl.ENTRY_WINDOW = int(cfg["entry_window"])
+        updated = True
+    if "entry_threshold" in cfg:
+        _cl.ENTRY_THRESHOLD = float(cfg["entry_threshold"])
+        updated = True
+    if "exit_drop3_limit" in cfg:
+        _cl.EXIT_DROP3_LIMIT = int(cfg["exit_drop3_limit"])
+        updated = True
+    if "exit_drop5_immediate" in cfg:
+        _cl.EXIT_DROP5_IMMEDIATE = _parse_bool(cfg["exit_drop5_immediate"])
+        updated = True
+    if updated:
+        send_log(
+            f"[counter] Params updated ({source}): "
+            f"W={_cl.ENTRY_WINDOW} T={_cl.ENTRY_THRESHOLD} "
+            f"D3={_cl.EXIT_DROP3_LIMIT} D5={_cl.EXIT_DROP5_IMMEDIATE}"
+        )
+    return updated
+
 def send_result(result: str, won: bool | None, bet_amount: float, balance: float,
                 turn: int, turns_display: str, cumulative_profit: int, cumulative_money: float,
                 round_profit_dollars: float = 0.0,
@@ -620,6 +658,12 @@ def _run_bet_session_inner(config: dict, stop_event: threading.Event, skip_event
     telegram_bot_token = (config.get("telegram_bot_token") or "").strip()
     telegram_chat_id = (config.get("telegram_chat_id") or "").strip()
     table_filter = config.get("table_filter", {})
+    counter_params_cfg: dict = {}
+    if isinstance(config.get("counter_params"), dict):
+        counter_params_cfg.update(config.get("counter_params") or {})
+    for _k in ("entry_window", "entry_threshold", "exit_drop3_limit", "exit_drop5_immediate"):
+        if _k in config:
+            counter_params_cfg[_k] = config.get(_k)
     logger.info(f"Table filter: {table_filter}")
     send_log(f"Table filter: {table_filter}")
 
@@ -1820,6 +1864,8 @@ def _run_bet_session_inner(config: dict, stop_event: threading.Event, skip_event
                 send_log("[counter] Using default params (cloud unavailable)")
         except Exception as e:
             send_log(f"[counter] Param load error: {e} — using defaults")
+        if counter_params_cfg:
+            _apply_counter_params(counter_params_cfg, "gui")
 
         is_flat = (_effective_mode_box[0] == "counter_flat")
         counter_set_size = 7 if _effective_mode_box[0] == "counter_seq7" else None
@@ -2740,6 +2786,22 @@ def _run_bet_session_inner(config: dict, stop_event: threading.Event, skip_event
             new_lc_chips = max(1, int(round(new_lc / max(chip_base, 0.01))))
             session.loss_cut = new_lc_chips
             send_log(f"Applied pending loss cut: ${new_lc:.0f} ({new_lc_chips} chips)")
+        pending_counter = {
+            k: pending[k]
+            for k in ("entry_window", "entry_threshold", "exit_drop3_limit", "exit_drop5_immediate")
+            if k in pending
+        }
+        if pending_counter:
+            _apply_counter_params(pending_counter, "pending")
+        if pending.get("use_cloud_params"):
+            try:
+                from counter_logic import apply_optimal_params, ENTRY_WINDOW, ENTRY_THRESHOLD, EXIT_DROP3_LIMIT, EXIT_DROP5_IMMEDIATE
+                if apply_optimal_params():
+                    send_log(f"[counter] Cloud params reloaded: W={ENTRY_WINDOW} T={ENTRY_THRESHOLD} D3={EXIT_DROP3_LIMIT} D5={EXIT_DROP5_IMMEDIATE}")
+                else:
+                    send_log("[counter] Cloud params reload skipped (unavailable)")
+            except Exception as e:
+                send_log(f"[counter] Cloud params reload failed: {e}")
         # Sync to remote if applicable
         if use_remote and hasattr(session, "update_config"):
             try:
@@ -4331,6 +4393,22 @@ def main():
                                 limit_val = 0
                             _profit_session_limit_box[0] = limit_val
                             send_log(f"Profit session limit updated: {limit_val}")
+                        counter_cfg = {
+                            k: cfg[k]
+                            for k in ("entry_window", "entry_threshold", "exit_drop3_limit", "exit_drop5_immediate")
+                            if k in cfg
+                        }
+                        if counter_cfg:
+                            _apply_counter_params(counter_cfg, "live")
+                        if cfg.get("use_cloud_params"):
+                            try:
+                                from counter_logic import apply_optimal_params, ENTRY_WINDOW, ENTRY_THRESHOLD, EXIT_DROP3_LIMIT, EXIT_DROP5_IMMEDIATE
+                                if apply_optimal_params():
+                                    send_log(f"[counter] Cloud params reloaded: W={ENTRY_WINDOW} T={ENTRY_THRESHOLD} D3={EXIT_DROP3_LIMIT} D5={EXIT_DROP5_IMMEDIATE}")
+                                else:
+                                    send_log("[counter] Cloud params reload skipped (unavailable)")
+                            except Exception as e:
+                                send_log(f"[counter] Cloud params reload failed: {e}")
                         # Sync to remote session if applicable
                         if hasattr(s, "update_config") and hasattr(s, "client"):
                             try:
