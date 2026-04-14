@@ -26,7 +26,7 @@ DB_PATH = os.environ.get("ANALYTICS_DB", "analytics.sqlite3")
 JST = timezone(timedelta(hours=9))
 
 # Supabase
-SITE_URL = os.environ.get("LAPLACE_SITE_URL", "https://bafather.uk").rstrip("/")
+SITE_URL = os.environ.get("LAPLACE_SITE_URL", "https://www.bafather.uk").rstrip("/")
 API_KEY = os.environ.get("LAPLACE_API_KEY", "")
 
 # Telegram alert
@@ -282,21 +282,26 @@ def post_pattern_winrates(pattern_top):
     """パターン勝率 Top100 を Supabase に送信"""
     if not API_KEY or not pattern_top:
         return
-    payload = json.dumps({
-        "api_key": API_KEY,
-        "patterns": pattern_top,
-    }).encode("utf-8")
     url = f"{SITE_URL}/api/pattern-winrates"
-    req = urllib.request.Request(
-        url, data=payload,
-        headers={"Content-Type": "application/json", "User-Agent": "LAPLACE-learning/1.0"},
-        method="POST",
-    )
-    try:
-        with urllib.request.urlopen(req, timeout=10):
-            print("  [ok] Pattern winrates uploaded")
-    except Exception as e:
-        print(f"  [err] Pattern winrates upload failed: {e}")
+    batch_size = 25
+    total = len(pattern_top)
+    for start in range(0, total, batch_size):
+        batch = pattern_top[start:start + batch_size]
+        payload = json.dumps({
+            "api_key": API_KEY,
+            "patterns": batch,
+        }).encode("utf-8")
+        req = urllib.request.Request(
+            url, data=payload,
+            headers={"Content-Type": "application/json", "User-Agent": "LAPLACE-learning/1.0"},
+            method="POST",
+        )
+        try:
+            with urllib.request.urlopen(req, timeout=20):
+                print(f"  [ok] Pattern winrates uploaded ({min(start + batch_size, total)}/{total})")
+        except Exception as e:
+            print(f"  [err] Pattern winrates upload failed ({start + 1}-{start + len(batch)}): {e}")
+            return
 
 
 def send_telegram_alert(message):
