@@ -166,7 +166,7 @@ def send_action(text: str):
     send_msg({"type": "action", "message": text})
 
 # 状態バッジ用 Phase メッセージ
-# Phase名: idle | scanning | entering | waiting_entry | betting | waiting_result | skipping | error | stopped
+# Phase名: idle | scanning | entering | waiting_entry | betting | betting_player | betting_banker | waiting_result | skipping | ws_stall | error | stopped
 _LAST_PHASE = [""]
 def send_phase(name: str, detail: str = ""):
     """GUIの状態バッジを更新。同じ name+detail が連続する時は送らない(ノイズ低減)。"""
@@ -235,6 +235,14 @@ def send_result(result: str, won: bool | None, bet_amount: float, balance: float
         payload["round_profit_actual"] = round_profit_actual
     if cumulative_money_actual is not None:
         payload["cumulative_money_actual"] = cumulative_money_actual
+    # 残高スナップショット (GUI側でPNL計算に使用)
+    sess = _active_session
+    if sess is not None and hasattr(sess, 'session_open_balance'):
+        payload["session_open_balance"] = sess.session_open_balance
+        do = getattr(sess, 'daily_open', None)
+        if isinstance(do, dict):
+            payload["daily_open_date"] = do.get("date")
+            payload["daily_open_balance"] = do.get("balance")
     send_msg(payload)
 
 def send_set_complete(set_data, chip_base: float):
@@ -276,6 +284,13 @@ def send_status(session, balance: float = 0, cumulative_money_actual: float | No
     }
     if cumulative_money_actual is not None:
         payload["cumulative_money_actual"] = cumulative_money_actual
+    # 残高スナップショット (GUI側でPNL計算に使用)
+    if hasattr(session, 'session_open_balance'):
+        payload["session_open_balance"] = session.session_open_balance
+        do = getattr(session, 'daily_open', None)
+        if isinstance(do, dict):
+            payload["daily_open_date"] = do.get("date")
+            payload["daily_open_balance"] = do.get("balance")
     send_msg(payload)
 
 
@@ -814,21 +829,78 @@ def _run_bet_session_inner(config: dict, stop_event: threading.Event, skip_event
         _kick_settlement_worker()
 
     def _update_actual_profit(balance: float) -> float | None:
-        nonlocal balance_last, money_pnl_actual, daily_profit_actual, actual_profit_ready, last_balance_diff
+        """残高スナップショット方式でPNLを算出。
+
+        session.session_open_balance / session.daily_open を使って現在残高との差分を計算。
+        session が対応していない場合は旧来の差分積算にフォールバック。
+
+        Returns: last_balance_diff (前回からの残高増減、round通知用)
+        """
+        nonlocal balance_last, money_pnl_actual, daily_profit_actual
+        nonlocal actual_profit_ready, last_balance_diff, daily_date
         last_balance_diff = None
         if not balance or balance <= 0:
-            return
-        if balance_last is None:
-            balance_last = balance
-            actual_profit_ready = True
-            return
-        diff = balance - balance_last
+            return None
+
+        today = _jst_date_str()
+
+        # round-level diff (Telegram round通知等で使用)
+        if balance_last is not None:
+            last_balance_diff = balance - balance_last
         balance_last = balance
-        money_pnl_actual += diff
-        daily_profit_actual += diff
+
+        sess = _active_session
+        # 残高スナップショット方式 (MaruBatsuBetSession が対応)
+        if sess is not None and hasattr(sess, 'session_open_balance'):
+            # 初期化: session_open_balance が未設定なら現残高を起点に
+            if sess.session_open_balance is None:
+                sess.session_open_balance = balance
+                logger.info(f"[pnl] session_open_balance initialized: ${balance:.2f}")
+                try:
+                    sess._save_state()
+                except Exception:
+                    pass
+            # 日付ロールオーバー or 初期化
+            do = sess.daily_open or {}
+            if do.get("date") != today:
+                old_date = do.get("date")
+                sess.daily_open = {"date": today, "balance": balance}
+                if old_date:
+                    logger.info(f"[pnl] Date rollover {old_date}→{today}, daily_open=${balance:.2f}")
+                else:
+                    logger.info(f"[pnl] daily_open initialized: ${balance:.2f} ({today})")
+                try:
+                    sess._save_state()
+                except Exception:
+                    pass
+            # PNL は常に現残高 - open の差分 (累積誤差なし)
+            money_pnl_actual = balance - sess.session_open_balance
+            daily_profit_actual = balance - sess.daily_open["balance"]
+        else:
+            # Fallback: 旧来の差分積算 (Remote等で state_dict 非対応のケース)
+            if last_balance_diff is not None:
+                money_pnl_actual += last_balance_diff
+                daily_profit_actual += last_balance_diff
+
         actual_profit_ready = True
-        last_balance_diff = diff
-        return diff
+        daily_date = today
+        return last_balance_diff
+
+    def _reset_session_open(balance: float):
+        """利確/損切後に session_open_balance を現残高にリセット。
+
+        残高スナップショット方式では session_open_balance を動かすだけでPNL=0になる。
+        """
+        if not balance or balance <= 0:
+            return
+        sess = _active_session
+        if sess is not None and hasattr(sess, 'session_open_balance'):
+            sess.session_open_balance = balance
+            try:
+                sess._save_state()
+            except Exception:
+                pass
+            logger.info(f"[pnl] session_open_balance reset to ${balance:.2f}")
 
     def _flush_daily_summary(force: bool = False, table_name: str = ""):
         nonlocal daily_date, daily_profit, daily_profit_actual
@@ -2175,7 +2247,8 @@ def _run_bet_session_inner(config: dict, stop_event: threading.Event, skip_event
                 from marubatsu_strategy import SEQ_COUNTER as _SEQ
                 _bet_amt = counter_session.get_bet_amount()
                 send_log(f"[counter] BET {side.upper()} ${_bet_amt:.0f}")
-                send_phase("betting", f"{side.upper()} ${_bet_amt:.0f}")
+                _phase_name = "betting_player" if side == "player" else "betting_banker" if side == "banker" else "betting"
+                send_phase(_phase_name, f"${_bet_amt:.0f}")
                 round_result = counter_session.run_round(
                     lambda: not stop_event.is_set(),
                     side=side,
@@ -2307,6 +2380,9 @@ def _run_bet_session_inner(config: dict, stop_event: threading.Event, skip_event
                             "pre_wins": pw,
                             "pre_losses": pl,
                             "cumulative_money_actual": actual_cum,
+                            "session_open_balance": counter_session.session_open_balance,
+                            "daily_open_date": (counter_session.daily_open or {}).get("date"),
+                            "daily_open_balance": (counter_session.daily_open or {}).get("balance"),
                         })
                         _schedule_session_state_sync(user_email, counter_session, user_id, session_api_key)
                         _flush_daily_summary(table_name=current_name or "")
@@ -2439,6 +2515,14 @@ def _run_bet_session_inner(config: dict, stop_event: threading.Event, skip_event
                         round_profit_actual=last_balance_diff,
                         cumulative_money_actual=actual_cum,
                     )
+                    _sob = None
+                    _do_date = None
+                    _do_bal = None
+                    if _active_session is not None and hasattr(_active_session, 'session_open_balance'):
+                        _sob = _active_session.session_open_balance
+                        _do = getattr(_active_session, 'daily_open', None) or {}
+                        _do_date = _do.get("date")
+                        _do_bal = _do.get("balance")
                     send_msg({
                         "type": "status",
                         "wins": flat_wins, "losses": flat_losses, "ties": flat_ties,
@@ -2449,6 +2533,9 @@ def _run_bet_session_inner(config: dict, stop_event: threading.Event, skip_event
                         "balance": bal, "turns_display": "", "running": True,
                         "session_count": 0,
                         "cumulative_money_actual": actual_cum,
+                        "session_open_balance": _sob,
+                        "daily_open_date": _do_date,
+                        "daily_open_balance": _do_bal,
                     })
                     _flush_daily_summary(table_name=current_name or "")
                     money_actual = money_pnl_actual if actual_profit_ready else money_pnl
@@ -2498,6 +2585,7 @@ def _run_bet_session_inner(config: dict, stop_event: threading.Event, skip_event
                         if bal > 0:
                             balance_last = bal
                             actual_profit_ready = True
+                            _reset_session_open(bal)
                         else:
                             balance_last = None
                             actual_profit_ready = False
@@ -2646,6 +2734,7 @@ def _run_bet_session_inner(config: dict, stop_event: threading.Event, skip_event
                     if bal_now > 0:
                         balance_last = bal_now
                         actual_profit_ready = True
+                        _reset_session_open(bal_now)
                     else:
                         balance_last = None
                         actual_profit_ready = False
@@ -4173,6 +4262,7 @@ def _run_bet_session_inner(config: dict, stop_event: threading.Event, skip_event
             if bal_now > 0:
                 balance_last = bal_now
                 actual_profit_ready = True
+                _reset_session_open(bal_now)
             else:
                 balance_last = None
                 actual_profit_ready = False

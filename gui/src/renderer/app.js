@@ -145,11 +145,65 @@ if (_supportToggle) {
 }
 
 // --- Start / Stop ---
-let sessionTotal = 0;
+// ========== 残高スナップショット方式のPNL ==========
+// 真実の源: Python から届く session_open_balance / daily_open_balance + current balance。
+// Session PNL = currentBalance - sessionOpenBalance
+// Daily PNL   = currentBalance - dailyOpenBalance (日付変化時に open を更新)
+// GUI は計算・表示のみ担当。累積や加算はしない。
 let _startedAt = 0;  // START押下時刻 (stopped誤検知防止用)
-let _pnlSynced = false;  // VPS累計PNL同期フラグ（resume時に1回だけ同期）
-let _lastCumulativeMoney = 0;  // 前回の cumulative_money (daily 差分計算用)
+let _currentBalance = null;        // 最新残高 (Pythonから)
+let _sessionOpenBalance = null;    // セッション起点残高
+let _dailyOpenBalance = null;      // デイリー起点残高
+let _dailyOpenDate = null;         // デイリー起点日付 (JST YYYY-MM-DD)
+// 互換: sessionTotal は計算結果を保持する (他コードが参照するため)
+let sessionTotal = 0;
 const results = [];  // 'W' | 'L' | 'T'
+
+function _jstDateStrNow() {
+  const now = new Date();
+  const utcMs = now.getTime() + (now.getTimezoneOffset() * 60000);
+  const jst = new Date(utcMs + 9 * 3600000);
+  return `${jst.getFullYear()}-${String(jst.getMonth()+1).padStart(2,'0')}-${String(jst.getDate()).padStart(2,'0')}`;
+}
+
+function _computePnl() {
+  if (_currentBalance === null) return { session: 0, daily: 0 };
+  // Daily: 日付ロールオーバーチェック (GUI側でもフォールバック処理)
+  const today = _jstDateStrNow();
+  if (_dailyOpenDate !== today) {
+    // Python から新しい date がまだ来ていない場合の暫定処理
+    _dailyOpenDate = today;
+    _dailyOpenBalance = _currentBalance;
+    _persistBalanceSnapshot();
+  }
+  const session = (_sessionOpenBalance !== null) ? (_currentBalance - _sessionOpenBalance) : 0;
+  const daily = (_dailyOpenBalance !== null) ? (_currentBalance - _dailyOpenBalance) : 0;
+  sessionTotal = session;  // 互換用
+  return { session, daily };
+}
+
+function _persistBalanceSnapshot() {
+  try {
+    localStorage.setItem('valhalla_balance_snapshot', JSON.stringify({
+      current: _currentBalance,
+      session_open: _sessionOpenBalance,
+      daily_open: _dailyOpenBalance,
+      daily_date: _dailyOpenDate,
+    }));
+  } catch {}
+}
+
+function _restoreBalanceSnapshot() {
+  try {
+    const raw = localStorage.getItem('valhalla_balance_snapshot');
+    if (!raw) return;
+    const s = JSON.parse(raw);
+    if (typeof s.current === 'number') _currentBalance = s.current;
+    if (typeof s.session_open === 'number') _sessionOpenBalance = s.session_open;
+    if (typeof s.daily_open === 'number') _dailyOpenBalance = s.daily_open;
+    if (typeof s.daily_date === 'string') _dailyOpenDate = s.daily_date;
+  } catch {}
+}
 
 $('#btnStart').addEventListener('click', async () => {
   // Syncモード用: 起動時にサーバーから最新の推奨テーブルを取得
@@ -169,17 +223,16 @@ $('#btnStart').addEventListener('click', async () => {
     config.resume = false;
   }
   if (!config.resume) {
+    // 新規開始: スナップショットをクリア (Python から最初の balance で再初期化される)
+    _sessionOpenBalance = null;
+    // daily_open はその日のうちは保持 (日次は再開でリセットしない)
     sessionTotal = 0;
-    _lastCumulativeMoney = 0;  // 新規開始 → リセット
-    _pnlSynced = true;  // 新規開始 → 同期不要
+    _persistBalanceSnapshot();
     updateSessionDisplay();
     resetFeed();
   } else {
-    _pnlSynced = false;  // resume → 最初のstatusでVPS累計を同期
-    // Supabaseからgui_stateを復元
+    // Resume: Supabaseからgui_stateを復元 → Python から届く status で上書きされる
     await restoreGuiStateFromServer();
-    // resume時は復元された sessionTotal を _lastCumulativeMoney と同期
-    _lastCumulativeMoney = sessionTotal;
   }
   config.resume_results = Array.isArray(results) ? results.slice() : [];
   _startedAt = Date.now();
@@ -196,9 +249,16 @@ $('#btnStart').addEventListener('click', async () => {
 });
 
 function updateSessionDisplay() {
+  const { session, daily } = _computePnl();
   const el = $('#sessionPnl');
-  el.textContent = `$${sessionTotal >= 0 ? '+' : ''}${sessionTotal.toFixed(2)}`;
-  el.className = 'stat-value ' + (sessionTotal >= 0 ? 'positive' : 'negative');
+  el.textContent = `$${session >= 0 ? '+' : ''}${session.toFixed(2)}`;
+  el.className = 'stat-value ' + (session >= 0 ? 'positive' : 'negative');
+  // Daily P&L もここで更新
+  const todayEl = $('#todayPnl');
+  if (todayEl) {
+    todayEl.textContent = `${daily >= 0 ? '+$' : '-$'}${Math.abs(daily).toFixed(0)}`;
+    todayEl.className = 'today-pnl ' + (daily >= 0 ? 'positive' : 'negative');
+  }
   persistSessionState();
 }
 
@@ -218,12 +278,13 @@ function restoreSessionState() {
     const raw = localStorage.getItem('valhalla_session_state');
     if (!raw) return false;
     const state = JSON.parse(raw);
-    sessionTotal = state.sessionTotal || 0;
-    _lastCumulativeMoney = sessionTotal;  // Phase A1+: 復元時も同期
+    // 互換: 旧 sessionTotal フィールドは残高スナップショット方式では不要。
+    // _restoreBalanceSnapshot() で session_open_balance を復元する。
     results.length = 0;
     if (Array.isArray(state.results)) {
       for (const r of state.results) results.push(r);
     }
+    _restoreBalanceSnapshot();
     updateSessionDisplay();
     renderFeed();
     renderRecent();
@@ -269,8 +330,12 @@ function showContinueDialog() {
     $('#btnContinue').onclick = () => { restoreSessionState(); cleanup(); resolve('continue'); };
     $('#btnResetAll').onclick = () => {
       localStorage.removeItem('valhalla_session_state');
+      localStorage.removeItem('valhalla_balance_snapshot');
       sessionTotal = 0;
-      _lastCumulativeMoney = 0;  // Phase A1+: 同期
+      _currentBalance = null;
+      _sessionOpenBalance = null;
+      _dailyOpenBalance = null;
+      _dailyOpenDate = null;
       updateSessionDisplay();
       resetFeed();
       cleanup();
@@ -410,6 +475,12 @@ let _guiSyncPending = false;
 
 function _getGuiState() {
   return {
+    // 残高スナップショット (GUI再起動/別端末からの復元用)
+    current_balance: _currentBalance,
+    session_open_balance: _sessionOpenBalance,
+    daily_open_balance: _dailyOpenBalance,
+    daily_open_date: _dailyOpenDate,
+    // 互換: 旧フィールドも残す (読み取り側の既存コード向け)
     session_total: sessionTotal,
     daily_pnl: loadDailyPnl(),
     results: results.slice(-200),
@@ -460,14 +531,13 @@ async function loadGuiStateFromServer() {
 async function restoreGuiStateFromServer() {
   const state = await loadGuiStateFromServer();
   if (!state) return false;
-  if (typeof state.session_total === 'number') {
-    sessionTotal = state.session_total;
-    _lastCumulativeMoney = state.session_total;  // Phase A1+: 復元時も同期
-    updateSessionDisplay();
-  }
+  // サーバに保存されている残高スナップショットを復元 (Python から最新値が届くまでの暫定表示)
+  if (typeof state.current_balance === 'number') _currentBalance = state.current_balance;
+  if (typeof state.session_open_balance === 'number') _sessionOpenBalance = state.session_open_balance;
+  if (typeof state.daily_open_balance === 'number') _dailyOpenBalance = state.daily_open_balance;
+  if (typeof state.daily_open_date === 'string') _dailyOpenDate = state.daily_open_date;
   if (state.daily_pnl && typeof state.daily_pnl === 'object') {
     saveDailyPnl(state.daily_pnl);
-    renderDailyPnl();
   }
   if (Array.isArray(state.results) && state.results.length > 0) {
     results.length = 0;
@@ -475,6 +545,9 @@ async function restoreGuiStateFromServer() {
     renderFeed();
     renderRecent();
   }
+  _persistBalanceSnapshot();
+  updateSessionDisplay();
+  renderDailyPnl();
   addLog('GUI state restored from server.', 'info');
   return true;
 }
@@ -831,6 +904,8 @@ const _PHASE_LABELS = {
   entering: 'ENTERING',
   waiting_entry: 'WAIT ENTRY',
   betting: 'BETTING',
+  betting_player: 'BET PLAYER',
+  betting_banker: 'BET BANKER',
   waiting_result: 'WAIT RESULT',
   skipping: 'SKIPPING',
   ws_stall: 'WS STALL',
@@ -948,27 +1023,34 @@ function todayKeyJST() {
   return `${jst.getFullYear()}-${String(jst.getMonth()+1).padStart(2,'0')}-${String(jst.getDate()).padStart(2,'0')}`;
 }
 
-function addRoundToDaily(profitDollars) {
-  if (Math.abs(profitDollars) < 0.01) return;
-  const data = loadDailyPnl();
-  const key = todayKeyJST();
-  data[key] = (data[key] || 0) + profitDollars;
-  saveDailyPnl(data);
-  renderDailyPnl();
+// 日付ロールオーバー時: 前日のPNL(=直前のdaily値)をlocalStorageに凍結
+function _freezeDailyIfRollover(newDate) {
+  if (!newDate || !_dailyOpenDate) return;
+  if (_dailyOpenDate === newDate) return;
+  // 前日の最終値を凍結 (currentBalance は直近更新前の値)
+  if (_currentBalance !== null && _dailyOpenBalance !== null) {
+    const prevPnl = _currentBalance - _dailyOpenBalance;
+    const data = loadDailyPnl();
+    data[_dailyOpenDate] = prevPnl;
+    saveDailyPnl(data);
+  }
 }
 
 function renderDailyPnl() {
   const row = $('#dailyRow');
   const data = loadDailyPnl();
 
-  // Today value header
-  const today = todayKeyJST();
-  const todayVal = data[today] || 0;
+  // Today value = 残高スナップショット計算 (updateSessionDisplay で更新済みだがここでも念のため)
+  const today = _dailyOpenDate || todayKeyJST();
+  const { daily } = _computePnl();
   const todayEl = $('#todayPnl');
   if (todayEl) {
-    todayEl.textContent = `${todayVal >= 0 ? '+$' : '-$'}${Math.abs(todayVal).toFixed(0)}`;
-    todayEl.className = 'today-pnl ' + (todayVal >= 0 ? 'positive' : 'negative');
+    todayEl.textContent = `${daily >= 0 ? '+$' : '-$'}${Math.abs(daily).toFixed(0)}`;
+    todayEl.className = 'today-pnl ' + (daily >= 0 ? 'positive' : 'negative');
   }
+  // 今日の値もlocalStorage に反映 (リアルタイム凍結)
+  data[today] = daily;
+  saveDailyPnl(data);
 
   const keys = Object.keys(data).sort().slice(-14);
   if (keys.length === 0) {
@@ -1021,30 +1103,26 @@ window.valhalla.onAgentMessage((msg) => {
         addResult('L');
       }
 
-      // Update balance
-      if (msg.balance) {
+      // Update balance (スナップショット方式: Python から届く balance と open で PNL 再計算)
+      if (typeof msg.balance === 'number' && msg.balance > 0) {
+        _currentBalance = msg.balance;
         $('#balance').textContent = `$${msg.balance.toFixed(2)}`;
       }
-      // === Phase A1++: 1ハンドごとに round_profit で smooth 更新 ===
-      // (旧 A1+ で cumulative_money のみ使用 → 7ハンドに1回しか更新されない問題を修正)
-      // round_profit: 各ハンドの BET 額 ($win/-$lose)
-      // 1ハンドごとに sessionTotal/daily を更新 → スムーズなUX
-      // cumulative_money は status メッセージ受信時の reconciliation 用 (drift 補正)
-      const roundDelta = (typeof msg.round_profit_actual === 'number')
-        ? msg.round_profit_actual
-        : msg.round_profit;
-      if (typeof roundDelta === 'number') {
-        sessionTotal += roundDelta;
-        addRoundToDaily(roundDelta);
-        updateSessionDisplay();
-        // _lastCumulativeMoney は次の cumulative_money を基準にする
-        if (typeof msg.cumulative_money_actual === 'number') {
-          _lastCumulativeMoney = msg.cumulative_money_actual;
-        } else if (typeof msg.cumulative_money === 'number') {
-          _lastCumulativeMoney = msg.cumulative_money;
-        }
-        scheduleGuiStateSync();
+      if (typeof msg.session_open_balance === 'number' && msg.session_open_balance > 0) {
+        _sessionOpenBalance = msg.session_open_balance;
       }
+      // 日付ロールオーバー検出 → 前日PNLを凍結してから開く
+      if (typeof msg.daily_open_date === 'string' && msg.daily_open_date) {
+        _freezeDailyIfRollover(msg.daily_open_date);
+        _dailyOpenDate = msg.daily_open_date;
+      }
+      if (typeof msg.daily_open_balance === 'number' && msg.daily_open_balance > 0) {
+        _dailyOpenBalance = msg.daily_open_balance;
+      }
+      _persistBalanceSnapshot();
+      updateSessionDisplay();
+      renderDailyPnl();
+      scheduleGuiStateSync();
       break;
     }
 
@@ -1089,9 +1167,24 @@ window.valhalla.onAgentMessage((msg) => {
         const wr = ((msg.wins || 0) / totalBets * 100).toFixed(1);
         $('#winRate').textContent = `${wr}%`;
       }
-      if (msg.balance) {
+      if (typeof msg.balance === 'number' && msg.balance > 0) {
+        _currentBalance = msg.balance;
         $('#balance').textContent = `$${msg.balance.toFixed(2)}`;
       }
+      // 残高スナップショット (Python側の真実の源を受信)
+      if (typeof msg.session_open_balance === 'number' && msg.session_open_balance > 0) {
+        _sessionOpenBalance = msg.session_open_balance;
+      }
+      if (typeof msg.daily_open_date === 'string' && msg.daily_open_date) {
+        _freezeDailyIfRollover(msg.daily_open_date);
+        _dailyOpenDate = msg.daily_open_date;
+      }
+      if (typeof msg.daily_open_balance === 'number' && msg.daily_open_balance > 0) {
+        _dailyOpenBalance = msg.daily_open_balance;
+      }
+      _persistBalanceSnapshot();
+      updateSessionDisplay();
+      renderDailyPnl();
       // OS (overshoot) tag in BETS card (removed from HTML, guard with null check)
       if (typeof msg.overshoot === 'number') {
         const osEl = $('#osValue');
@@ -1103,33 +1196,6 @@ window.valhalla.onAgentMessage((msg) => {
       }
       // Developer panel
       updateDevPanel(msg);
-      // === Phase A1++: 初回のみ sessionTotal を VPS から同期 (resume時) ===
-      // status は定期送信されるため、毎回上書きすると セット途中で sessionTotal が
-      // リセットされてしまう。初回のみ同期し、以降は round_profit accumulator に任せる。
-      // ドリフト検知: 値が大きく違う場合は警告ログのみ (override しない)
-      const cumulativeMoney = (typeof msg.cumulative_money_actual === 'number')
-        ? msg.cumulative_money_actual
-        : msg.cumulative_money;
-      if (typeof cumulativeMoney === 'number') {
-        if (!_pnlSynced) {
-          // 初回のみ同期 (resume直後)
-          sessionTotal = cumulativeMoney;
-          _lastCumulativeMoney = cumulativeMoney;
-          _pnlSynced = true;
-          updateSessionDisplay();
-          addLog(`Session P&L synced from VPS: $${sessionTotal >= 0 ? '+' : ''}${sessionTotal.toFixed(2)}`, 'info');
-        } else {
-          // ドリフト検知 (override せず警告のみ)
-          const diff = Math.abs(sessionTotal - cumulativeMoney);
-          if (diff > 1.0) {
-            // セット途中は cumulative_money が古いので、大きい diff は許容
-            // 50以上のズレは異常
-            if (diff > 50) {
-              console.warn(`[pnl-drift] sessionTotal=${sessionTotal} vs VPS cm=${cumulativeMoney} (diff=${diff.toFixed(2)})`);
-            }
-          }
-        }
-      }
       break;
     }
 
@@ -1148,10 +1214,13 @@ window.valhalla.onAgentMessage((msg) => {
       showResetToast(title, `${sign}$${Math.abs(amt).toFixed(0)}`, isProfit);
       flashScreen(isProfit ? 'profit' : 'losscut');
       addLog(`=== ${title} ===  ${sign}$${Math.abs(amt).toFixed(0)}`, isProfit ? 'win' : 'lose');
-      // Reset session total (daily total stays)
-      // Phase A1+: _lastCumulativeMoney もリセット (次の round_result の delta 計算のため)
-      sessionTotal = 0;
-      _lastCumulativeMoney = 0;
+      // 残高スナップショット方式: session_open_balance は Python 側で現残高に更新済み。
+      // 次の status/round_result で新しい session_open_balance が届いてPNL=0に戻る。
+      // 暫定的にローカルでも 0 にしておく (即時反映のため)。
+      if (_currentBalance !== null) {
+        _sessionOpenBalance = _currentBalance;
+      }
+      _persistBalanceSnapshot();
       updateSessionDisplay();
       break;
     }
@@ -1209,10 +1278,12 @@ window.valhalla.onAgentLog((text) => {
 // ONE-TIME full reset requested by user
 localStorage.removeItem('valhalla_daily_pnl');
 localStorage.removeItem('valhalla_session_state');
+// 注意: valhalla_balance_snapshot は保持 (GUI再起動時のPNL復元用)
 sessionTotal = 0;
-_lastCumulativeMoney = 0;
 results.length = 0;
 setRunning(false);
+// 前回のスナップショットを復元 (あれば)
+_restoreBalanceSnapshot();
 updateSessionDisplay();
 setAction('Ready. Press START to begin.');
 addLog('LAPLACE ready. All data cleared.', 'info');

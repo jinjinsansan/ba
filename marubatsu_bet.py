@@ -69,6 +69,15 @@ class MaruBatsuBetSession:
         self.total_losses = 0
         self.total_ties = 0
 
+        # --- 残高スナップショット方式のPNL追跡 ---
+        # session_open_balance: START時 or 利確/損切直後の残高を記録。
+        #   セッションPNL = current_balance - session_open_balance
+        # daily_open: { "date": "YYYY-MM-DD", "balance": float } 形式。
+        #   その日の最初に観測した残高を記録。日付変更で更新。
+        #   デイリーPNL = current_balance - daily_open["balance"]
+        self.session_open_balance: float | None = None
+        self.daily_open: dict = {"date": None, "balance": None}
+
         # Separate state files for dry run vs live
         if dry_run:
             self.state_path = Path(__file__).parent / "state_marubatsu_bet_dry.json"
@@ -93,6 +102,8 @@ class MaruBatsuBetSession:
             "chip_base": self.chip_base,
             "profit_stop": self.profit_stop,
             "loss_cut": self.loss_cut,
+            "session_open_balance": self.session_open_balance,
+            "daily_open": dict(self.daily_open) if self.daily_open else {"date": None, "balance": None},
             "sets": [
                 {
                     "set_index": s.set_index,
@@ -151,6 +162,16 @@ class MaruBatsuBetSession:
         self.total_wins = state.get("total_wins", 0) or 0
         self.total_losses = state.get("total_losses", 0) or 0
         self.total_ties = state.get("total_ties", 0) or 0
+        # --- 残高スナップショット復元 ---
+        sob = state.get("session_open_balance")
+        if isinstance(sob, (int, float)) and sob > 0:
+            self.session_open_balance = float(sob)
+        do = state.get("daily_open")
+        if isinstance(do, dict):
+            d_date = do.get("date")
+            d_bal = do.get("balance")
+            if isinstance(d_date, str) and isinstance(d_bal, (int, float)) and d_bal > 0:
+                self.daily_open = {"date": d_date, "balance": float(d_bal)}
         self._save_state()
 
     def _save_state(self):
@@ -176,10 +197,21 @@ class MaruBatsuBetSession:
             self.total_wins = state.get("total_wins", 0)
             self.total_losses = state.get("total_losses", 0)
             self.total_ties = state.get("total_ties", 0)
+            # --- 残高スナップショット復元 (ローカル state ファイル) ---
+            sob = state.get("session_open_balance")
+            if isinstance(sob, (int, float)) and sob > 0:
+                self.session_open_balance = float(sob)
+            do = state.get("daily_open")
+            if isinstance(do, dict):
+                d_date = do.get("date")
+                d_bal = do.get("balance")
+                if isinstance(d_date, str) and isinstance(d_bal, (int, float)) and d_bal > 0:
+                    self.daily_open = {"date": d_date, "balance": float(d_bal)}
             logger.info(
                 f"状態復元: {len(self.tracker.sets)}セット, "
                 f"ターン{len(self.tracker.current_turns)}/{self.tracker.set_size}, "
-                f"累計{self.tracker.cumulative_profit:+d}chip"
+                f"累計{self.tracker.cumulative_profit:+d}chip, "
+                f"session_open=${self.session_open_balance} daily_open={self.daily_open}"
             )
         except Exception as e:
             logger.warning(f"状態復元失敗: {e}")
