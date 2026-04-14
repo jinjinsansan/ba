@@ -75,8 +75,12 @@ class MaruBatsuBetSession:
         # daily_open: { "date": "YYYY-MM-DD", "balance": float } 形式。
         #   その日の最初に観測した残高を記録。日付変更で更新。
         #   デイリーPNL = current_balance - daily_open["balance"]
+        # current_balance + last_balance_at: Vercel cron による日次 settle で
+        #   GUI 停止中でも現在残高を参照できるよう保存。
         self.session_open_balance: float | None = None
         self.daily_open: dict = {"date": None, "balance": None}
+        self.current_balance: float | None = None
+        self.last_balance_at: str | None = None  # ISO8601 UTC
 
         # Separate state files for dry run vs live
         if dry_run:
@@ -104,6 +108,8 @@ class MaruBatsuBetSession:
             "loss_cut": self.loss_cut,
             "session_open_balance": self.session_open_balance,
             "daily_open": dict(self.daily_open) if self.daily_open else {"date": None, "balance": None},
+            "current_balance": self.current_balance,
+            "last_balance_at": self.last_balance_at,
             "sets": [
                 {
                     "set_index": s.set_index,
@@ -172,6 +178,12 @@ class MaruBatsuBetSession:
             d_bal = do.get("balance")
             if isinstance(d_date, str) and isinstance(d_bal, (int, float)) and d_bal > 0:
                 self.daily_open = {"date": d_date, "balance": float(d_bal)}
+        cb = state.get("current_balance")
+        if isinstance(cb, (int, float)) and cb > 0:
+            self.current_balance = float(cb)
+        lba = state.get("last_balance_at")
+        if isinstance(lba, str) and lba:
+            self.last_balance_at = lba
         self._save_state()
 
     def _save_state(self):

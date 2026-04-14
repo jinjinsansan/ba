@@ -403,13 +403,14 @@ function showContinueDialog() {
     };
     $('#btnContinue').onclick = () => { restoreSessionState(); cleanup(); resolve('continue'); };
     $('#btnResetAll').onclick = () => {
+      // セッション関連のみリセット。デイリー (dailyOpenBalance/Date) と 14日履歴は保持。
+      // 理由: Daily PNL は 20% 課金計算の基準で、管理パネルと同期必要。
+      // 0時ロールオーバー以外で消してはいけない。
       localStorage.removeItem('valhalla_session_state');
-      localStorage.removeItem('valhalla_balance_snapshot');
       sessionTotal = 0;
-      _currentBalance = null;
-      _sessionOpenBalance = null;
-      _dailyOpenBalance = null;
-      _dailyOpenDate = null;
+      _sessionOpenBalance = null;  // セッション起点のみクリア
+      // _currentBalance / _dailyOpenBalance / _dailyOpenDate は温存
+      _persistBalanceSnapshot();
       updateSessionDisplay();
       resetFeed();
       cleanup();
@@ -1343,10 +1344,10 @@ window.valhalla.onAgentLog((text) => {
 });
 
 // --- Init ---
-// ONE-TIME full reset requested by user
-localStorage.removeItem('valhalla_daily_pnl');
+// 重要: valhalla_daily_pnl (14日履歴) と valhalla_balance_snapshot (今日の起点残高)
+// は GUI 起動時に保持。20% 課金の計算基準になるので消してはいけない。
+// セッション途中状態 (valhalla_session_state) だけクリアする。
 localStorage.removeItem('valhalla_session_state');
-// 注意: valhalla_balance_snapshot は保持 (GUI再起動時のPNL復元用)
 sessionTotal = 0;
 results.length = 0;
 setRunning(false);

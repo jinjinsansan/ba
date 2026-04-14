@@ -37,7 +37,8 @@
             "x64"
           ]
         }
-      ]
+      ],
+      "icon": "assets/icon.ico"
     },
     "directories": {
       "output": "dist",

@@ -68,29 +68,83 @@ export async function GET(req: NextRequest) {
   }
 
   const admin = createAdminClient()
-  const dateStr = getJstDateString()
+  // 「昨日分」を確定する。JST 00:05 頃に実行される前提で、昨日の日付を返す。
+  const now = new Date()
+  const jstNow = new Date(now.toLocaleString('en-US', { timeZone: 'Asia/Tokyo' }))
+  const yesterday = new Date(jstNow)
+  yesterday.setDate(jstNow.getDate() - 1)
+  const dateStr = yesterday.toLocaleDateString('en-CA', { timeZone: 'Asia/Tokyo' })
 
+  // session_state も含めて取得 (current_balance + daily_open を使う)
   const { data: billings } = await admin
     .from('billing')
-    .select('user_id, balance, profit_share_rate, carry_loss, is_free, suspended')
+    .select('user_id, balance, profit_share_rate, carry_loss, is_free, suspended, session_state')
     .eq('suspended', false)
     .gt('balance', 0)
 
-  if (!billings?.length) return NextResponse.json({ message: 'No active users', settled: 0 })
-
-  let settled = 0
-
-  for (const b of billings) {
-    if (b.is_free) continue
-
-    // NOTE: GET is legacy; daily profit should be posted via POST
-    const dailyProfit = 0
-    if (dailyProfit === 0) continue
-    const result = await settleUser(admin, b.user_id, dailyProfit, dateStr)
-    if (result.ok) settled++
+  if (!billings?.length) {
+    return NextResponse.json({ message: 'No active users', settled: 0, skipped: 0, date: dateStr })
   }
 
-  return NextResponse.json({ message: `Settled ${settled} users`, date: dateStr, settled })
+  let settled = 0
+  let skipped = 0
+  const skipReasons: Record<string, number> = {}
+  const errors: Array<{ user_id: string; error: string }> = []
+
+  // Stale threshold: 最後の balance 更新が昨日 23時 より前なら stale (信頼できない)
+  const staleCutoff = new Date(yesterday)
+  staleCutoff.setHours(23, 0, 0, 0)
+
+  for (const b of billings) {
+    if (b.is_free) { skipped++; skipReasons['free'] = (skipReasons['free'] || 0) + 1; continue }
+    const ss = b.session_state as Record<string, unknown> | null
+    if (!ss || typeof ss !== 'object') {
+      skipped++
+      skipReasons['no_session_state'] = (skipReasons['no_session_state'] || 0) + 1
+      continue
+    }
+    const daily_open = ss.daily_open as { date?: string; balance?: number } | undefined
+    const current_balance = typeof ss.current_balance === 'number' ? ss.current_balance : null
+    const last_balance_at = typeof ss.last_balance_at === 'string' ? ss.last_balance_at : null
+    if (!daily_open?.balance || !current_balance || !last_balance_at) {
+      skipped++
+      skipReasons['incomplete_state'] = (skipReasons['incomplete_state'] || 0) + 1
+      continue
+    }
+    // daily_open.date が settle 対象日 (昨日) と一致しているかチェック
+    if (daily_open.date !== dateStr) {
+      skipped++
+      skipReasons['stale_daily_open'] = (skipReasons['stale_daily_open'] || 0) + 1
+      continue
+    }
+    // last_balance_at が昨日23時以降でない = GUI 長時間停止 → skip
+    if (new Date(last_balance_at) < staleCutoff) {
+      skipped++
+      skipReasons['stale_balance'] = (skipReasons['stale_balance'] || 0) + 1
+      continue
+    }
+    const dailyProfit = current_balance - daily_open.balance
+    const result = await settleUser(admin, b.user_id, dailyProfit, dateStr)
+    if (result.ok) {
+      settled++
+    } else {
+      // "Already settled" は Python 側で先行処理された証 → ok 扱い
+      if (result.error === 'Already settled for this date') {
+        settled++
+      } else {
+        errors.push({ user_id: b.user_id, error: result.error || 'unknown' })
+      }
+    }
+  }
+
+  return NextResponse.json({
+    message: `Settled ${settled}, skipped ${skipped}`,
+    date: dateStr,
+    settled,
+    skipped,
+    skipReasons,
+    errors: errors.slice(0, 10),
+  })
 }
 
 export async function POST(req: NextRequest) {

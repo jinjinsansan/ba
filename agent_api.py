@@ -899,6 +899,9 @@ def _run_bet_session_inner(config: dict, stop_event: threading.Event, skip_event
             # PNL は常に現残高 - open の差分 (累積誤差なし)
             money_pnl_actual = balance - sess.session_open_balance
             daily_profit_actual = balance - sess.daily_open["balance"]
+            # Vercel cron 日次 settle 用に最新残高を保存
+            sess.current_balance = balance
+            sess.last_balance_at = datetime.utcnow().isoformat() + "Z"
         else:
             # Fallback: 旧来の差分積算 (Remote等で state_dict 非対応のケース)
             if last_balance_diff is not None:
