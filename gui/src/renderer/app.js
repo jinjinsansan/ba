@@ -771,6 +771,16 @@ function _applyPendingMark(el, mark, color) {
   return true;
 }
 
+function _getStreamTurnCount(msg) {
+  if (typeof msg.sets === 'number' && typeof msg.current_turn === 'number') {
+    return (msg.sets * _streamSetSize) + msg.current_turn;
+  }
+  if (typeof msg.total_bets === 'number') {
+    return msg.total_bets;
+  }
+  return 0;
+}
+
 function updateDevPanel(msg) {
   if (!isDevMode()) return;
   const sc = $('#sigCycle');
@@ -794,30 +804,31 @@ function updateDevPanel(msg) {
   // ROUND = total bets, color cycles per set (hidden set boundary indicator)
   const setIdx = typeof msg.sets === 'number' ? msg.sets : 0;
   const currentSetColor = _STREAM_SET_COLORS[setIdx % _STREAM_SET_COLORS.length];
-  if (srd && typeof msg.total_bets === 'number') {
-    srd.textContent = `#${msg.total_bets}`;
+  const streamTurnCount = _getStreamTurnCount(msg);
+  if (srd && typeof streamTurnCount === 'number') {
+    srd.textContent = `#${streamTurnCount}`;
     srd.style.color = currentSetColor;
   }
 
   // Stream: add one mark per hand, colored by current set
   const el = $('#sigStream');
-  if (el && typeof msg.total_bets === 'number') {
+  if (el && typeof streamTurnCount === 'number') {
     if (el.children.length === 0 && typeof msg.sets === 'number') {
       _streamSetIdx = msg.sets;
       if (typeof msg.current_turn === 'number') {
         _streamTurnsInSet = msg.current_turn;
       }
     }
-    if (msg.total_bets < _lastStreamTurn) {
+    if (streamTurnCount < _lastStreamTurn) {
       _lastStreamTurn = -1;
       _pendingStreamResults.length = 0;
       el.innerHTML = '';
       _streamSetIdx = typeof msg.sets === 'number' ? msg.sets : 0;
       _streamTurnsInSet = typeof msg.current_turn === 'number' ? msg.current_turn : 0;
     }
-    if (msg.total_bets > _lastStreamTurn) {
+    if (streamTurnCount > _lastStreamTurn) {
       if (el.querySelector('[style*="rgba"]')) el.innerHTML = '';  // Clear "AWAITING SIGNAL"
-      for (let t = _lastStreamTurn + 1; t <= msg.total_bets; t += 1) {
+      for (let t = _lastStreamTurn + 1; t <= streamTurnCount; t += 1) {
         const next = _pendingStreamResults.shift();
         if (next) {
           const color = _commitStreamMark(next);
@@ -827,7 +838,7 @@ function updateDevPanel(msg) {
           _appendStreamMark(el, '·', color, true);
         }
       }
-      _lastStreamTurn = msg.total_bets;
+      _lastStreamTurn = streamTurnCount;
     }
   }
 }
@@ -1039,7 +1050,7 @@ window.valhalla.onAgentMessage((msg) => {
       const r = msg.result;
       const won = msg.won;
       _lastRoundWon = won;
-      const streamMark = (r === 'tie') ? 'T' : (won === true ? 'O' : won === false ? 'X' : '');
+      const streamMark = (r === 'tie') ? '' : (won === true ? 'O' : won === false ? 'X' : '');
       if (isDevMode() && streamMark) {
         const el = $('#sigStream');
         if (el) {
