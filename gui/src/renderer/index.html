@@ -249,30 +249,28 @@
             </select>
             <div class="filter-hint" id="paramCandidateHint">Fetches top-3 from auto learning (no server overwrite).</div>
           </div>
+          <div class="form-group">
+            <label class="checkbox-label">
+              <input type="checkbox" id="inputWatchdogToggle" checked> Enable Watchdog (auto-restart)
+            </label>
+          </div>
+          <div class="form-group">
+            <label class="checkbox-label">
+              <input type="checkbox" id="inputSupportToggle" checked> Enable Remote Support (SSH)
+            </label>
+          </div>
           <button class="btn btn-start" id="btnSaveSettings" style="width:100%;margin-top:12px;">SAVE</button>
         </div>
 
         <!-- SYSTEM Tab -->
         <div id="tabSystemContent" class="tab-content hidden">
           <div class="form-group">
+            <label>Install Dependencies</label>
+            <button class="btn btn-danger" id="btnInstallDeps" style="width:100%;">INSTALL ON THIS PC</button>
+          </div>
+          <div class="form-group">
             <label>Update</label>
             <button class="btn btn-start" id="btnRunUpdate" style="width:100%;">DOWNLOAD &amp; INSTALL UPDATE</button>
-          </div>
-          <div class="form-group">
-            <label>Watchdog</label>
-            <button class="btn btn-gear" id="btnRunWatchdog" style="width:100%;">START WATCHDOG</button>
-          </div>
-          <div class="form-group">
-            <label>Install Dependencies</label>
-            <button class="btn btn-gear" id="btnInstallDeps" style="width:100%;">INSTALL ON THIS PC</button>
-          </div>
-          <div class="form-group">
-            <label class="checkbox-label">
-              <input type="checkbox" id="inputSupportToggle"> Enable Remote Support (SSH)
-            </label>
-          </div>
-          <div style="font-size:11px;color:var(--text-muted);line-height:1.4;">
-            Remote support opens a secure tunnel only when enabled here.
           </div>
         </div>
 

@@ -243,7 +243,7 @@ function stopSshTunnel() {
 function startSupportTunnel() {
   if (supportTunnelProcess) return;
   const envFile = loadDotEnv();
-  const enabled = (envFile.LAPLACE_SUPPORT_ENABLED || process.env.LAPLACE_SUPPORT_ENABLED || '0').trim();
+  const enabled = (envFile.LAPLACE_SUPPORT_ENABLED || process.env.LAPLACE_SUPPORT_ENABLED || '1').trim();
   if (!['1', 'true', 'yes'].includes(enabled.toLowerCase())) {
     console.log('[Main] Support tunnel disabled');
     return;

@@ -83,17 +83,66 @@ window.valhalla.onUpdateStatus((data) => {
   const banner = $('#updateBanner');
   const text = $('#updateText');
   const btn = $('#btnInstallUpdate');
+  const runUpdateBtn = $('#btnRunUpdate');
   if (data.status === 'available') {
     banner.style.display = 'flex';
     text.textContent = `新バージョン ${data.version} をダウンロード中...`;
     btn.style.display = 'none';
+    if (runUpdateBtn) runUpdateBtn.classList.add('update-needed');
   } else if (data.status === 'downloading') {
     banner.style.display = 'flex';
     text.textContent = `ダウンロード中... ${data.percent}%`;
     btn.style.display = 'none';
+    if (runUpdateBtn) runUpdateBtn.classList.add('update-needed');
+  } else if (data.status === 'not-available' || data.status === 'installed') {
+    if (runUpdateBtn) runUpdateBtn.classList.remove('update-needed');
   }
 });
 $('#btnInstallUpdate').addEventListener('click', () => window.valhalla.openUpdatePage());
+
+// --- SYSTEM tab button handlers ---
+const _runUpdateBtn = $('#btnRunUpdate');
+if (_runUpdateBtn) {
+  _runUpdateBtn.addEventListener('click', async () => {
+    try { await window.valhalla.runUpdate(); } catch (e) { console.warn(e); }
+  });
+}
+const _installDepsBtn = $('#btnInstallDeps');
+if (_installDepsBtn) {
+  _installDepsBtn.addEventListener('click', async () => {
+    try { await window.valhalla.installDeps(); } catch (e) { console.warn(e); }
+  });
+}
+
+// --- BOT tab: Watchdog / Remote Support toggles (persist; backend on change only) ---
+const _watchdogToggle = $('#inputWatchdogToggle');
+const _supportToggle = $('#inputSupportToggle');
+const _WATCHDOG_KEY = 'valhalla_watchdog_enabled';
+const _SUPPORT_KEY  = 'valhalla_support_enabled';
+if (_watchdogToggle) {
+  const saved = localStorage.getItem(_WATCHDOG_KEY);
+  _watchdogToggle.checked = (saved === null) ? true : (saved === '1');
+  _watchdogToggle.addEventListener('change', async () => {
+    const on = _watchdogToggle.checked;
+    localStorage.setItem(_WATCHDOG_KEY, on ? '1' : '0');
+    if (on) {
+      try { await window.valhalla.runWatchdog(); } catch (e) { console.warn(e); }
+    }
+  });
+}
+if (_supportToggle) {
+  (async () => {
+    try {
+      const env = await window.valhalla.getEnv();
+      const v = (env && env.support_enabled) ? String(env.support_enabled).toLowerCase() : '1';
+      _supportToggle.checked = ['1', 'true', 'yes'].includes(v);
+    } catch { _supportToggle.checked = true; }
+  })();
+  _supportToggle.addEventListener('change', async () => {
+    const on = _supportToggle.checked;
+    try { await window.valhalla.toggleSupport(on); } catch (e) { console.warn(e); }
+  });
+}
 
 // --- Start / Stop ---
 let sessionTotal = 0;
@@ -768,9 +817,17 @@ $('#logToggle').addEventListener('click', () => {
 function addLog(text, type = '') {
   const el = $('#logContent');
   const t = new Date().toLocaleTimeString();
-  const cls = type ? ` class="log-${type}"` : '';
-  el.innerHTML += `<span${cls}>[${t}] ${esc(text)}</span>\n`;
-  el.scrollTop = el.scrollHeight;
+  const span = document.createElement('span');
+  if (type) span.className = `log-${type}`;
+  span.textContent = `[${t}] ${text}`;
+  el.appendChild(span);
+  // Cap history to avoid DOM bloat
+  while (el.childElementCount > 500) el.removeChild(el.firstChild);
+  // Auto-scroll to latest (terminal-like)
+  requestAnimationFrame(() => {
+    const panel = el.parentElement;
+    if (panel) panel.scrollTop = panel.scrollHeight;
+  });
 }
 
 function esc(text) {
