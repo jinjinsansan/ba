@@ -178,13 +178,44 @@ $('#btnInstallUpdate').addEventListener('click', () => window.valhalla.openUpdat
 const _runUpdateBtn = $('#btnRunUpdate');
 if (_runUpdateBtn) {
   _runUpdateBtn.addEventListener('click', async () => {
-    try { await window.valhalla.runUpdate(); } catch (e) { console.warn(e); }
+    try {
+      addLog('Launching update...', 'info');
+      const result = await window.valhalla.runUpdate();
+      if (!result || !result.ok) {
+        addLog(`Update failed: ${result?.error || 'Unknown error'}`, 'lose');
+      } else {
+        addLog('Update launched. GUI will close...', 'info');
+      }
+    } catch (e) {
+      addLog(`Update error: ${e.message || e}`, 'lose');
+    }
   });
 }
 const _installDepsBtn = $('#btnInstallDeps');
 if (_installDepsBtn) {
   _installDepsBtn.addEventListener('click', async () => {
-    try { await window.valhalla.installDeps(); } catch (e) { console.warn(e); }
+    try {
+      addLog('Launching dependency installer (UAC prompt will appear)...', 'info');
+      const result = await window.valhalla.installDeps();
+      if (!result || !result.ok) {
+        addLog(`Install failed: ${result?.error || 'Unknown error'}`, 'lose');
+      } else {
+        addLog(`Setup launched. Check log: ${result.logPath || 'C:\\ProgramData\\LAPLACE\\setup-all.log'}`, 'info');
+      }
+    } catch (e) {
+      addLog(`Install error: ${e.message || e}`, 'lose');
+    }
+  });
+}
+
+// Listen for install-deps-result event from main process
+if (window.valhalla.onInstallDepsResult) {
+  window.valhalla.onInstallDepsResult((data) => {
+    if (data.success) {
+      addLog(data.message || 'Setup completed.', 'win');
+    } else {
+      addLog(`Setup failed: ${data.error || 'Unknown error'}`, 'lose');
+    }
   });
 }
 

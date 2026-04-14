@@ -696,15 +696,19 @@ ipcMain.handle('check-updates', async () => {
 ipcMain.handle('run-update', () => {
   const baseDir = resolveBaseDir();
   const updateBat = path.join(baseDir, 'cloud_scripts', 'update.bat');
+  
+  if (!fs.existsSync(updateBat)) {
+    console.warn('[update] update.bat not found at:', updateBat);
+    return { ok: false, error: 'Update script not found. Please download the latest version from the dashboard.' };
+  }
+  
   const envFile = loadDotEnv();
   const childEnv = {
     ...process.env,
     ...envFile,
     LAPLACE_BASE_DIR: baseDir,
   };
-  if (!fs.existsSync(updateBat)) {
-    return { ok: false, error: 'update.bat not found' };
-  }
+  
   stopPython();
   spawn('cmd', ['/c', updateBat], { cwd: baseDir, env: childEnv, detached: true });
   setTimeout(() => app.quit(), 500);
