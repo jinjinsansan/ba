@@ -720,14 +720,6 @@ html[data-variant="user"] .os-tag { display: none !important; }
   box-shadow: 0 0 8px rgba(0,229,255,0.55);
 }
 
-/* Filter Reset Link */
-.filter-reset-link {
-  text-align: center; margin-top: 10px;
-  font-family: var(--font-hud); font-size: 9px; color: var(--text-dim);
-  cursor: pointer; letter-spacing: 0.08em; padding: 4px; transition: color 0.2s;
-}
-.filter-reset-link:hover { color: var(--accent); }
-
 /* ============================================================
    UTILITY
    ============================================================ */
