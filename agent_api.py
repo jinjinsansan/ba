@@ -166,7 +166,7 @@ def send_action(text: str):
     send_msg({"type": "action", "message": text})
 
 # 状態バッジ用 Phase メッセージ
-# Phase名: idle | scanning | entering | waiting_entry | betting | betting_player | betting_banker | waiting_result | skipping | ws_stall | error | stopped
+# Phase名: idle | scanning | entering | betting | betting_player | betting_banker | ws_stall | error | stopped
 _LAST_PHASE = [""]
 def send_phase(name: str, detail: str = ""):
     """GUIの状態バッジを更新。同じ name+detail が連続する時は送らない(ノイズ低減)。"""
@@ -864,6 +864,15 @@ def _run_bet_session_inner(config: dict, stop_event: threading.Event, skip_event
             do = sess.daily_open or {}
             if do.get("date") != today:
                 old_date = do.get("date")
+                old_bal = do.get("balance")
+                # 前日の確定PNLを VPS settlement キューに保存 (データ欠損防止)
+                if old_date and isinstance(old_bal, (int, float)) and old_bal > 0:
+                    prev_pnl = balance - float(old_bal)
+                    try:
+                        _enqueue_settlement(old_date, prev_pnl)
+                        logger.info(f"[pnl] Rollover settle {old_date}: ${prev_pnl:+.2f}")
+                    except Exception as _e:
+                        logger.warning(f"[pnl] Rollover settle enqueue failed: {_e}")
                 sess.daily_open = {"date": today, "balance": balance}
                 if old_date:
                     logger.info(f"[pnl] Date rollover {old_date}→{today}, daily_open=${balance:.2f}")

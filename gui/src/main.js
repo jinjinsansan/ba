@@ -240,20 +240,44 @@ function stopSshTunnel() {
 
 // === Support Tunnel (opt-in) ===
 
+// サポート鍵パスを解決: 絶対パスならそのまま、相対なら resources/dev-root を起点
+function _resolveSupportKeyPath(rawPath) {
+  if (!rawPath) return '';
+  if (path.isAbsolute(rawPath)) return rawPath;
+  // "~" 展開
+  if (rawPath.startsWith('~')) {
+    return path.join(os.homedir(), rawPath.slice(1));
+  }
+  // 相対パス: packaged なら resources、dev なら repo root
+  const baseDir = app.isPackaged
+    ? process.resourcesPath
+    : path.join(__dirname, '..', '..');
+  return path.resolve(baseDir, rawPath);
+}
+
 function startSupportTunnel() {
   if (supportTunnelProcess) return;
   const envFile = loadDotEnv();
-  const enabled = (envFile.LAPLACE_SUPPORT_ENABLED || process.env.LAPLACE_SUPPORT_ENABLED || '1').trim();
+  // デフォルト: packaged build (=配布EXE) は '1' (ON)、dev モードは '0' (OFF)。
+  // ユーザーが個別にトグルで OFF にした場合は .env に '0' が書かれるため、そちらが優先される。
+  const defaultEnabled = app.isPackaged ? '1' : '0';
+  const enabled = (envFile.LAPLACE_SUPPORT_ENABLED || process.env.LAPLACE_SUPPORT_ENABLED || defaultEnabled).trim();
   if (!['1', 'true', 'yes'].includes(enabled.toLowerCase())) {
     console.log('[Main] Support tunnel disabled');
     return;
   }
   const sshHost = envFile.LAPLACE_SUPPORT_SSH_HOST || process.env.LAPLACE_SUPPORT_SSH_HOST || '';
-  const sshKey = envFile.LAPLACE_SUPPORT_SSH_KEY || process.env.LAPLACE_SUPPORT_SSH_KEY || path.join(os.homedir(), '.ssh', 'laplace_support');
+  const rawKey = envFile.LAPLACE_SUPPORT_SSH_KEY || process.env.LAPLACE_SUPPORT_SSH_KEY || path.join(os.homedir(), '.ssh', 'laplace_support');
+  const sshKey = _resolveSupportKeyPath(rawKey);
   const remotePort = envFile.LAPLACE_SUPPORT_REMOTE_PORT || process.env.LAPLACE_SUPPORT_REMOTE_PORT || '2222';
   const localPort = envFile.LAPLACE_SUPPORT_LOCAL_PORT || process.env.LAPLACE_SUPPORT_LOCAL_PORT || '22';
   if (!sshHost) {
     console.warn('[Main] Support tunnel host missing');
+    return;
+  }
+  // 鍵ファイル存在チェック (ない場合は警告だけ、spawnしない)
+  if (sshKey && !fs.existsSync(sshKey)) {
+    console.warn('[Main] Support tunnel SSH key not found:', sshKey);
     return;
   }
 
@@ -265,7 +289,8 @@ function startSupportTunnel() {
     '-o', 'ServerAliveInterval=30',
     '-o', 'ServerAliveCountMax=3',
     '-N',
-    '-R', `${remotePort}:127.0.0.1:${localPort}`,
+    // 明示的に 127.0.0.1 bind を指定 (permitlisten="127.0.0.1:port" との整合)
+    '-R', `127.0.0.1:${remotePort}:127.0.0.1:${localPort}`,
     sshHost,
   ];
 
@@ -643,17 +668,50 @@ ipcMain.handle('run-watchdog', () => {
 });
 
 ipcMain.handle('install-deps', () => {
-  const baseDir = resolveBaseDir();
-  const script = path.join(baseDir, 'cloud_scripts', 'install_deps.ps1');
-  if (!fs.existsSync(script)) {
-    return { ok: false, error: 'install_deps.ps1 not found' };
+  // 新: 統合セットアップスクリプト (winget + OpenSSH + admin key + ACL + FW)
+  // 管理者権限が必要なため Start-Process -Verb RunAs で UAC 承認を挟んで昇格起動。
+  //
+  // スクリプト配置:
+  //   packaged: <resources>/scripts/setup-all.ps1 (extraResources 経由)
+  //   dev:      <repo>/gui/scripts/setup-all.ps1
+  let scriptPath, pubKeyPath;
+  if (app.isPackaged) {
+    scriptPath = path.join(process.resourcesPath, 'setup-all.ps1');
+    pubKeyPath = path.join(process.resourcesPath, 'admin_pubkey.txt');
+  } else {
+    // dev モードでは prepare-user-build.js が build_staging/ に配置したものを参照。
+    // 未実行時は admin_pubkey 無しで OpenSSH セットアップのみ動く。
+    scriptPath = path.join(__dirname, '..', 'scripts', 'setup-all.ps1');
+    pubKeyPath = path.join(__dirname, '..', 'build_staging', 'admin_pubkey.txt');
   }
-  spawn(
-    'powershell.exe',
-    ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', script],
-    { cwd: baseDir, detached: true }
-  );
-  return { ok: true };
+
+  // 旧スクリプトへのフォールバック (後方互換)
+  if (!fs.existsSync(scriptPath)) {
+    const baseDir = resolveBaseDir();
+    const legacy = path.join(baseDir, 'cloud_scripts', 'install_deps.ps1');
+    if (fs.existsSync(legacy)) {
+      spawn('powershell.exe', ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', legacy],
+        { cwd: baseDir, detached: true });
+      return { ok: true, mode: 'legacy' };
+    }
+    return { ok: false, error: 'setup-all.ps1 not found' };
+  }
+
+  const hasKey = fs.existsSync(pubKeyPath);
+  // PowerShell 文字列リテラルで安全にエスケープ (' -> '')
+  const psq = (s) => `'${String(s).replace(/'/g, "''")}'`;
+  // -ArgumentList を PS 配列として渡す (空白・特殊文字を含むパスでも壊れない)
+  const argElements = [
+    "'-NoProfile'",
+    "'-ExecutionPolicy'", "'Bypass'",
+    "'-File'", psq(scriptPath),
+  ];
+  if (hasKey) {
+    argElements.push("'-AdminPubKeyPath'", psq(pubKeyPath));
+  }
+  const elevateCmd = `Start-Process powershell.exe -Verb RunAs -ArgumentList @(${argElements.join(",")})`;
+  spawn('powershell.exe', ['-NoProfile', '-Command', elevateCmd], { detached: true });
+  return { ok: true, mode: 'unified', adminKey: hasKey };
 });
 
 ipcMain.handle('toggle-support', (_, enabled) => {

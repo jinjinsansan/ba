@@ -27,6 +27,11 @@ state_marubatsu_bet.json
 state_marubatsu_bet_dry.json
 gui/node_modules/
 gui/dist/
+# User-specific support tunnel keys (never commit — contains private keys)
+gui/user_build/
+gui/build_staging/
+gui/dist_user/
+scripts/user_ports.csv
 
 # Local DB and artifacts
 *.sqlite3
