@@ -1068,7 +1068,14 @@ window.valhalla.onAgentMessage((msg) => {
     }
 
     case 'session_reset': {
-      const amt = msg.amount || 0;
+      const rawAmt = (msg.amount_actual ?? msg.amount);
+      let amt = (typeof rawAmt === 'number') ? rawAmt : parseFloat(rawAmt);
+      if (!Number.isFinite(amt)) {
+        amt = 0;
+      }
+      if (amt === 0 && sessionTotal !== 0) {
+        amt = sessionTotal;
+      }
       const isProfit = msg.is_profit;
       const title = isProfit ? 'PROFIT TARGET HIT' : 'LOSS CUT';
       const sign = amt >= 0 ? '+' : '-';

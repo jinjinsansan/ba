@@ -350,10 +350,10 @@ def _load_session_state_from_server(email: str, api_key: str = "") -> dict | Non
         return None
 
 
-def _post_session_state_to_server(email: str, state: dict, api_key: str = "") -> None:
+def _post_session_state_to_server(email: str, state: dict, api_key: str = "") -> bool:
     key = api_key or _SESSION_API_KEY
     if not email or not key or not state:
-        return
+        return False
     payload = json.dumps({"email": email, "api_key": key, "session_state": state}).encode("utf-8")
     url = f"{_SESSION_SITE_URL}/api/session-state"
     req = urllib.request.Request(
@@ -364,9 +364,10 @@ def _post_session_state_to_server(email: str, state: dict, api_key: str = "") ->
     )
     try:
         with urllib.request.urlopen(req, timeout=10):
-            pass
-    except Exception:
-        pass
+            return True
+    except Exception as e:
+        logger.warning(f"[session] Supabase sync failed: {e}")
+        return False
 
 
 def _jst_date_str() -> str:
@@ -457,11 +458,7 @@ def _backfill_session_state(email: str, session, user_id: str = "", api_key: str
         state["user_id"] = user_id
     state["updated_at"] = datetime.utcnow().isoformat() + "Z"
 
-    def _worker():
-        _post_session_state_to_server(email, state, key)
-
-    threading.Thread(target=_worker, daemon=True).start()
-    return True
+    return _post_session_state_to_server(email, state, key)
 
 
 def _apply_session_state(session, state: dict) -> bool:
@@ -2595,6 +2592,17 @@ def _run_bet_session_inner(config: dict, stop_event: threading.Event, skip_event
                 send_log("[counter] State synced (cloud)")
             except Exception as e:
                 send_log(f"[counter] Cloud sync failed: {e}")
+            if user_email and session_api_key:
+                try:
+                    state = _extract_session_state(counter_session)
+                    if _has_session_state(state):
+                        if user_id:
+                            state["user_id"] = user_id
+                        state["updated_at"] = datetime.utcnow().isoformat() + "Z"
+                        if _post_session_state_to_server(user_email, state, session_api_key):
+                            send_log("[counter] State synced (cloud, flush)")
+                except Exception as e:
+                    send_log(f"[counter] Cloud sync flush failed: {e}")
         try:
             executor.exit_table()
         except Exception:

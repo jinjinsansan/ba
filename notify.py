@@ -111,7 +111,7 @@ class PublicNotifier(TelegramNotifier):
             f"{marks}\n"
             f"{set_data['wins']}W/{set_data['losses']}L  "
             f"{sign}{set_data['set_profit']}u\n"
-            f"Cumulative: {cum_sign}${cumulative_dollars:.0f}"
+            f"Cumulative: {cum_sign}${cumulative_dollars:.2f}"
         )
 
     def notify_profit_target(self, session_num: int, amount_dollars: float, hands_played: int):
@@ -120,7 +120,7 @@ class PublicNotifier(TelegramNotifier):
             f"🏆 PROFIT TARGET REACHED\n"
             f"━━━━━━━━━━━━━━━━\n"
             f"Session #{session_num}\n"
-            f"Profit: +${amount_dollars:.0f}\n"
+            f"Profit: +${amount_dollars:.2f}\n"
             f"Hands: {hands_played}\n"
             f"Time: {datetime.now().strftime('%H:%M JST')}\n"
             f"━━━━━━━━━━━━━━━━\n"
@@ -133,7 +133,7 @@ class PublicNotifier(TelegramNotifier):
             f"⛔ Loss Cut\n"
             f"━━━━━━━━━━━━━━━━\n"
             f"Session #{session_num}\n"
-            f"Loss: -${abs(amount_dollars):.0f}\n"
+            f"Loss: -${abs(amount_dollars):.2f}\n"
             f"Hands: {hands_played}\n"
             f"Time: {datetime.now().strftime('%H:%M JST')}\n"
             f"━━━━━━━━━━━━━━━━"
@@ -151,7 +151,7 @@ class PublicNotifier(TelegramNotifier):
             f"Sessions: {total_sessions}\n"
             f"Profit sessions: {profit_sessions}\n"
             f"Loss sessions: {loss_sessions}\n"
-            f"Net: {sign}${net_profit:.0f}\n"
+            f"Net: {sign}${net_profit:.2f}\n"
             f"━━━━━━━━━━━━━━━━\n"
             f"∫ LAPLACE"
         )
@@ -195,15 +195,15 @@ class AdminNotifier(TelegramNotifier):
     def notify_user_profit(self, user: str, session_num: int, amount: float, cumulative_today: float):
         self.send(
             f"{self._prefix(user)} 🎉 Profit target\n"
-            f"+${amount:.0f} locked in (Session #{session_num})\n"
-            f"Today total: +${cumulative_today:.0f}"
+            f"+${amount:.2f} locked in (Session #{session_num})\n"
+            f"Today total: +${cumulative_today:.2f}"
         )
 
     def notify_user_loss_cut(self, user: str, session_num: int, amount: float, cumulative_today: float):
         self.send(
             f"{self._prefix(user)} ⚠️ Loss cut\n"
-            f"-${abs(amount):.0f} (Session #{session_num})\n"
-            f"Today total: ${'+' if cumulative_today >= 0 else ''}${cumulative_today:.0f}"
+            f"-${abs(amount):.2f} (Session #{session_num})\n"
+            f"Today total: ${'+' if cumulative_today >= 0 else ''}${cumulative_today:.2f}"
         )
 
     def notify_error(self, user: str, error_type: str, detail: str):
@@ -248,14 +248,14 @@ class UserNotifier(TelegramNotifier):
                              cumulative_today: float, table_name: str = ""):
         self.send(
             f"🎉 TARGET REACHED #{session_num}\n"
-            f"+${amount:.0f} | Today: {cumulative_today:+.0f}"
+            f"+${amount:.2f} | Today: {cumulative_today:+.2f}"
         )
 
     def notify_loss_cut(self, session_num: int, amount: float,
                         cumulative_today: float, table_name: str = ""):
         self.send(
             f"🛑 LIMIT REACHED #{session_num}\n"
-            f"-${abs(amount):.0f} | Today: {cumulative_today:+.0f}"
+            f"-${abs(amount):.2f} | Today: {cumulative_today:+.2f}"
         )
 
     def notify_daily_summary(self, date_str: str, total_sessions: int,
@@ -264,7 +264,7 @@ class UserNotifier(TelegramNotifier):
         sign = "+" if net_profit >= 0 else ""
         self.send(
             f"📊 Daily | {date_str}\n"
-            f"{total_sessions} rounds ({profit_sessions}P / {loss_sessions}L) | {sign}${net_profit:.0f}"
+            f"{total_sessions} rounds ({profit_sessions}P / {loss_sessions}L) | {sign}${net_profit:.2f}"
         )
 
 
