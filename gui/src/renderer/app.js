@@ -376,18 +376,15 @@ const LAPLACE_API_KEY = 'c6gDoe0xIyBOTQ7bvzRaAHNYn4ZE1W9Mriumqkw8Shf5Jlsd';
 let _paramCandidates = [];
 
 function _formatParamCandidate(c, idx) {
-  const t = typeof c.entry_threshold === 'number' ? Math.round(c.entry_threshold * 100) : '--';
-  const w = c.entry_window ?? '--';
-  const d3 = c.exit_drop3_limit ?? '--';
-  const d5 = c.exit_drop5_immediate ? 'ON' : 'OFF';
-  return `#${idx + 1} T=${t}% W=${w} D3=${d3} D5=${d5}`;
+  // シンプル化: "Auto2" / "Auto3" 等の表記のみ (内部パラメータは非表示)
+  return `Auto${idx + 2}`;
 }
 
 function _renderParamCandidates(selected) {
   const select = $('#inputParamCandidate');
   if (!select) return;
   const hint = $('#paramCandidateHint');
-  select.innerHTML = '<option value="auto">Auto (cloud)</option>';
+  select.innerHTML = '<option value="auto">Auto</option>';
   if (_paramCandidates.length === 0) {
     if (hint) hint.textContent = 'No candidates from server.';
     return;
