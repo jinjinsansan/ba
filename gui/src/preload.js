@@ -22,6 +22,7 @@ contextBridge.exposeInMainWorld('valhalla', {
   runWatchdog: () => ipcRenderer.invoke('run-watchdog'),
   installDeps: () => ipcRenderer.invoke('install-deps'),
   onInstallDepsResult: (cb) => ipcRenderer.on('install-deps-result', (_, data) => cb(data)),
+  openSetupLog: () => ipcRenderer.invoke('open-setup-log'),
   checkSshdInstalled: () => ipcRenderer.invoke('check-sshd-installed'),
   toggleSupport: (enabled) => ipcRenderer.invoke('toggle-support', enabled),
 

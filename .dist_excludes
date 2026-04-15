@@ -50,7 +50,11 @@ parse_*.py
 inspect_*.py
 test_*.py
 find_*.py
+generate_*.py
 _*.py
+
+# --- Auto update helper (contains server-only canary strings) ---
+auto_update_tables.py
 
 # --- Server-only entry points ---
 laplace_api.py

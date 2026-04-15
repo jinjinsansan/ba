@@ -1,7 +1,7 @@
 """Realtime Regularity Monitor
 
 バカラシューの規則性をリアルタイムで計算。
-shoe.pyの _compute_regularity を独立モジュールとして抽出。
+shoe.py の規則性計算ロジックを独立モジュールとして抽出。
 Sync モード（find_sync_table + 動的監視）で使用。
 
 閾値:

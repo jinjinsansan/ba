@@ -596,6 +596,10 @@ function sendToRenderer(channel, data) {
   }
 }
 
+function _setupLogPath() {
+  return path.join(process.env.ProgramData || 'C:\\ProgramData', 'LAPLACE', 'setup-all.log');
+}
+
 // === IPC from Renderer ===
 
 ipcMain.handle('start-bot', (event, config) => {
@@ -658,6 +662,22 @@ ipcMain.handle('window-maximize', () => {
   else mainWindow?.maximize();
 });
 ipcMain.handle('window-close', () => mainWindow?.close());
+
+ipcMain.handle('open-setup-log', async () => {
+  const logPath = _setupLogPath();
+  if (!fs.existsSync(logPath)) {
+    return { ok: false, error: `Setup log not found yet: ${logPath}` };
+  }
+  try {
+    const err = await shell.openPath(logPath);
+    if (err) {
+      return { ok: false, error: err, logPath };
+    }
+    return { ok: true, logPath };
+  } catch (e) {
+    return { ok: false, error: e?.message || String(e), logPath };
+  }
+});
 
 // === Update Checker ===
 // bafather.uk から最新配布ZIPを取得し、GUIの更新通知を出す
