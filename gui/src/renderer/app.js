@@ -770,6 +770,11 @@ $('#btnSettings').addEventListener('click', () => {
 });
 $('#settingsClose').addEventListener('click', () => $('#settingsModal').classList.add('hidden'));
 $('#btnSaveSettings').addEventListener('click', async () => {
+  // IME/composition の入力が確定していないと value が古いまま読まれる事があるため、
+  // クリック時にフォーカスを外して 1tick 待ってから値を読む。
+  try { document.activeElement?.blur?.(); } catch {}
+  await new Promise((r) => setTimeout(r, 0));
+
   const settings = {
     chip_base: parseFloat($('#inputChipBase').value) || 1,
     profit_target: parseFloat($('#inputProfitTarget').value) || 50,
@@ -1435,7 +1440,11 @@ window.valhalla.onAgentMessage((msg) => {
 
     case 'mode_changed': {
       const nextMode = normalizeBetMode(msg.mode);
-      if ($('#inputBetMode')) $('#inputBetMode').value = nextMode;
+      // Settings モーダル操作中に backend 側の mode_changed で select が上書きされると、
+      // ユーザーが選んだ値が SAVE 時に失われることがあるため、開いている間は触らない。
+      const modal = $('#settingsModal');
+      const modalOpen = modal && !modal.classList.contains('hidden');
+      if (!modalOpen && $('#inputBetMode')) $('#inputBetMode').value = nextMode;
       _streamSetSize = _setSizeForMode(nextMode);
       addLog(`BET mode → ${nextMode}`, 'info');
       break;
