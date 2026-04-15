@@ -429,15 +429,19 @@ class MaruBatsuBetSession:
         _lp = _rnd.choice("QRSTM")
         _vp = _rnd.choice("UVWXY")
         _os = self.tracker.prev_overshoot
-        # 実額PNL (Banker 5%手数料を反映) — GUIと同じ計算
-        if won:
-            _round_pnl = bet_amount * (0.95 if side == "banker" else 1.0)
+        # セッションPNL: 残高スナップショット方式（GUIのmoney_pnl_actualと完全一致）
+        # session_open_balance が未設定なら BET結果のみで集計するフォールバック
+        if self.session_open_balance is not None and balance is not None:
+            _spnl = balance - self.session_open_balance
         else:
-            _round_pnl = -bet_amount
-        if not hasattr(self, '_telegram_pnl'):
-            self._telegram_pnl = 0.0
-        self._telegram_pnl += _round_pnl
-        _spnl = self._telegram_pnl
+            if won:
+                _round_pnl = bet_amount * (0.95 if side == "banker" else 1.0)
+            else:
+                _round_pnl = -bet_amount
+            if not hasattr(self, '_telegram_pnl'):
+                self._telegram_pnl = 0.0
+            self._telegram_pnl += _round_pnl
+            _spnl = self._telegram_pnl
         _spnl_sign = "+" if _spnl >= 0 else ""
         self.notifier.send(
             f"{'WIN' if won else 'LOSE'} | {result.upper()} | ${bet_amount:.2f}\n"
