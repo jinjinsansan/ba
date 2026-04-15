@@ -121,7 +121,12 @@ def main():
     log_state = {"pos": 0}
     while True:
         running = is_process_running()
-        stale = log_stale()
+        agent_pids = find_agent_pids()
+        # agent が動いていない (=ユーザーがSTOP中/未起動) 状態では
+        # agent.log が更新されないのは正常。ここで GUI を再起動してしまうと、
+        # 30秒ごとの監視で「勝手にGUIが落ちて起動し直す」ように見え、
+        # localStorage の永続化も不安定になる。
+        stale = log_stale() if agent_pids else False
         now = time.time()
         if now - last_no_frame_reset > NOFRAME_WINDOW:
             no_frame_hits = 0
@@ -146,28 +151,15 @@ def main():
                     stop_agent()
                     start_gui()
                 elif stale:
-                    if find_agent_pids():
-                        print("[watchdog] log stale - restarting agent")
-                        stop_camoufox()
-                        stop_agent()
-                    else:
-                        print("[watchdog] log stale + no agent - restarting gui")
-                        stop_camoufox()
-                        stop_gui()
-                        time.sleep(3)
-                        start_gui()
+                    # stale は agent_pids がある場合のみ True になる
+                    print("[watchdog] log stale - restarting agent")
+                    stop_camoufox()
+                    stop_agent()
                 last_restart = now
-        elif hard_restart and now - last_restart >= RESTART_COOLDOWN:
-            if find_agent_pids():
-                print("[watchdog] recovery loop/browser closed - restarting agent")
-                stop_camoufox()
-                stop_agent()
-            else:
-                print("[watchdog] recovery loop + no agent - restarting gui")
-                stop_camoufox()
-                stop_gui()
-                time.sleep(3)
-                start_gui()
+        elif hard_restart and agent_pids and now - last_restart >= RESTART_COOLDOWN:
+            print("[watchdog] recovery loop/browser closed - restarting agent")
+            stop_camoufox()
+            stop_agent()
             no_frame_hits = 0
             browser_closed_hits = 0
             last_no_frame_reset = now
