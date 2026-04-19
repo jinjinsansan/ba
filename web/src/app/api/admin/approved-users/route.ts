@@ -13,7 +13,7 @@ export async function POST(req: NextRequest) {
   const admin = createAdminClient()
   const { data, error } = await admin
     .from('profiles')
-    .select('id, email, is_admin, created_at, billing(bot_paid, is_free, suspended, balance, expires_at, updated_at)')
+    .select('id, email, is_admin, created_at, billing(bot_paid, is_free, suspended, balance, grace_deadline, updated_at)')
     .order('created_at', { ascending: false })
 
   if (error) {
@@ -25,7 +25,7 @@ export async function POST(req: NextRequest) {
     const b = Array.isArray(u.billing) ? u.billing[0] : u.billing
     // ステータス計算: GUI 側 /api/auth/license のロジックと合わせる
     let status = 'not_approved'
-    const expired = b?.expires_at && new Date(b.expires_at) < now
+    const expired = b?.grace_deadline && new Date(b.grace_deadline) < now
     if (u.is_admin) {
       status = 'admin'
     } else if (!b || !b.bot_paid) {
@@ -48,7 +48,7 @@ export async function POST(req: NextRequest) {
       is_free: !!b?.is_free,
       suspended: !!b?.suspended,
       balance: b?.balance || 0,
-      expires_at: b?.expires_at || null,
+      grace_deadline: b?.grace_deadline || null,
       created_at: u.created_at,
       billing_updated_at: b?.updated_at || null,
     }
