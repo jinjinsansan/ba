@@ -1,480 +1,728 @@
 <!DOCTYPE html>
 <html lang="ja"><head><meta charset="UTF-8">
-<title>新SEQ2 × 7T × Banker 52% × $30k 利確比較</title>
+<title>AI. 新SEQ2 × 7T × Banker 52% × $100k 元本 — 利確比較</title>
 <style>
-@import url('https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500;700;900&display=swap');
-* { box-sizing: border-box; margin:0; padding:0; }
-body { font-family: 'Noto Sans JP', sans-serif; background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%); color:white; min-height:100vh; padding:40px 20px; }
-.container { max-width:1200px; margin:0 auto; }
-h1 { font-size:36px; font-weight:900; background:linear-gradient(135deg,#00c8ff 0%,#6bcf8f 100%); -webkit-background-clip:text; background-clip:text; color:transparent; margin-bottom:8px; }
-.sub { color:#a0a0c0; margin-bottom:30px; }
-h2 { color:#00c8ff; font-size:22px; margin:30px 0 15px; border-left:4px solid #00c8ff; padding-left:12px; }
-table { width:100%; border-collapse:collapse; background:rgba(255,255,255,0.03); border-radius:8px; overflow:hidden; }
-th, td { padding:10px 12px; text-align:right; border-bottom:1px solid rgba(255,255,255,0.08); font-size:14px; }
-th { background:rgba(0,200,255,0.1); color:#00c8ff; font-weight:700; }
-td:first-child, th:first-child { text-align:left; }
-.seq-box { background:rgba(255,255,255,0.05); padding:15px; border-radius:8px; font-family:monospace; font-size:13px; color:#6bcf8f; margin:15px 0; word-wrap:break-word; }
-.params { background:rgba(0,200,255,0.06); padding:15px; border-radius:8px; margin:15px 0; font-size:14px; line-height:1.8; }
-.back { display:inline-block; margin-bottom:20px; color:#00c8ff; text-decoration:none; }
-.back:hover { text-decoration:underline; }
+* { box-sizing: border-box; }
+body { font-family: -apple-system, "Segoe UI", "Noto Sans JP", sans-serif; background: #0f1419; color: #e0e6ed; margin: 0; padding: 24px; line-height: 1.5; }
+.container { max-width: 1200px; margin: 0 auto; }
+h1 { color: #ffd700; font-size: 28px; border-bottom: 2px solid #ffd700; padding-bottom: 8px; }
+h2 { color: #c084fc; margin-top: 32px; font-size: 20px; }
+.nav { margin: 16px 0 24px; }
+.nav a { display: inline-block; margin-right: 12px; padding: 8px 16px; background: #1a2332; color: #6dd5ed; text-decoration: none; border-radius: 4px; border: 1px solid #2a3441; font-size: 13px; }
+.nav a:hover { border-color: #c084fc; }
+.banner { background: #2a1a3a; border-left: 5px solid #c084fc; padding: 14px 18px; margin: 16px 0; font-size: 14px; border-radius: 4px; line-height: 1.8; }
+.banner strong { color: #c084fc; }
+.summary { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 12px; margin: 20px 0; }
+.card { background: #1a2332; padding: 14px; border-radius: 4px; border-left: 4px solid #6dd5ed; }
+.card .label { font-size: 11px; color: #8a96a8; text-transform: uppercase; letter-spacing: 0.5px; }
+.card .value { font-size: 22px; font-weight: bold; color: #ffd700; margin-top: 4px; }
+.card .sub { font-size: 11px; color: #8a96a8; margin-top: 2px; }
+.card.profit { border-left-color: #4ade80; }
+.card.profit .value { color: #4ade80; }
+.card.bankrupt { border-left-color: #f87171; }
+.card.bankrupt .value { color: #f87171; }
+.card.dd { border-left-color: #fbbf24; }
+.card.dd .value { color: #fbbf24; }
+table { width: 100%; border-collapse: collapse; font-size: 13px; margin: 16px 0; background: #1a2332; border-radius: 4px; overflow: hidden; }
+table th { background: #0f1419; color: #c084fc; padding: 10px 8px; text-align: right; border-bottom: 2px solid #2a3441; font-weight: 600; }
+table th:first-child, table td:first-child { text-align: left; }
+table td { padding: 8px; text-align: right; border-bottom: 1px solid #2a3441; }
+.seq-box { background: #0f1419; padding: 12px; border-radius: 4px; font-family: monospace; font-size: 12px; color: #6dd5ed; word-wrap: break-word; margin: 8px 0; }
+.note { background: #1a2332; border-left: 4px solid #6dd5ed; padding: 12px 16px; margin: 20px 0; font-size: 13px; color: #b8c5d6; border-radius: 4px; line-height: 1.7; }
+.note b { color: #6dd5ed; }
 </style></head><body>
 <div class="container">
-<a href="index.html" class="back">← index に戻る</a>
-<h1>新SEQ2 × 7ターン × Banker 52% × $30k 元本</h1>
-<div class="sub">利確 $30 vs $100 の比較 / 手数料補正なし (勝ち 0.95× で実損反映) / Bernoulli MC × 20 試行</div>
+<h1>AI. 新SEQ2 × 7ターン × Banker 52% × 元本 $100,000</h1>
 
-<div class="params">
-<b>SEQ (28 段)</b>:<br>
-<div class="seq-box">$10, $20, $30, $40, $50, $70, $90, $110, $140, $170, $200, $250, $300, $350, $430, $510, $590, $700, $810, $940, $1090, $1260, $1440, $1640, $1870, $2150, $2450, $2800</div>
-<b>条件</b>: B=52% (狙い打ち仮定) / 7ターン制 (SET_SIZE=7) / $10 base / 元本 $30,000 / 損切なし /
-BET そのまま (1.0526× 補正なし) / 勝ち時 ×0.95 (5% rake 実損)<br>
-<b>EV/bet</b> = 0.52 × 0.95 - 0.48 × 1.00 = <b style="color:#6bcf8f">+1.40%</b><br>
-<b>MC</b>: Bernoulli(0.52) × 1,723,343 ハンド × 20 trial
+<div class="nav">
+<a href="index.html">← レポートTOP</a>
+<a href="seq_fair_comparison.html">AJ. 5 SEQ 公平比較</a>
+<a href="seq_bankroll_scan.html">AK. 利確額スキャン</a>
 </div>
 
-<h2>📊 集計 ($30 vs $100)</h2>
+<div class="banner">
+<strong>📊 新 SEQ2 ($1 起点, 30 段, max $2,800) 単独バックテスト</strong><br>
+Banker のみ BET / 手数料補正なし (勝ち時 ×0.95 で実損反映) / 利確 $30 vs $50 vs $100 を比較。<br>
+<strong>$100k 元本が耐えられるか、どの利確が最適か?</strong>
+</div>
+
+<h2>🎯 全体サマリー</h2>
+<div class="summary">
+  <div class="card bankrupt"><div class="label">総破綻数</div><div class="value">0 / 60</div><div class="sub">全 3 利確 × 20 trial</div></div>
+  <div class="card profit"><div class="label">全試行 平均 PNL</div><div class="value">$+227,696</div><div class="sub">最優秀 $100 利確: $+230,886</div></div>
+  <div class="card dd"><div class="label">最大 DD (全試行中)</div><div class="value">$39,071</div><div class="sub">元本比 39.1%</div></div>
+  <div class="card"><div class="label">EV/bet (B=52%)</div><div class="value">+1.40%</div><div class="sub">0.52×0.95 − 0.48×1.00</div></div>
+</div>
+
+<h2>📋 前提条件 & SEQ</h2>
+<div class="note">
+<b>元本</b>: $100,000 / <b>勝率</b>: 52.0% (Banker 狙い打ち仮定) / <b>ハンド数</b>: 1,723,343 × 20 trial<br>
+<b>ルール</b>: 7 ターン制 / BET = seq_val (補正なし) / 勝ち ×0.95 / 負け ×(−1) / 利確でリセット / 損切なし<br>
+<b>SEQ (30 段)</b>:
+<div class="seq-box">$1, $5, $10, $20, $30, $40, $50, $70, $90, $110, $140, $170, $200, $250, $300, $350, $430, $510, $590, $700, $810, $940, $1,090, $1,260, $1,440, $1,640, $1,870, $2,150, $2,450, $2,800</div>
+</div>
+
+<h2>💰 利確額別 集計</h2>
 <table>
-<tr><th>利確</th><th>破綻</th><th>平均PNL</th><th>最悪PNL</th><th>最良PNL</th><th>平均DD</th><th>最大DD</th><th>平均リセット数</th><th>最大到達SEQ</th><th>平均Peak</th></tr>
+<thead>
+<tr><th>利確</th><th>破綻</th><th>平均 PNL</th><th>最悪 PNL</th><th>最良 PNL</th><th>平均 DD</th><th>最大 DD</th><th>平均リセット</th><th>最大到達 SEQ</th></tr>
+</thead>
+<tbody>
 
 <tr>
-<td style="color:#4ade80;font-weight:700">$30</td>
-<td>0/20 (0%)</td>
-<td style="color:#4ade80">$+594,433</td>
-<td style="color:#4ade80">$+520,253</td>
-<td style="color:#4ade80">$+707,020</td>
-<td>$20,735</td>
-<td style="color:#fbbf24">$57,370</td>
-<td>15,577</td>
-<td>SEQ[27]=$2,800</td>
-<td>$625,822</td>
+<td style="color:#4ade80;font-weight:bold">$30 利確</td>
+<td style="color:#4ade80">0 / 20</td>
+<td style="color:#4ade80;font-weight:bold">$+223,318</td>
+<td style="color:#4ade80">$+181,330</td>
+<td style="color:#4ade80">$+266,020</td>
+<td>$15,686</td>
+<td style="color:#fbbf24">$29,713</td>
+<td>6,429</td>
+<td>SEQ[26]=$1,870</td>
 </tr>
 
 <tr>
-<td style="color:#f87171;font-weight:700">$100</td>
-<td>0/20 (0%)</td>
-<td style="color:#4ade80">$+594,632</td>
-<td style="color:#4ade80">$+511,623</td>
-<td style="color:#4ade80">$+665,852</td>
-<td>$20,732</td>
-<td style="color:#fbbf24">$65,258</td>
-<td>5,544</td>
-<td>SEQ[27]=$2,800</td>
-<td>$625,995</td>
+<td style="color:#fbbf24;font-weight:bold">$50 利確</td>
+<td style="color:#4ade80">0 / 20</td>
+<td style="color:#4ade80;font-weight:bold">$+228,883</td>
+<td style="color:#4ade80">$+181,289</td>
+<td style="color:#4ade80">$+284,073</td>
+<td>$15,053</td>
+<td style="color:#fbbf24">$39,071</td>
+<td>4,144</td>
+<td>SEQ[26]=$1,870</td>
 </tr>
 
+<tr>
+<td style="color:#f87171;font-weight:bold">$100 利確</td>
+<td style="color:#4ade80">0 / 20</td>
+<td style="color:#4ade80;font-weight:bold">$+230,886</td>
+<td style="color:#4ade80">$+191,047</td>
+<td style="color:#4ade80">$+257,140</td>
+<td>$16,149</td>
+<td style="color:#fbbf24">$29,766</td>
+<td>2,192</td>
+<td>SEQ[24]=$1,440</td>
+</tr>
+
+</tbody>
 </table>
 
-<h2>🎲 各試行の結果 (全 40 trial)</h2>
+<h2>🎲 試行別詳細 (全 60 trial)</h2>
 <table>
-<tr><th>利確</th><th>seed</th><th>PNL</th><th>最大DD</th><th>破綻</th><th>最大到達SEQ</th><th>リセット数</th></tr>
+<thead>
+<tr><th>利確</th><th>seed</th><th>PNL</th><th>最大 DD</th><th>状態</th><th>最大到達 SEQ</th><th>リセット数</th></tr>
+</thead>
+<tbody>
 
 <tr>
-<td style="color:#4ade80">$30</td>
-<td>#2000</td>
-<td style="color:#4ade80">$+626,476</td>
-<td>$15,566</td>
-<td style="color:#4ade80">NO</td>
-<td>SEQ[22]=$1,440</td>
-<td>16,363</td>
+<td style="color:#4ade80;font-weight:bold">$30</td>
+<td style="font-family:monospace;color:#8a96a8">#2000</td>
+<td style="color:#4ade80;font-weight:bold">$+227,609</td>
+<td>$13,594</td>
+<td style="text-align:center"><span style="color:#4ade80">✓ 生存</span></td>
+<td>SEQ[20]=$810</td>
+<td>6,577</td>
 </tr>
 
 <tr>
-<td style="color:#4ade80">$30</td>
-<td>#2001</td>
-<td style="color:#4ade80">$+544,963</td>
-<td>$15,674</td>
-<td style="color:#4ade80">NO</td>
-<td>SEQ[19]=$940</td>
-<td>14,283</td>
+<td style="color:#4ade80;font-weight:bold">$30</td>
+<td style="font-family:monospace;color:#8a96a8">#2001</td>
+<td style="color:#4ade80;font-weight:bold">$+181,763</td>
+<td>$15,239</td>
+<td style="text-align:center"><span style="color:#4ade80">✓ 生存</span></td>
+<td>SEQ[23]=$1,260</td>
+<td>5,205</td>
 </tr>
 
 <tr>
-<td style="color:#4ade80">$30</td>
-<td>#2002</td>
-<td style="color:#4ade80">$+612,806</td>
-<td>$16,342</td>
-<td style="color:#4ade80">NO</td>
-<td>SEQ[19]=$940</td>
-<td>15,987</td>
+<td style="color:#4ade80;font-weight:bold">$30</td>
+<td style="font-family:monospace;color:#8a96a8">#2002</td>
+<td style="color:#4ade80;font-weight:bold">$+220,709</td>
+<td>$22,331</td>
+<td style="text-align:center"><span style="color:#4ade80">✓ 生存</span></td>
+<td>SEQ[23]=$1,260</td>
+<td>6,297</td>
 </tr>
 
 <tr>
-<td style="color:#4ade80">$30</td>
-<td>#2003</td>
-<td style="color:#4ade80">$+556,538</td>
-<td>$31,348</td>
-<td style="color:#4ade80">NO</td>
-<td>SEQ[23]=$1,640</td>
-<td>14,536</td>
+<td style="color:#4ade80;font-weight:bold">$30</td>
+<td style="font-family:monospace;color:#8a96a8">#2003</td>
+<td style="color:#4ade80;font-weight:bold">$+211,490</td>
+<td>$15,354</td>
+<td style="text-align:center"><span style="color:#4ade80">✓ 生存</span></td>
+<td>SEQ[20]=$810</td>
+<td>6,027</td>
 </tr>
 
 <tr>
-<td style="color:#4ade80">$30</td>
-<td>#2004</td>
-<td style="color:#4ade80">$+614,508</td>
-<td>$12,705</td>
-<td style="color:#4ade80">NO</td>
-<td>SEQ[16]=$590</td>
-<td>16,117</td>
+<td style="color:#4ade80;font-weight:bold">$30</td>
+<td style="font-family:monospace;color:#8a96a8">#2004</td>
+<td style="color:#4ade80;font-weight:bold">$+252,825</td>
+<td>$12,238</td>
+<td style="text-align:center"><span style="color:#4ade80">✓ 生存</span></td>
+<td>SEQ[19]=$700</td>
+<td>7,246</td>
 </tr>
 
 <tr>
-<td style="color:#4ade80">$30</td>
-<td>#2005</td>
-<td style="color:#4ade80">$+630,987</td>
-<td>$21,599</td>
-<td style="color:#4ade80">NO</td>
-<td>SEQ[18]=$810</td>
-<td>16,537</td>
+<td style="color:#4ade80;font-weight:bold">$30</td>
+<td style="font-family:monospace;color:#8a96a8">#2005</td>
+<td style="color:#4ade80;font-weight:bold">$+235,728</td>
+<td>$9,418</td>
+<td style="text-align:center"><span style="color:#4ade80">✓ 生存</span></td>
+<td>SEQ[18]=$590</td>
+<td>6,762</td>
 </tr>
 
 <tr>
-<td style="color:#4ade80">$30</td>
-<td>#2006</td>
-<td style="color:#4ade80">$+635,332</td>
-<td>$15,457</td>
-<td style="color:#4ade80">NO</td>
-<td>SEQ[18]=$810</td>
-<td>16,661</td>
+<td style="color:#4ade80;font-weight:bold">$30</td>
+<td style="font-family:monospace;color:#8a96a8">#2006</td>
+<td style="color:#4ade80;font-weight:bold">$+253,354</td>
+<td>$9,491</td>
+<td style="text-align:center"><span style="color:#4ade80">✓ 生存</span></td>
+<td>SEQ[19]=$700</td>
+<td>7,284</td>
 </tr>
 
 <tr>
-<td style="color:#4ade80">$30</td>
-<td>#2007</td>
-<td style="color:#4ade80">$+639,410</td>
-<td>$23,869</td>
-<td style="color:#4ade80">NO</td>
-<td>SEQ[21]=$1,260</td>
-<td>16,759</td>
+<td style="color:#4ade80;font-weight:bold">$30</td>
+<td style="font-family:monospace;color:#8a96a8">#2007</td>
+<td style="color:#4ade80;font-weight:bold">$+258,926</td>
+<td>$13,399</td>
+<td style="text-align:center"><span style="color:#4ade80">✓ 生存</span></td>
+<td>SEQ[20]=$810</td>
+<td>7,451</td>
 </tr>
 
 <tr>
-<td style="color:#4ade80">$30</td>
-<td>#2008</td>
-<td style="color:#4ade80">$+633,114</td>
-<td>$16,298</td>
-<td style="color:#4ade80">NO</td>
-<td>SEQ[19]=$940</td>
-<td>16,550</td>
+<td style="color:#4ade80;font-weight:bold">$30</td>
+<td style="font-family:monospace;color:#8a96a8">#2008</td>
+<td style="color:#4ade80;font-weight:bold">$+266,020</td>
+<td>$7,528</td>
+<td style="text-align:center"><span style="color:#4ade80">✓ 生存</span></td>
+<td>SEQ[19]=$700</td>
+<td>7,599</td>
 </tr>
 
 <tr>
-<td style="color:#4ade80">$30</td>
-<td>#2009</td>
-<td style="color:#4ade80">$+557,882</td>
-<td>$23,540</td>
-<td style="color:#4ade80">NO</td>
-<td>SEQ[20]=$1,090</td>
-<td>14,575</td>
+<td style="color:#4ade80;font-weight:bold">$30</td>
+<td style="font-family:monospace;color:#8a96a8">#2009</td>
+<td style="color:#4ade80;font-weight:bold">$+200,909</td>
+<td>$16,119</td>
+<td style="text-align:center"><span style="color:#4ade80">✓ 生存</span></td>
+<td>SEQ[20]=$810</td>
+<td>5,745</td>
 </tr>
 
 <tr>
-<td style="color:#4ade80">$30</td>
-<td>#2010</td>
-<td style="color:#4ade80">$+520,253</td>
-<td>$36,582</td>
-<td style="color:#4ade80">NO</td>
-<td>SEQ[23]=$1,640</td>
-<td>13,639</td>
+<td style="color:#4ade80;font-weight:bold">$30</td>
+<td style="font-family:monospace;color:#8a96a8">#2010</td>
+<td style="color:#4ade80;font-weight:bold">$+194,876</td>
+<td>$21,444</td>
+<td style="text-align:center"><span style="color:#4ade80">✓ 生存</span></td>
+<td>SEQ[22]=$1,090</td>
+<td>5,594</td>
 </tr>
 
 <tr>
-<td style="color:#4ade80">$30</td>
-<td>#2011</td>
-<td style="color:#4ade80">$+551,189</td>
-<td>$57,370</td>
-<td style="color:#4ade80">NO</td>
-<td>SEQ[27]=$2,800</td>
-<td>14,399</td>
+<td style="color:#4ade80;font-weight:bold">$30</td>
+<td style="font-family:monospace;color:#8a96a8">#2011</td>
+<td style="color:#4ade80;font-weight:bold">$+214,616</td>
+<td>$25,265</td>
+<td style="text-align:center"><span style="color:#4ade80">✓ 生存</span></td>
+<td>SEQ[26]=$1,870</td>
+<td>6,259</td>
 </tr>
 
 <tr>
-<td style="color:#4ade80">$30</td>
-<td>#2012</td>
-<td style="color:#4ade80">$+535,828</td>
-<td>$16,786</td>
-<td style="color:#4ade80">NO</td>
-<td>SEQ[19]=$940</td>
-<td>13,993</td>
+<td style="color:#4ade80;font-weight:bold">$30</td>
+<td style="font-family:monospace;color:#8a96a8">#2012</td>
+<td style="color:#4ade80;font-weight:bold">$+223,853</td>
+<td>$10,458</td>
+<td style="text-align:center"><span style="color:#4ade80">✓ 生存</span></td>
+<td>SEQ[17]=$510</td>
+<td>6,394</td>
 </tr>
 
 <tr>
-<td style="color:#4ade80">$30</td>
-<td>#2013</td>
-<td style="color:#4ade80">$+707,020</td>
-<td>$9,600</td>
-<td style="color:#4ade80">NO</td>
-<td>SEQ[18]=$810</td>
-<td>18,484</td>
+<td style="color:#4ade80;font-weight:bold">$30</td>
+<td style="font-family:monospace;color:#8a96a8">#2013</td>
+<td style="color:#4ade80;font-weight:bold">$+257,084</td>
+<td>$8,499</td>
+<td style="text-align:center"><span style="color:#4ade80">✓ 生存</span></td>
+<td>SEQ[17]=$510</td>
+<td>7,343</td>
 </tr>
 
 <tr>
-<td style="color:#4ade80">$30</td>
-<td>#2014</td>
-<td style="color:#4ade80">$+556,854</td>
-<td>$18,275</td>
-<td style="color:#4ade80">NO</td>
-<td>SEQ[19]=$940</td>
-<td>14,608</td>
+<td style="color:#4ade80;font-weight:bold">$30</td>
+<td style="font-family:monospace;color:#8a96a8">#2014</td>
+<td style="color:#4ade80;font-weight:bold">$+181,330</td>
+<td>$29,713</td>
+<td style="text-align:center"><span style="color:#4ade80">✓ 生存</span></td>
+<td>SEQ[23]=$1,260</td>
+<td>5,279</td>
 </tr>
 
 <tr>
-<td style="color:#4ade80">$30</td>
-<td>#2015</td>
-<td style="color:#4ade80">$+612,161</td>
-<td>$18,283</td>
-<td style="color:#4ade80">NO</td>
-<td>SEQ[17]=$700</td>
-<td>16,021</td>
+<td style="color:#4ade80;font-weight:bold">$30</td>
+<td style="font-family:monospace;color:#8a96a8">#2015</td>
+<td style="color:#4ade80;font-weight:bold">$+244,269</td>
+<td>$20,346</td>
+<td style="text-align:center"><span style="color:#4ade80">✓ 生存</span></td>
+<td>SEQ[23]=$1,260</td>
+<td>6,984</td>
 </tr>
 
 <tr>
-<td style="color:#4ade80">$30</td>
-<td>#2016</td>
-<td style="color:#4ade80">$+581,980</td>
-<td>$17,486</td>
-<td style="color:#4ade80">NO</td>
-<td>SEQ[20]=$1,090</td>
-<td>15,543</td>
+<td style="color:#4ade80;font-weight:bold">$30</td>
+<td style="font-family:monospace;color:#8a96a8">#2016</td>
+<td style="color:#4ade80;font-weight:bold">$+208,622</td>
+<td>$12,068</td>
+<td style="text-align:center"><span style="color:#4ade80">✓ 生存</span></td>
+<td>SEQ[18]=$590</td>
+<td>6,143</td>
 </tr>
 
 <tr>
-<td style="color:#4ade80">$30</td>
-<td>#2017</td>
-<td style="color:#4ade80">$+571,256</td>
-<td>$16,215</td>
-<td style="color:#4ade80">NO</td>
-<td>SEQ[19]=$940</td>
-<td>15,052</td>
+<td style="color:#4ade80;font-weight:bold">$30</td>
+<td style="font-family:monospace;color:#8a96a8">#2017</td>
+<td style="color:#4ade80;font-weight:bold">$+216,285</td>
+<td>$13,681</td>
+<td style="text-align:center"><span style="color:#4ade80">✓ 生存</span></td>
+<td>SEQ[20]=$810</td>
+<td>6,359</td>
 </tr>
 
 <tr>
-<td style="color:#4ade80">$30</td>
-<td>#2018</td>
-<td style="color:#4ade80">$+629,272</td>
-<td>$12,592</td>
-<td style="color:#4ade80">NO</td>
-<td>SEQ[18]=$810</td>
-<td>16,456</td>
+<td style="color:#4ade80;font-weight:bold">$30</td>
+<td style="font-family:monospace;color:#8a96a8">#2018</td>
+<td style="color:#4ade80;font-weight:bold">$+211,226</td>
+<td>$18,532</td>
+<td style="text-align:center"><span style="color:#4ade80">✓ 生存</span></td>
+<td>SEQ[21]=$940</td>
+<td>6,030</td>
 </tr>
 
 <tr>
-<td style="color:#4ade80">$30</td>
-<td>#2019</td>
-<td style="color:#4ade80">$+570,826</td>
-<td>$19,118</td>
-<td style="color:#4ade80">NO</td>
-<td>SEQ[19]=$940</td>
-<td>14,982</td>
+<td style="color:#4ade80;font-weight:bold">$30</td>
+<td style="font-family:monospace;color:#8a96a8">#2019</td>
+<td style="color:#4ade80;font-weight:bold">$+204,875</td>
+<td>$19,002</td>
+<td style="text-align:center"><span style="color:#4ade80">✓ 生存</span></td>
+<td>SEQ[19]=$700</td>
+<td>6,011</td>
 </tr>
 
 <tr>
-<td style="color:#f87171">$100</td>
-<td>#2000</td>
-<td style="color:#4ade80">$+621,050</td>
-<td>$15,682</td>
-<td style="color:#4ade80">NO</td>
-<td>SEQ[19]=$940</td>
-<td>5,802</td>
+<td style="color:#fbbf24;font-weight:bold">$50</td>
+<td style="font-family:monospace;color:#8a96a8">#2000</td>
+<td style="color:#4ade80;font-weight:bold">$+238,281</td>
+<td>$16,484</td>
+<td style="text-align:center"><span style="color:#4ade80">✓ 生存</span></td>
+<td>SEQ[21]=$940</td>
+<td>4,303</td>
 </tr>
 
 <tr>
-<td style="color:#f87171">$100</td>
-<td>#2001</td>
-<td style="color:#4ade80">$+543,614</td>
-<td>$20,760</td>
-<td style="color:#4ade80">NO</td>
-<td>SEQ[21]=$1,260</td>
-<td>5,053</td>
+<td style="color:#fbbf24;font-weight:bold">$50</td>
+<td style="font-family:monospace;color:#8a96a8">#2001</td>
+<td style="color:#4ade80;font-weight:bold">$+212,062</td>
+<td>$11,036</td>
+<td style="text-align:center"><span style="color:#4ade80">✓ 生存</span></td>
+<td>SEQ[21]=$940</td>
+<td>3,828</td>
 </tr>
 
 <tr>
-<td style="color:#f87171">$100</td>
-<td>#2002</td>
-<td style="color:#4ade80">$+645,160</td>
-<td>$16,342</td>
-<td style="color:#4ade80">NO</td>
-<td>SEQ[19]=$940</td>
-<td>6,003</td>
+<td style="color:#fbbf24;font-weight:bold">$50</td>
+<td style="font-family:monospace;color:#8a96a8">#2002</td>
+<td style="color:#4ade80;font-weight:bold">$+245,481</td>
+<td>$10,058</td>
+<td style="text-align:center"><span style="color:#4ade80">✓ 生存</span></td>
+<td>SEQ[19]=$700</td>
+<td>4,411</td>
 </tr>
 
 <tr>
-<td style="color:#f87171">$100</td>
-<td>#2003</td>
-<td style="color:#4ade80">$+590,552</td>
-<td>$20,294</td>
-<td style="color:#4ade80">NO</td>
-<td>SEQ[19]=$940</td>
-<td>5,502</td>
+<td style="color:#fbbf24;font-weight:bold">$50</td>
+<td style="font-family:monospace;color:#8a96a8">#2003</td>
+<td style="color:#4ade80;font-weight:bold">$+236,533</td>
+<td>$9,560</td>
+<td style="text-align:center"><span style="color:#4ade80">✓ 生存</span></td>
+<td>SEQ[18]=$590</td>
+<td>4,266</td>
 </tr>
 
 <tr>
-<td style="color:#f87171">$100</td>
-<td>#2004</td>
-<td style="color:#4ade80">$+651,283</td>
-<td>$17,971</td>
-<td style="color:#4ade80">NO</td>
-<td>SEQ[19]=$940</td>
-<td>6,067</td>
+<td style="color:#fbbf24;font-weight:bold">$50</td>
+<td style="font-family:monospace;color:#8a96a8">#2004</td>
+<td style="color:#4ade80;font-weight:bold">$+262,322</td>
+<td>$17,760</td>
+<td style="text-align:center"><span style="color:#4ade80">✓ 生存</span></td>
+<td>SEQ[22]=$1,090</td>
+<td>4,741</td>
 </tr>
 
 <tr>
-<td style="color:#f87171">$100</td>
-<td>#2005</td>
-<td style="color:#4ade80">$+629,028</td>
-<td>$13,346</td>
-<td style="color:#4ade80">NO</td>
-<td>SEQ[18]=$810</td>
-<td>5,856</td>
+<td style="color:#fbbf24;font-weight:bold">$50</td>
+<td style="font-family:monospace;color:#8a96a8">#2005</td>
+<td style="color:#4ade80;font-weight:bold">$+231,778</td>
+<td>$9,658</td>
+<td style="text-align:center"><span style="color:#4ade80">✓ 生存</span></td>
+<td>SEQ[18]=$590</td>
+<td>4,186</td>
 </tr>
 
 <tr>
-<td style="color:#f87171">$100</td>
-<td>#2006</td>
-<td style="color:#4ade80">$+621,691</td>
-<td>$15,166</td>
-<td style="color:#4ade80">NO</td>
-<td>SEQ[19]=$940</td>
-<td>5,796</td>
+<td style="color:#fbbf24;font-weight:bold">$50</td>
+<td style="font-family:monospace;color:#8a96a8">#2006</td>
+<td style="color:#4ade80;font-weight:bold">$+247,497</td>
+<td>$9,604</td>
+<td style="text-align:center"><span style="color:#4ade80">✓ 生存</span></td>
+<td>SEQ[19]=$700</td>
+<td>4,472</td>
 </tr>
 
 <tr>
-<td style="color:#f87171">$100</td>
-<td>#2007</td>
-<td style="color:#4ade80">$+575,887</td>
-<td>$65,258</td>
-<td style="color:#4ade80">NO</td>
-<td>SEQ[27]=$2,800</td>
-<td>5,379</td>
+<td style="color:#fbbf24;font-weight:bold">$50</td>
+<td style="font-family:monospace;color:#8a96a8">#2007</td>
+<td style="color:#4ade80;font-weight:bold">$+262,517</td>
+<td>$13,428</td>
+<td style="text-align:center"><span style="color:#4ade80">✓ 生存</span></td>
+<td>SEQ[20]=$810</td>
+<td>4,731</td>
 </tr>
 
 <tr>
-<td style="color:#f87171">$100</td>
-<td>#2008</td>
-<td style="color:#4ade80">$+630,595</td>
-<td>$16,298</td>
-<td style="color:#4ade80">NO</td>
-<td>SEQ[19]=$940</td>
-<td>5,867</td>
+<td style="color:#fbbf24;font-weight:bold">$50</td>
+<td style="font-family:monospace;color:#8a96a8">#2008</td>
+<td style="color:#4ade80;font-weight:bold">$+256,273</td>
+<td>$16,482</td>
+<td style="text-align:center"><span style="color:#4ade80">✓ 生存</span></td>
+<td>SEQ[22]=$1,090</td>
+<td>4,645</td>
 </tr>
 
 <tr>
-<td style="color:#f87171">$100</td>
-<td>#2009</td>
-<td style="color:#4ade80">$+555,206</td>
-<td>$18,950</td>
-<td style="color:#4ade80">NO</td>
-<td>SEQ[20]=$1,090</td>
-<td>5,159</td>
+<td style="color:#fbbf24;font-weight:bold">$50</td>
+<td style="font-family:monospace;color:#8a96a8">#2009</td>
+<td style="color:#4ade80;font-weight:bold">$+216,195</td>
+<td>$14,659</td>
+<td style="text-align:center"><span style="color:#4ade80">✓ 生存</span></td>
+<td>SEQ[20]=$810</td>
+<td>3,901</td>
 </tr>
 
 <tr>
-<td style="color:#f87171">$100</td>
-<td>#2010</td>
-<td style="color:#4ade80">$+511,623</td>
-<td>$32,077</td>
-<td style="color:#4ade80">NO</td>
-<td>SEQ[22]=$1,440</td>
-<td>4,770</td>
+<td style="color:#fbbf24;font-weight:bold">$50</td>
+<td style="font-family:monospace;color:#8a96a8">#2010</td>
+<td style="color:#4ade80;font-weight:bold">$+181,289</td>
+<td>$39,071</td>
+<td style="text-align:center"><span style="color:#4ade80">✓ 生存</span></td>
+<td>SEQ[26]=$1,870</td>
+<td>3,347</td>
 </tr>
 
 <tr>
-<td style="color:#f87171">$100</td>
-<td>#2011</td>
-<td style="color:#4ade80">$+596,062</td>
-<td>$18,678</td>
-<td style="color:#4ade80">NO</td>
-<td>SEQ[20]=$1,090</td>
-<td>5,558</td>
+<td style="color:#fbbf24;font-weight:bold">$50</td>
+<td style="font-family:monospace;color:#8a96a8">#2011</td>
+<td style="color:#4ade80;font-weight:bold">$+207,910</td>
+<td>$25,265</td>
+<td style="text-align:center"><span style="color:#4ade80">✓ 生存</span></td>
+<td>SEQ[26]=$1,870</td>
+<td>3,750</td>
 </tr>
 
 <tr>
-<td style="color:#f87171">$100</td>
-<td>#2012</td>
-<td style="color:#4ade80">$+537,826</td>
-<td>$15,862</td>
-<td style="color:#4ade80">NO</td>
-<td>SEQ[17]=$700</td>
-<td>5,011</td>
+<td style="color:#fbbf24;font-weight:bold">$50</td>
+<td style="font-family:monospace;color:#8a96a8">#2012</td>
+<td style="color:#4ade80;font-weight:bold">$+204,579</td>
+<td>$13,084</td>
+<td style="text-align:center"><span style="color:#4ade80">✓ 生存</span></td>
+<td>SEQ[21]=$940</td>
+<td>3,684</td>
 </tr>
 
 <tr>
-<td style="color:#f87171">$100</td>
-<td>#2013</td>
-<td style="color:#4ade80">$+665,852</td>
-<td>$18,038</td>
-<td style="color:#4ade80">NO</td>
-<td>SEQ[20]=$1,090</td>
-<td>6,198</td>
+<td style="color:#fbbf24;font-weight:bold">$50</td>
+<td style="font-family:monospace;color:#8a96a8">#2013</td>
+<td style="color:#4ade80;font-weight:bold">$+284,073</td>
+<td>$6,631</td>
+<td style="text-align:center"><span style="color:#4ade80">✓ 生存</span></td>
+<td>SEQ[16]=$430</td>
+<td>5,122</td>
 </tr>
 
 <tr>
-<td style="color:#f87171">$100</td>
-<td>#2014</td>
-<td style="color:#4ade80">$+573,498</td>
-<td>$18,036</td>
-<td style="color:#4ade80">NO</td>
-<td>SEQ[18]=$810</td>
-<td>5,358</td>
+<td style="color:#fbbf24;font-weight:bold">$50</td>
+<td style="font-family:monospace;color:#8a96a8">#2014</td>
+<td style="color:#4ade80;font-weight:bold">$+201,273</td>
+<td>$23,894</td>
+<td style="text-align:center"><span style="color:#4ade80">✓ 生存</span></td>
+<td>SEQ[23]=$1,260</td>
+<td>3,672</td>
 </tr>
 
 <tr>
-<td style="color:#f87171">$100</td>
-<td>#2015</td>
-<td style="color:#4ade80">$+612,412</td>
-<td>$18,283</td>
-<td style="color:#4ade80">NO</td>
-<td>SEQ[18]=$810</td>
-<td>5,696</td>
+<td style="color:#fbbf24;font-weight:bold">$50</td>
+<td style="font-family:monospace;color:#8a96a8">#2015</td>
+<td style="color:#4ade80;font-weight:bold">$+246,753</td>
+<td>$10,397</td>
+<td style="text-align:center"><span style="color:#4ade80">✓ 生存</span></td>
+<td>SEQ[18]=$590</td>
+<td>4,450</td>
 </tr>
 
 <tr>
-<td style="color:#f87171">$100</td>
-<td>#2016</td>
-<td style="color:#4ade80">$+569,119</td>
-<td>$16,024</td>
-<td style="color:#4ade80">NO</td>
-<td>SEQ[18]=$810</td>
-<td>5,366</td>
+<td style="color:#fbbf24;font-weight:bold">$50</td>
+<td style="font-family:monospace;color:#8a96a8">#2016</td>
+<td style="color:#4ade80;font-weight:bold">$+211,088</td>
+<td>$12,021</td>
+<td style="text-align:center"><span style="color:#4ade80">✓ 生存</span></td>
+<td>SEQ[20]=$810</td>
+<td>3,886</td>
 </tr>
 
 <tr>
-<td style="color:#f87171">$100</td>
-<td>#2017</td>
-<td style="color:#4ade80">$+596,186</td>
-<td>$16,967</td>
-<td style="color:#4ade80">NO</td>
-<td>SEQ[19]=$940</td>
-<td>5,570</td>
+<td style="color:#fbbf24;font-weight:bold">$50</td>
+<td style="font-family:monospace;color:#8a96a8">#2017</td>
+<td style="color:#4ade80;font-weight:bold">$+219,653</td>
+<td>$11,214</td>
+<td style="text-align:center"><span style="color:#4ade80">✓ 生存</span></td>
+<td>SEQ[20]=$810</td>
+<td>4,044</td>
 </tr>
 
 <tr>
-<td style="color:#f87171">$100</td>
-<td>#2018</td>
-<td style="color:#4ade80">$+594,172</td>
-<td>$18,858</td>
-<td style="color:#4ade80">NO</td>
-<td>SEQ[21]=$1,260</td>
-<td>5,526</td>
+<td style="color:#fbbf24;font-weight:bold">$50</td>
+<td style="font-family:monospace;color:#8a96a8">#2018</td>
+<td style="color:#4ade80;font-weight:bold">$+214,500</td>
+<td>$18,516</td>
+<td style="text-align:center"><span style="color:#4ade80">✓ 生存</span></td>
+<td>SEQ[21]=$940</td>
+<td>3,868</td>
 </tr>
 
 <tr>
-<td style="color:#f87171">$100</td>
-<td>#2019</td>
-<td style="color:#4ade80">$+571,832</td>
-<td>$21,744</td>
-<td style="color:#4ade80">NO</td>
-<td>SEQ[19]=$940</td>
-<td>5,333</td>
+<td style="color:#fbbf24;font-weight:bold">$50</td>
+<td style="font-family:monospace;color:#8a96a8">#2019</td>
+<td style="color:#4ade80;font-weight:bold">$+197,597</td>
+<td>$12,242</td>
+<td style="text-align:center"><span style="color:#4ade80">✓ 生存</span></td>
+<td>SEQ[17]=$510</td>
+<td>3,570</td>
 </tr>
 
+<tr>
+<td style="color:#f87171;font-weight:bold">$100</td>
+<td style="font-family:monospace;color:#8a96a8">#2000</td>
+<td style="color:#4ade80;font-weight:bold">$+230,869</td>
+<td>$12,223</td>
+<td style="text-align:center"><span style="color:#4ade80">✓ 生存</span></td>
+<td>SEQ[22]=$1,090</td>
+<td>2,195</td>
+</tr>
+
+<tr>
+<td style="color:#f87171;font-weight:bold">$100</td>
+<td style="font-family:monospace;color:#8a96a8">#2001</td>
+<td style="color:#4ade80;font-weight:bold">$+217,102</td>
+<td>$15,316</td>
+<td style="text-align:center"><span style="color:#4ade80">✓ 生存</span></td>
+<td>SEQ[20]=$810</td>
+<td>2,055</td>
+</tr>
+
+<tr>
+<td style="color:#f87171;font-weight:bold">$100</td>
+<td style="font-family:monospace;color:#8a96a8">#2002</td>
+<td style="color:#4ade80;font-weight:bold">$+246,239</td>
+<td>$13,334</td>
+<td style="text-align:center"><span style="color:#4ade80">✓ 生存</span></td>
+<td>SEQ[21]=$940</td>
+<td>2,333</td>
+</tr>
+
+<tr>
+<td style="color:#f87171;font-weight:bold">$100</td>
+<td style="font-family:monospace;color:#8a96a8">#2003</td>
+<td style="color:#4ade80;font-weight:bold">$+253,237</td>
+<td>$7,430</td>
+<td style="text-align:center"><span style="color:#4ade80">✓ 生存</span></td>
+<td>SEQ[18]=$590</td>
+<td>2,395</td>
+</tr>
+
+<tr>
+<td style="color:#f87171;font-weight:bold">$100</td>
+<td style="font-family:monospace;color:#8a96a8">#2004</td>
+<td style="color:#4ade80;font-weight:bold">$+230,386</td>
+<td>$17,760</td>
+<td style="text-align:center"><span style="color:#4ade80">✓ 生存</span></td>
+<td>SEQ[22]=$1,090</td>
+<td>2,183</td>
+</tr>
+
+<tr>
+<td style="color:#f87171;font-weight:bold">$100</td>
+<td style="font-family:monospace;color:#8a96a8">#2005</td>
+<td style="color:#4ade80;font-weight:bold">$+232,337</td>
+<td>$20,146</td>
+<td style="text-align:center"><span style="color:#4ade80">✓ 生存</span></td>
+<td>SEQ[20]=$810</td>
+<td>2,195</td>
+</tr>
+
+<tr>
+<td style="color:#f87171;font-weight:bold">$100</td>
+<td style="font-family:monospace;color:#8a96a8">#2006</td>
+<td style="color:#4ade80;font-weight:bold">$+257,140</td>
+<td>$16,378</td>
+<td style="text-align:center"><span style="color:#4ade80">✓ 生存</span></td>
+<td>SEQ[22]=$1,090</td>
+<td>2,491</td>
+</tr>
+
+<tr>
+<td style="color:#f87171;font-weight:bold">$100</td>
+<td style="font-family:monospace;color:#8a96a8">#2007</td>
+<td style="color:#4ade80;font-weight:bold">$+248,129</td>
+<td>$10,428</td>
+<td style="text-align:center"><span style="color:#4ade80">✓ 生存</span></td>
+<td>SEQ[17]=$510</td>
+<td>2,340</td>
+</tr>
+
+<tr>
+<td style="color:#f87171;font-weight:bold">$100</td>
+<td style="font-family:monospace;color:#8a96a8">#2008</td>
+<td style="color:#4ade80;font-weight:bold">$+251,383</td>
+<td>$23,658</td>
+<td style="text-align:center"><span style="color:#4ade80">✓ 生存</span></td>
+<td>SEQ[24]=$1,440</td>
+<td>2,379</td>
+</tr>
+
+<tr>
+<td style="color:#f87171;font-weight:bold">$100</td>
+<td style="font-family:monospace;color:#8a96a8">#2009</td>
+<td style="color:#4ade80;font-weight:bold">$+204,193</td>
+<td>$16,119</td>
+<td style="text-align:center"><span style="color:#4ade80">✓ 生存</span></td>
+<td>SEQ[20]=$810</td>
+<td>1,932</td>
+</tr>
+
+<tr>
+<td style="color:#f87171;font-weight:bold">$100</td>
+<td style="font-family:monospace;color:#8a96a8">#2010</td>
+<td style="color:#4ade80;font-weight:bold">$+191,047</td>
+<td>$24,050</td>
+<td style="text-align:center"><span style="color:#4ade80">✓ 生存</span></td>
+<td>SEQ[22]=$1,090</td>
+<td>1,811</td>
+</tr>
+
+<tr>
+<td style="color:#f87171;font-weight:bold">$100</td>
+<td style="font-family:monospace;color:#8a96a8">#2011</td>
+<td style="color:#4ade80;font-weight:bold">$+230,869</td>
+<td>$9,720</td>
+<td style="text-align:center"><span style="color:#4ade80">✓ 生存</span></td>
+<td>SEQ[18]=$590</td>
+<td>2,188</td>
+</tr>
+
+<tr>
+<td style="color:#f87171;font-weight:bold">$100</td>
+<td style="font-family:monospace;color:#8a96a8">#2012</td>
+<td style="color:#4ade80;font-weight:bold">$+196,169</td>
+<td>$10,901</td>
+<td style="text-align:center"><span style="color:#4ade80">✓ 生存</span></td>
+<td>SEQ[20]=$810</td>
+<td>1,852</td>
+</tr>
+
+<tr>
+<td style="color:#f87171;font-weight:bold">$100</td>
+<td style="font-family:monospace;color:#8a96a8">#2013</td>
+<td style="color:#4ade80;font-weight:bold">$+244,360</td>
+<td>$16,767</td>
+<td style="text-align:center"><span style="color:#4ade80">✓ 生存</span></td>
+<td>SEQ[23]=$1,260</td>
+<td>2,310</td>
+</tr>
+
+<tr>
+<td style="color:#f87171;font-weight:bold">$100</td>
+<td style="font-family:monospace;color:#8a96a8">#2014</td>
+<td style="color:#4ade80;font-weight:bold">$+209,625</td>
+<td>$29,766</td>
+<td style="text-align:center"><span style="color:#4ade80">✓ 生存</span></td>
+<td>SEQ[23]=$1,260</td>
+<td>2,008</td>
+</tr>
+
+<tr>
+<td style="color:#f87171;font-weight:bold">$100</td>
+<td style="font-family:monospace;color:#8a96a8">#2015</td>
+<td style="color:#4ade80;font-weight:bold">$+250,070</td>
+<td>$19,858</td>
+<td style="text-align:center"><span style="color:#4ade80">✓ 生存</span></td>
+<td>SEQ[19]=$700</td>
+<td>2,361</td>
+</tr>
+
+<tr>
+<td style="color:#f87171;font-weight:bold">$100</td>
+<td style="font-family:monospace;color:#8a96a8">#2016</td>
+<td style="color:#4ade80;font-weight:bold">$+244,647</td>
+<td>$12,053</td>
+<td style="text-align:center"><span style="color:#4ade80">✓ 生存</span></td>
+<td>SEQ[19]=$700</td>
+<td>2,316</td>
+</tr>
+
+<tr>
+<td style="color:#f87171;font-weight:bold">$100</td>
+<td style="font-family:monospace;color:#8a96a8">#2017</td>
+<td style="color:#4ade80;font-weight:bold">$+236,132</td>
+<td>$11,956</td>
+<td style="text-align:center"><span style="color:#4ade80">✓ 生存</span></td>
+<td>SEQ[20]=$810</td>
+<td>2,289</td>
+</tr>
+
+<tr>
+<td style="color:#f87171;font-weight:bold">$100</td>
+<td style="font-family:monospace;color:#8a96a8">#2018</td>
+<td style="color:#4ade80;font-weight:bold">$+224,372</td>
+<td>$19,916</td>
+<td style="text-align:center"><span style="color:#4ade80">✓ 生存</span></td>
+<td>SEQ[22]=$1,090</td>
+<td>2,121</td>
+</tr>
+
+<tr>
+<td style="color:#f87171;font-weight:bold">$100</td>
+<td style="font-family:monospace;color:#8a96a8">#2019</td>
+<td style="color:#4ade80;font-weight:bold">$+219,413</td>
+<td>$15,206</td>
+<td style="text-align:center"><span style="color:#4ade80">✓ 生存</span></td>
+<td>SEQ[19]=$700</td>
+<td>2,076</td>
+</tr>
+
+</tbody>
 </table>
 
-<div style="margin-top:30px; padding:20px; background:rgba(0,200,255,0.06); border-radius:8px; font-size:14px; line-height:1.7;">
-<b style="color:#00c8ff">読み方</b>:<br>
-・<b>破綻</b>: $30k 元本が尽きて次の BET が打てなくなった試行数 / 全 20 試行<br>
-・<b>最大DD</b>: ピーク残高からの最大下落幅 (全試行の最悪値)<br>
-・<b>平均リセット数</b>: 利確達成でSEQリセットした回数の平均<br>
-・<b>最大到達SEQ</b>: 全試行で最も深く進んだ SEQ インデックスとその額
+<div class="note">
+<b>📖 読み方</b><br>
+・<b>破綻</b>: $100,000 元本が尽きて次の BET が打てなくなった試行の数<br>
+・<b>最大 DD</b>: ピーク残高からの最大下落幅 (ドローダウン)<br>
+・<b>リセット数</b>: 利確達成で SEQ[0] に戻った回数 (多いほど高頻度小利確)<br>
+・<b>最大到達 SEQ</b>: SEQ 配列で最も深く進んだインデックスとその BET 額
 </div>
 </div></body></html>

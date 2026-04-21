@@ -1,379 +1,571 @@
 <!DOCTYPE html>
 <html lang="ja"><head><meta charset="UTF-8">
-<title>SEQ 5種 公平比較 — B=51.05% vs 52% / 利確$3 vs $10 / 元本$5k</title>
+<title>AJ. SEQ 5種 公平比較 — 元本 $100k / 利確 $30·$50·$100</title>
 <style>
-@import url('https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500;700;900&display=swap');
-* { box-sizing:border-box;margin:0;padding:0 }
-body { font-family:'Noto Sans JP',sans-serif;background:linear-gradient(135deg,#1a1a2e 0%,#16213e 100%);color:white;min-height:100vh;padding:40px 20px }
-.container { max-width:1400px;margin:0 auto }
-h1 { font-size:32px;font-weight:900;background:linear-gradient(135deg,#00c8ff 0%,#6bcf8f 100%);-webkit-background-clip:text;background-clip:text;color:transparent;margin-bottom:8px }
-.sub { color:#a0a0c0;margin-bottom:30px }
-h2 { color:#00c8ff;font-size:22px;margin:30px 0 15px;border-left:4px solid #00c8ff;padding-left:12px }
-h3 { color:#fbbf24;font-size:18px;margin:25px 0 10px }
-table { width:100%;border-collapse:collapse;background:rgba(255,255,255,0.03);border-radius:8px;overflow:hidden;font-size:13px }
-th,td { padding:8px 10px;text-align:right;border-bottom:1px solid rgba(255,255,255,0.08) }
-th { background:rgba(0,200,255,0.1);color:#00c8ff;font-weight:700 }
-td:nth-child(1),td:nth-child(2),th:nth-child(1),th:nth-child(2) { text-align:left }
-.params { background:rgba(0,200,255,0.06);padding:15px;border-radius:8px;margin:15px 0;font-size:14px;line-height:1.7 }
-.back { display:inline-block;margin-bottom:20px;color:#00c8ff;text-decoration:none }
-.back:hover { text-decoration:underline }
+* { box-sizing: border-box; }
+body { font-family: -apple-system, "Segoe UI", "Noto Sans JP", sans-serif; background: #0f1419; color: #e0e6ed; margin: 0; padding: 24px; line-height: 1.5; }
+.container { max-width: 1300px; margin: 0 auto; }
+h1 { color: #ffd700; font-size: 28px; border-bottom: 2px solid #ffd700; padding-bottom: 8px; }
+h2 { color: #c084fc; margin-top: 32px; font-size: 20px; }
+h3 { color: #fbbf24; margin-top: 24px; font-size: 16px; }
+.nav { margin: 16px 0 24px; }
+.nav a { display: inline-block; margin-right: 12px; padding: 8px 16px; background: #1a2332; color: #6dd5ed; text-decoration: none; border-radius: 4px; border: 1px solid #2a3441; font-size: 13px; }
+.nav a:hover { border-color: #c084fc; }
+.banner { background: #2a1a3a; border-left: 5px solid #c084fc; padding: 14px 18px; margin: 16px 0; font-size: 14px; border-radius: 4px; line-height: 1.8; }
+.banner strong { color: #c084fc; }
+.summary { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 12px; margin: 20px 0; }
+.card { background: #1a2332; padding: 14px; border-radius: 4px; border-left: 4px solid #6dd5ed; }
+.card .label { font-size: 11px; color: #8a96a8; text-transform: uppercase; letter-spacing: 0.5px; }
+.card .value { font-size: 22px; font-weight: bold; color: #ffd700; margin-top: 4px; }
+.card .sub { font-size: 11px; color: #8a96a8; margin-top: 2px; }
+.card.profit { border-left-color: #4ade80; }
+.card.profit .value { color: #4ade80; }
+.card.bankrupt { border-left-color: #f87171; }
+.card.bankrupt .value { color: #f87171; }
+.card.dd { border-left-color: #fbbf24; }
+.card.dd .value { color: #fbbf24; }
+table { width: 100%; border-collapse: collapse; font-size: 13px; margin: 12px 0; background: #1a2332; border-radius: 4px; overflow: hidden; }
+table th { background: #0f1419; color: #c084fc; padding: 10px 8px; text-align: right; border-bottom: 2px solid #2a3441; font-weight: 600; }
+table th:nth-child(1), table th:nth-child(2), table td:nth-child(1), table td:nth-child(2) { text-align: left; }
+table td { padding: 8px; text-align: right; border-bottom: 1px solid #2a3441; }
+.seq-box { background: #0f1419; padding: 10px; border-radius: 4px; font-family: monospace; font-size: 11px; color: #6dd5ed; word-wrap: break-word; margin: 6px 0; }
+.note { background: #1a2332; border-left: 4px solid #6dd5ed; padding: 12px 16px; margin: 20px 0; font-size: 13px; color: #b8c5d6; border-radius: 4px; line-height: 1.7; }
+.note b { color: #6dd5ed; }
 </style></head><body>
 <div class="container">
-<a href="index.html" class="back">← index に戻る</a>
-<h1>SEQ 5種 公平比較</h1>
-<div class="sub">base $1 統一 / 元本 $5,000 / 手数料補正なし (勝ち 0.95×) / B=51.05% vs 52% / 利確 $3 vs $10 / N_TRIALS=30 seed共有</div>
+<h1>AJ. SEQ 5種 公平比較 — 元本 $100,000</h1>
 
-<div class="params">
-<b>共通条件</b>:<br>
-・7ターン制 (SET_SIZE=7)<br>
-・BET = seq_val (UPSIZE なし)<br>
-・勝ち delta = +0.95 × seq_val / 負け delta = -seq_val<br>
-・EV/bet at B=52%: +1.40% / at B=51.05%: -0.46%<br>
-・MC: Bernoulli × 1,723,343 ハンド × 30 trial (全 SEQ 間 seed 共有で分散揃え)
+<div class="nav">
+<a href="index.html">← レポートTOP</a>
+<a href="seq2_banker_52pct_30k.html">AI. 新SEQ2 単独</a>
+<a href="seq_bankroll_scan.html">AK. 利確額スキャン</a>
 </div>
 
-<h2>📋 比較対象 SEQ 一覧 (base $1 正規化)</h2>
-
-<div style="margin:15px 0;padding:15px;background:rgba(255,255,255,0.04);border-left:4px solid #fbbf24;border-radius:4px">
-<b style="color:#fbbf24">A: 新SEQ (SEQ_COUNTER)</b> (43要素 / max $500 / 平均1.25x成長)<br>
-<div style="font-family:monospace;font-size:12px;color:#a0a0c0;margin-top:6px;word-wrap:break-word">[1, 3, 5, 7, 10, 13, 16, 20, 25, 30, 35, 40, 45, 50, 60, 70, 80, 90, 100, 110, 120, 130, 145, 160, 175, 190, 205, 220, 235, 250, 265, 280, 300, 320, 340, 360, 380, 400, 420, 440, 460, 480, 500]</div>
+<div class="banner">
+<strong>📊 SEQ 5 種を同条件で公平比較</strong><br>
+全 SEQ とも base $1 (先頭ベット $1) / 元本 $100k / 利確 $30 vs $50 vs $100 / B=51.05% (実データ) vs B=52% (狙い打ち仮定)。<br>
+<strong>実データで生き残れるか? 狙い打ちできた時はどの SEQ が最強か?</strong>
 </div>
 
-<div style="margin:15px 0;padding:15px;background:rgba(255,255,255,0.04);border-left:4px solid #60a5fa;border-radius:4px">
-<b style="color:#60a5fa">B: 旧SEQ</b> (48要素 / max $250 / 平均1.15x成長)<br>
-<div style="font-family:monospace;font-size:12px;color:#a0a0c0;margin-top:6px;word-wrap:break-word">[1, 2, 3, 5, 7, 9, 11, 13, 16, 19, 22, 25, 28, 31, 35, 39, 43, 47, 51, 55, 60, 65, 70, 75, 80, 85, 90, 95, 100, 106, 112, 118, 124, 130, 136, 142, 148, 154, 160, 170, 180, 190, 200, 210, 220, 230, 240, 250]</div>
+<h2>🎯 全体サマリー</h2>
+<div class="summary">
+  <div class="card profit"><div class="label">最優秀 avg PNL</div><div class="value">$+228,425</div><div class="sub">E @ B=52.0% / $30 利確</div></div>
+  <div class="card bankrupt"><div class="label">B=51.05% 破綻</div><div class="value">47 / 450</div><div class="sub">実データ勝率 (10% 破綻)</div></div>
+  <div class="card profit"><div class="label">B=52% 破綻</div><div class="value">0 / 450</div><div class="sub">狙い打ち仮定 (0% 破綻)</div></div>
+  <div class="card"><div class="label">MC 試行</div><div class="value">30</div><div class="sub">seed 共有 / 全 SEQ 同条件</div></div>
 </div>
 
-<div style="margin:15px 0;padding:15px;background:rgba(255,255,255,0.04);border-left:4px solid #a78bfa;border-radius:4px">
-<b style="color:#a78bfa">C: 指数1.30x圧縮</b> (20要素 / max $275 / 指数1.30x)<br>
-<div style="font-family:monospace;font-size:12px;color:#a0a0c0;margin-top:6px;word-wrap:break-word">[1, 2, 3, 4, 5, 7, 9, 12, 15, 20, 26, 34, 44, 57, 74, 96, 125, 163, 212, 275]</div>
+<h2>📋 比較対象 SEQ (先頭ベット $1 統一)</h2>
+
+<div style="margin: 10px 0; padding: 12px 15px; background: #1a2332; border-left: 4px solid #fbbf24; border-radius: 4px">
+<b style="color:#fbbf24">A. 新SEQ (SEQ_COUNTER)</b> <span style="color:#8a96a8; font-size:12px">— 43要素 / max $500 / 平均1.25x成長</span>
+<div class="seq-box">[$1, $3, $5, $7, $10, $13, $16, $20, $25, $30, $35, $40, $45, $50, $60, $70, $80, $90, $100, $110, $120, $130, $145, $160, $175, $190, $205, $220, $235, $250, $265, $280, $300, $320, $340, $360, $380, $400, $420, $440, $460, $480, $500]</div>
 </div>
 
-<div style="margin:15px 0;padding:15px;background:rgba(255,255,255,0.04);border-left:4px solid #4ade80;border-radius:4px">
-<b style="color:#4ade80">D: 指数1.44x理論最適</b> (17要素 / max $500 / 指数1.44x (4W3L recovery保証))<br>
-<div style="font-family:monospace;font-size:12px;color:#a0a0c0;margin-top:6px;word-wrap:break-word">[1, 2, 3, 4, 6, 9, 13, 19, 27, 39, 56, 81, 117, 168, 242, 348, 500]</div>
+<div style="margin: 10px 0; padding: 12px 15px; background: #1a2332; border-left: 4px solid #60a5fa; border-radius: 4px">
+<b style="color:#60a5fa">B. 旧SEQ</b> <span style="color:#8a96a8; font-size:12px">— 48要素 / max $250 / 平均1.15x成長</span>
+<div class="seq-box">[$1, $2, $3, $5, $7, $9, $11, $13, $16, $19, $22, $25, $28, $31, $35, $39, $43, $47, $51, $55, $60, $65, $70, $75, $80, $85, $90, $95, $100, $106, $112, $118, $124, $130, $136, $142, $148, $154, $160, $170, $180, $190, $200, $210, $220, $230, $240, $250]</div>
 </div>
 
-<div style="margin:15px 0;padding:15px;background:rgba(255,255,255,0.04);border-left:4px solid #f87171;border-radius:4px">
-<b style="color:#f87171">E: 新SEQ2 (user, ÷10 正規化)</b> (28要素 / max $280 / ÷10 正規化)<br>
-<div style="font-family:monospace;font-size:12px;color:#a0a0c0;margin-top:6px;word-wrap:break-word">[1, 2, 3, 4, 5, 7, 9, 11, 14, 17, 20, 25, 30, 35, 43, 51, 59, 70, 81, 94, 109, 126, 144, 164, 187, 215, 245, 280]</div>
+<div style="margin: 10px 0; padding: 12px 15px; background: #1a2332; border-left: 4px solid #a78bfa; border-radius: 4px">
+<b style="color:#a78bfa">C. 指数1.30x圧縮</b> <span style="color:#8a96a8; font-size:12px">— 20要素 / max $275 / 指数1.30x</span>
+<div class="seq-box">[$1, $2, $3, $4, $5, $7, $9, $12, $15, $20, $26, $34, $44, $57, $74, $96, $125, $163, $212, $275]</div>
+</div>
+
+<div style="margin: 10px 0; padding: 12px 15px; background: #1a2332; border-left: 4px solid #4ade80; border-radius: 4px">
+<b style="color:#4ade80">D. 指数1.44x理論最適</b> <span style="color:#8a96a8; font-size:12px">— 17要素 / max $500 / 指数1.44x (4W3L recovery保証)</span>
+<div class="seq-box">[$1, $2, $3, $4, $6, $9, $13, $19, $27, $39, $56, $81, $117, $168, $242, $348, $500]</div>
+</div>
+
+<div style="margin: 10px 0; padding: 12px 15px; background: #1a2332; border-left: 4px solid #f87171; border-radius: 4px">
+<b style="color:#f87171">E. 新SEQ2 (user, $1 起点)</b> <span style="color:#8a96a8; font-size:12px">— 30要素 / max $2,800 / $1 起点</span>
+<div class="seq-box">[$1, $5, $10, $20, $30, $40, $50, $70, $90, $110, $140, $170, $200, $250, $300, $350, $430, $510, $590, $700, $810, $940, $1,090, $1,260, $1,440, $1,640, $1,870, $2,150, $2,450, $2,800]</div>
 </div>
 
 
-<h2>🏆 結果ランキング (PNL 降順)</h2>
+<h2>📐 共通条件</h2>
+<div class="note">
+<b>元本</b>: $100,000 / <b>ハンド数</b>: 1,723,343 / <b>試行</b>: 30 (seed 共有で分散揃え)<br>
+<b>ルール</b>: 7 ターン制 / BET = seq_val (手数料補正なし) / 勝ち ×0.95 / 負け ×(−1) / 利確でリセット / 損切なし<br>
+<b>EV/bet</b>: B=52% で +1.40% / B=51.05% で −0.46%
+</div>
 
-<h3>B=51.05% / 利確 $3</h3>
+<h2>🏆 ランキング (avg PNL 降順)</h2>
+
+<h3 style="color:#f87171">B = 51.05% (実データ) / 利確 $30</h3>
 <table>
-<tr><th>順位</th><th>SEQ</th><th>破綻</th><th>avgPNL</th><th>medPNL</th><th>minPNL</th><th>maxPNL</th><th>avgDD</th><th>maxDD</th><th>avgResets</th><th>最大到達SEQ</th></tr>
-
+<thead>
+<tr><th>順位</th><th>SEQ</th><th>破綻</th><th>平均 PNL</th><th>中央値</th><th>最悪</th><th>最良</th><th>平均 DD</th><th>最大 DD</th><th>平均リセット</th><th>最大 SEQ</th></tr>
+</thead>
+<tbody>
 <tr>
-<td>🥇 1</td>
-<td style="color:#4ade80;font-weight:700">D: 指数1.44x理論最適</td>
-<td>30/30</td>
-<td style="color:#f87171">$-4,747.31</td>
-<td style="color:#f87171">$-4,742.88</td>
-<td style="color:#f87171">$-4,988.20</td>
-<td style="color:#f87171">$-4,507.75</td>
-<td>$6,994.27</td>
-<td>$14,615.20</td>
-<td>553</td>
-<td>[16]</td>
-</tr>
-
-<tr>
-<td>🥈 2</td>
-<td style="color:#a78bfa;font-weight:700">C: 指数1.30x圧縮</td>
-<td>30/30</td>
-<td style="color:#f87171">$-4,910.84</td>
-<td style="color:#f87171">$-4,929.38</td>
-<td style="color:#f87171">$-4,999.20</td>
-<td style="color:#f87171">$-4,728.95</td>
-<td>$5,530.52</td>
-<td>$7,601.40</td>
-<td>160</td>
+<td>🥇</td>
+<td style="color:#a78bfa;font-weight:bold">C. 指数1.30x圧縮</td>
+<td style="color:#4ade80">0 / 30</td>
+<td style="color:#f87171;font-weight:bold">$-25,268</td>
+<td style="color:#f87171">$-25,657</td>
+<td style="color:#f87171">$-37,917</td>
+<td style="color:#f87171">$-11,719</td>
+<td>$27,051</td>
+<td style="color:#fbbf24">$40,231</td>
+<td>20</td>
 <td>[19]</td>
 </tr>
 
 <tr>
-<td>🥉 3</td>
-<td style="color:#fbbf24;font-weight:700">A: 新SEQ (SEQ_COUNTER)</td>
-<td>30/30</td>
-<td style="color:#f87171">$-4,970.02</td>
-<td style="color:#f87171">$-4,975.15</td>
-<td style="color:#f87171">$-4,997.70</td>
-<td style="color:#f87171">$-4,774.95</td>
-<td>$5,944.52</td>
-<td>$8,543.40</td>
-<td>224</td>
-<td>[29]</td>
+<td>🥈</td>
+<td style="color:#60a5fa;font-weight:bold">B. 旧SEQ</td>
+<td style="color:#4ade80">0 / 30</td>
+<td style="color:#f87171;font-weight:bold">$-26,223</td>
+<td style="color:#f87171">$-26,405</td>
+<td style="color:#f87171">$-36,346</td>
+<td style="color:#f87171">$-16,093</td>
+<td>$27,674</td>
+<td style="color:#fbbf24">$37,563</td>
+<td>21</td>
+<td>[26]</td>
 </tr>
 
 <tr>
-<td>   4</td>
-<td style="color:#f87171;font-weight:700">E: 新SEQ2 (user, ÷10 正規化)</td>
-<td>30/30</td>
-<td style="color:#f87171">$-4,973.79</td>
-<td style="color:#f87171">$-4,981.23</td>
-<td style="color:#f87171">$-4,998.90</td>
-<td style="color:#f87171">$-4,892.05</td>
-<td>$5,450.85</td>
-<td>$7,517.65</td>
-<td>124</td>
-<td>[24]</td>
-</tr>
-
-<tr>
-<td>   5</td>
-<td style="color:#60a5fa;font-weight:700">B: 旧SEQ</td>
-<td>30/30</td>
-<td style="color:#f87171">$-4,986.18</td>
-<td style="color:#f87171">$-4,989.90</td>
-<td style="color:#f87171">$-4,998.55</td>
-<td style="color:#f87171">$-4,950.35</td>
-<td>$5,526.11</td>
-<td>$6,695.40</td>
-<td>136</td>
-<td>[29]</td>
-</tr>
-
-</table>
-
-<h3>B=51.05% / 利確 $10</h3>
-<table>
-<tr><th>順位</th><th>SEQ</th><th>破綻</th><th>avgPNL</th><th>medPNL</th><th>minPNL</th><th>maxPNL</th><th>avgDD</th><th>maxDD</th><th>avgResets</th><th>最大到達SEQ</th></tr>
-
-<tr>
-<td>🥇 1</td>
-<td style="color:#4ade80;font-weight:700">D: 指数1.44x理論最適</td>
-<td>29/30</td>
-<td style="color:#f87171">$-4,377.43</td>
-<td style="color:#f87171">$-4,778.45</td>
-<td style="color:#f87171">$-4,996.80</td>
-<td style="color:#4ade80">$+7,375.15</td>
-<td>$7,266.79</td>
-<td>$12,481.40</td>
-<td>229</td>
+<td>🥉</td>
+<td style="color:#4ade80;font-weight:bold">D. 指数1.44x理論最適</td>
+<td style="color:#4ade80">0 / 30</td>
+<td style="color:#f87171;font-weight:bold">$-34,851</td>
+<td style="color:#f87171">$-34,644</td>
+<td style="color:#f87171">$-77,285</td>
+<td style="color:#4ade80">$+7,108</td>
+<td>$41,382</td>
+<td style="color:#fbbf24">$81,098</td>
+<td>76</td>
 <td>[16]</td>
 </tr>
 
 <tr>
-<td>🥈 2</td>
-<td style="color:#a78bfa;font-weight:700">C: 指数1.30x圧縮</td>
-<td>30/30</td>
-<td style="color:#f87171">$-4,908.30</td>
-<td style="color:#f87171">$-4,925.03</td>
-<td style="color:#f87171">$-4,996.00</td>
-<td style="color:#f87171">$-4,761.30</td>
-<td>$5,596.22</td>
-<td>$6,758.10</td>
-<td>63</td>
+<td>  4</td>
+<td style="color:#fbbf24;font-weight:bold">A. 新SEQ (SEQ_COUNTER)</td>
+<td style="color:#4ade80">0 / 30</td>
+<td style="color:#f87171;font-weight:bold">$-38,953</td>
+<td style="color:#f87171">$-40,595</td>
+<td style="color:#f87171">$-59,706</td>
+<td style="color:#f87171">$-20,409</td>
+<td>$41,003</td>
+<td style="color:#fbbf24">$60,702</td>
+<td>26</td>
+<td>[32]</td>
+</tr>
+
+<tr>
+<td>  5</td>
+<td style="color:#f87171;font-weight:bold">E. 新SEQ2 (user, $1 起点)</td>
+<td style="color:#f87171;font-weight:bold">16 / 30</td>
+<td style="color:#f87171;font-weight:bold">$-88,034</td>
+<td style="color:#f87171">$-99,308</td>
+<td style="color:#f87171">$-99,988</td>
+<td style="color:#f87171">$-55,887</td>
+<td>$93,840</td>
+<td style="color:#fbbf24">$112,036</td>
+<td>111</td>
+<td>[26]</td>
+</tr>
+</tbody>
+</table>
+
+<h3 style="color:#f87171">B = 51.05% (実データ) / 利確 $50</h3>
+<table>
+<thead>
+<tr><th>順位</th><th>SEQ</th><th>破綻</th><th>平均 PNL</th><th>中央値</th><th>最悪</th><th>最良</th><th>平均 DD</th><th>最大 DD</th><th>平均リセット</th><th>最大 SEQ</th></tr>
+</thead>
+<tbody>
+<tr>
+<td>🥇</td>
+<td style="color:#a78bfa;font-weight:bold">C. 指数1.30x圧縮</td>
+<td style="color:#4ade80">0 / 30</td>
+<td style="color:#f87171;font-weight:bold">$-25,522</td>
+<td style="color:#f87171">$-26,202</td>
+<td style="color:#f87171">$-40,817</td>
+<td style="color:#f87171">$-8,801</td>
+<td>$27,442</td>
+<td style="color:#fbbf24">$42,431</td>
+<td>11</td>
 <td>[19]</td>
 </tr>
 
 <tr>
-<td>🥉 3</td>
-<td style="color:#fbbf24;font-weight:700">A: 新SEQ (SEQ_COUNTER)</td>
-<td>30/30</td>
-<td style="color:#f87171">$-4,971.15</td>
-<td style="color:#f87171">$-4,978.28</td>
-<td style="color:#f87171">$-4,999.60</td>
-<td style="color:#f87171">$-4,900.35</td>
-<td>$5,837.20</td>
-<td>$9,869.95</td>
-<td>75</td>
-<td>[23]</td>
+<td>🥈</td>
+<td style="color:#60a5fa;font-weight:bold">B. 旧SEQ</td>
+<td style="color:#4ade80">0 / 30</td>
+<td style="color:#f87171;font-weight:bold">$-26,850</td>
+<td style="color:#f87171">$-29,145</td>
+<td style="color:#f87171">$-38,804</td>
+<td style="color:#f87171">$-14,879</td>
+<td>$28,444</td>
+<td style="color:#fbbf24">$39,428</td>
+<td>13</td>
+<td>[32]</td>
 </tr>
 
 <tr>
-<td>   4</td>
-<td style="color:#f87171;font-weight:700">E: 新SEQ2 (user, ÷10 正規化)</td>
-<td>30/30</td>
-<td style="color:#f87171">$-4,974.67</td>
-<td style="color:#f87171">$-4,983.00</td>
-<td style="color:#f87171">$-4,999.95</td>
-<td style="color:#f87171">$-4,895.70</td>
-<td>$5,544.83</td>
-<td>$7,276.85</td>
-<td>52</td>
-<td>[22]</td>
-</tr>
-
-<tr>
-<td>   5</td>
-<td style="color:#60a5fa;font-weight:700">B: 旧SEQ</td>
-<td>30/30</td>
-<td style="color:#f87171">$-4,987.59</td>
-<td style="color:#f87171">$-4,989.50</td>
-<td style="color:#f87171">$-4,999.15</td>
-<td style="color:#f87171">$-4,954.90</td>
-<td>$5,627.73</td>
-<td>$7,287.00</td>
-<td>58</td>
-<td>[29]</td>
-</tr>
-
-</table>
-
-<h3>B=52.00% / 利確 $3</h3>
-<table>
-<tr><th>順位</th><th>SEQ</th><th>破綻</th><th>avgPNL</th><th>medPNL</th><th>minPNL</th><th>maxPNL</th><th>avgDD</th><th>maxDD</th><th>avgResets</th><th>最大到達SEQ</th></tr>
-
-<tr>
-<td>🥇 1</td>
-<td style="color:#fbbf24;font-weight:700">A: 新SEQ (SEQ_COUNTER)</td>
-<td>0/30</td>
-<td style="color:#4ade80">$+92,109.25</td>
-<td style="color:#4ade80">$+92,745.87</td>
-<td style="color:#4ade80">$+77,070.45</td>
-<td style="color:#4ade80">$+103,190.05</td>
-<td>$3,493.27</td>
-<td>$6,713.40</td>
-<td>21,367</td>
-<td>[28]</td>
-</tr>
-
-<tr>
-<td>🥈 2</td>
-<td style="color:#4ade80;font-weight:700">D: 指数1.44x理論最適</td>
-<td>0/30</td>
-<td style="color:#4ade80">$+73,578.48</td>
-<td style="color:#4ade80">$+74,303.52</td>
-<td style="color:#4ade80">$+43,891.05</td>
-<td style="color:#4ade80">$+93,274.60</td>
-<td>$9,765.36</td>
-<td>$22,665.20</td>
-<td>18,768</td>
+<td>🥉</td>
+<td style="color:#4ade80;font-weight:bold">D. 指数1.44x理論最適</td>
+<td style="color:#4ade80">0 / 30</td>
+<td style="color:#f87171;font-weight:bold">$-37,413</td>
+<td style="color:#f87171">$-31,865</td>
+<td style="color:#f87171">$-74,299</td>
+<td style="color:#f87171">$-4,503</td>
+<td>$43,987</td>
+<td style="color:#fbbf24">$80,504</td>
+<td>47</td>
 <td>[16]</td>
 </tr>
 
 <tr>
-<td>🥉 3</td>
-<td style="color:#60a5fa;font-weight:700">B: 旧SEQ</td>
-<td>0/30</td>
-<td style="color:#4ade80">$+65,221.13</td>
-<td style="color:#4ade80">$+64,127.10</td>
-<td style="color:#4ade80">$+59,685.15</td>
-<td style="color:#4ade80">$+72,784.75</td>
-<td>$1,955.64</td>
-<td>$3,365.00</td>
-<td>16,625</td>
+<td>  4</td>
+<td style="color:#fbbf24;font-weight:bold">A. 新SEQ (SEQ_COUNTER)</td>
+<td style="color:#4ade80">0 / 30</td>
+<td style="color:#f87171;font-weight:bold">$-39,191</td>
+<td style="color:#f87171">$-39,279</td>
+<td style="color:#f87171">$-60,207</td>
+<td style="color:#f87171">$-19,272</td>
+<td>$41,492</td>
+<td style="color:#fbbf24">$62,070</td>
+<td>19</td>
+<td>[32]</td>
+</tr>
+
+<tr>
+<td>  5</td>
+<td style="color:#f87171;font-weight:bold">E. 新SEQ2 (user, $1 起点)</td>
+<td style="color:#f87171;font-weight:bold">15 / 30</td>
+<td style="color:#f87171;font-weight:bold">$-88,477</td>
+<td style="color:#f87171">$-95,558</td>
+<td style="color:#f87171">$-99,998</td>
+<td style="color:#f87171">$-39,661</td>
+<td>$95,303</td>
+<td style="color:#fbbf24">$110,438</td>
+<td>80</td>
+<td>[26]</td>
+</tr>
+</tbody>
+</table>
+
+<h3 style="color:#f87171">B = 51.05% (実データ) / 利確 $100</h3>
+<table>
+<thead>
+<tr><th>順位</th><th>SEQ</th><th>破綻</th><th>平均 PNL</th><th>中央値</th><th>最悪</th><th>最良</th><th>平均 DD</th><th>最大 DD</th><th>平均リセット</th><th>最大 SEQ</th></tr>
+</thead>
+<tbody>
+<tr>
+<td>🥇</td>
+<td style="color:#a78bfa;font-weight:bold">C. 指数1.30x圧縮</td>
+<td style="color:#4ade80">0 / 30</td>
+<td style="color:#f87171;font-weight:bold">$-25,275</td>
+<td style="color:#f87171">$-24,548</td>
+<td style="color:#f87171">$-46,764</td>
+<td style="color:#f87171">$-8,775</td>
+<td>$27,135</td>
+<td style="color:#fbbf24">$47,758</td>
+<td>6</td>
+<td>[19]</td>
+</tr>
+
+<tr>
+<td>🥈</td>
+<td style="color:#60a5fa;font-weight:bold">B. 旧SEQ</td>
+<td style="color:#4ade80">0 / 30</td>
+<td style="color:#f87171;font-weight:bold">$-26,478</td>
+<td style="color:#f87171">$-28,044</td>
+<td style="color:#f87171">$-38,804</td>
+<td style="color:#f87171">$-14,624</td>
+<td>$27,927</td>
+<td style="color:#fbbf24">$39,428</td>
+<td>5</td>
+<td>[30]</td>
+</tr>
+
+<tr>
+<td>🥉</td>
+<td style="color:#4ade80;font-weight:bold">D. 指数1.44x理論最適</td>
+<td style="color:#4ade80">0 / 30</td>
+<td style="color:#f87171;font-weight:bold">$-33,749</td>
+<td style="color:#f87171">$-33,126</td>
+<td style="color:#f87171">$-70,627</td>
+<td style="color:#4ade80">$+1,395</td>
+<td>$40,523</td>
+<td style="color:#fbbf24">$72,453</td>
+<td>25</td>
+<td>[16]</td>
+</tr>
+
+<tr>
+<td>  4</td>
+<td style="color:#fbbf24;font-weight:bold">A. 新SEQ (SEQ_COUNTER)</td>
+<td style="color:#4ade80">0 / 30</td>
+<td style="color:#f87171;font-weight:bold">$-38,479</td>
+<td style="color:#f87171">$-39,431</td>
+<td style="color:#f87171">$-56,908</td>
+<td style="color:#f87171">$-20,729</td>
+<td>$40,708</td>
+<td style="color:#fbbf24">$60,702</td>
+<td>9</td>
+<td>[29]</td>
+</tr>
+
+<tr>
+<td>  5</td>
+<td style="color:#f87171;font-weight:bold">E. 新SEQ2 (user, $1 起点)</td>
+<td style="color:#f87171;font-weight:bold">16 / 30</td>
+<td style="color:#f87171;font-weight:bold">$-89,588</td>
+<td style="color:#f87171">$-99,370</td>
+<td style="color:#f87171">$-99,980</td>
+<td style="color:#f87171">$-42,615</td>
+<td>$97,041</td>
+<td style="color:#fbbf24">$112,760</td>
+<td>45</td>
+<td>[29]</td>
+</tr>
+</tbody>
+</table>
+
+<h3 style="color:#4ade80">B = 52.00% (狙い打ち仮定) / 利確 $30</h3>
+<table>
+<thead>
+<tr><th>順位</th><th>SEQ</th><th>破綻</th><th>平均 PNL</th><th>中央値</th><th>最悪</th><th>最良</th><th>平均 DD</th><th>最大 DD</th><th>平均リセット</th><th>最大 SEQ</th></tr>
+</thead>
+<tbody>
+<tr>
+<td>🥇</td>
+<td style="color:#f87171;font-weight:bold">E. 新SEQ2 (user, $1 起点)</td>
+<td style="color:#4ade80">0 / 30</td>
+<td style="color:#4ade80;font-weight:bold">$+228,425</td>
+<td style="color:#4ade80">$+225,171</td>
+<td style="color:#4ade80">$+174,238</td>
+<td style="color:#4ade80">$+278,715</td>
+<td>$16,266</td>
+<td style="color:#fbbf24">$33,327</td>
+<td>6,559</td>
 <td>[25]</td>
 </tr>
 
 <tr>
-<td>   4</td>
-<td style="color:#a78bfa;font-weight:700">C: 指数1.30x圧縮</td>
-<td>0/30</td>
-<td style="color:#4ade80">$+60,125.47</td>
-<td style="color:#4ade80">$+60,217.92</td>
-<td style="color:#4ade80">$+51,048.15</td>
-<td style="color:#4ade80">$+69,917.95</td>
-<td>$3,986.57</td>
-<td>$8,945.70</td>
-<td>15,658</td>
-<td>[19]</td>
-</tr>
-
-<tr>
-<td>   5</td>
-<td style="color:#f87171;font-weight:700">E: 新SEQ2 (user, ÷10 正規化)</td>
-<td>0/30</td>
-<td style="color:#4ade80">$+58,618.27</td>
-<td style="color:#4ade80">$+57,777.40</td>
-<td style="color:#4ade80">$+52,519.95</td>
-<td style="color:#4ade80">$+67,604.75</td>
-<td>$2,207.23</td>
-<td>$3,826.95</td>
-<td>15,273</td>
+<td>🥈</td>
+<td style="color:#fbbf24;font-weight:bold">A. 新SEQ (SEQ_COUNTER)</td>
+<td style="color:#4ade80">0 / 30</td>
+<td style="color:#4ade80;font-weight:bold">$+94,044</td>
+<td style="color:#4ade80">$+94,224</td>
+<td style="color:#4ade80">$+82,169</td>
+<td style="color:#4ade80">$+104,052</td>
+<td>$3,253</td>
+<td style="color:#fbbf24">$5,014</td>
+<td>2,985</td>
 <td>[25]</td>
 </tr>
 
-</table>
-
-<h3>B=52.00% / 利確 $10</h3>
-<table>
-<tr><th>順位</th><th>SEQ</th><th>破綻</th><th>avgPNL</th><th>medPNL</th><th>minPNL</th><th>maxPNL</th><th>avgDD</th><th>maxDD</th><th>avgResets</th><th>最大到達SEQ</th></tr>
+<tr>
+<td>🥉</td>
+<td style="color:#4ade80;font-weight:bold">D. 指数1.44x理論最適</td>
+<td style="color:#4ade80">0 / 30</td>
+<td style="color:#4ade80;font-weight:bold">$+71,773</td>
+<td style="color:#4ade80">$+71,952</td>
+<td style="color:#4ade80">$+52,515</td>
+<td style="color:#4ade80">$+96,486</td>
+<td>$10,551</td>
+<td style="color:#fbbf24">$22,665</td>
+<td>2,312</td>
+<td>[16]</td>
+</tr>
 
 <tr>
-<td>🥇 1</td>
-<td style="color:#fbbf24;font-weight:700">A: 新SEQ (SEQ_COUNTER)</td>
-<td>0/30</td>
-<td style="color:#4ade80">$+92,602.45</td>
-<td style="color:#4ade80">$+91,962.30</td>
-<td style="color:#4ade80">$+81,214.50</td>
-<td style="color:#4ade80">$+104,469.20</td>
-<td>$3,354.07</td>
-<td>$5,824.95</td>
-<td>8,123</td>
+<td>  4</td>
+<td style="color:#60a5fa;font-weight:bold">B. 旧SEQ</td>
+<td style="color:#4ade80">0 / 30</td>
+<td style="color:#4ade80;font-weight:bold">$+65,500</td>
+<td style="color:#4ade80">$+66,003</td>
+<td style="color:#4ade80">$+57,189</td>
+<td style="color:#4ade80">$+74,798</td>
+<td>$2,009</td>
+<td style="color:#fbbf24">$4,264</td>
+<td>2,116</td>
 <td>[27]</td>
 </tr>
 
 <tr>
-<td>🥈 2</td>
-<td style="color:#60a5fa;font-weight:700">B: 旧SEQ</td>
-<td>0/30</td>
-<td style="color:#4ade80">$+65,329.17</td>
-<td style="color:#4ade80">$+65,276.45</td>
-<td style="color:#4ade80">$+56,922.45</td>
-<td style="color:#4ade80">$+73,588.65</td>
-<td>$1,907.99</td>
-<td>$3,274.50</td>
-<td>5,982</td>
+<td>  5</td>
+<td style="color:#a78bfa;font-weight:bold">C. 指数1.30x圧縮</td>
+<td style="color:#4ade80">0 / 30</td>
+<td style="color:#4ade80;font-weight:bold">$+60,683</td>
+<td style="color:#4ade80">$+61,547</td>
+<td style="color:#4ade80">$+51,065</td>
+<td style="color:#4ade80">$+68,957</td>
+<td>$3,793</td>
+<td style="color:#fbbf24">$7,747</td>
+<td>1,973</td>
+<td>[19]</td>
+</tr>
+</tbody>
+</table>
+
+<h3 style="color:#4ade80">B = 52.00% (狙い打ち仮定) / 利確 $50</h3>
+<table>
+<thead>
+<tr><th>順位</th><th>SEQ</th><th>破綻</th><th>平均 PNL</th><th>中央値</th><th>最悪</th><th>最良</th><th>平均 DD</th><th>最大 DD</th><th>平均リセット</th><th>最大 SEQ</th></tr>
+</thead>
+<tbody>
+<tr>
+<td>🥇</td>
+<td style="color:#f87171;font-weight:bold">E. 新SEQ2 (user, $1 起点)</td>
+<td style="color:#4ade80">0 / 30</td>
+<td style="color:#4ade80;font-weight:bold">$+225,056</td>
+<td style="color:#4ade80">$+221,505</td>
+<td style="color:#4ade80">$+183,641</td>
+<td style="color:#4ade80">$+266,582</td>
+<td>$15,944</td>
+<td style="color:#fbbf24">$28,794</td>
+<td>4,069</td>
 <td>[25]</td>
 </tr>
 
 <tr>
-<td>🥉 3</td>
-<td style="color:#4ade80;font-weight:700">D: 指数1.44x理論最適</td>
-<td>3/30</td>
-<td style="color:#4ade80">$+62,868.86</td>
-<td style="color:#4ade80">$+69,347.32</td>
-<td style="color:#f87171">$-4,956.50</td>
-<td style="color:#4ade80">$+95,100.30</td>
-<td>$9,906.47</td>
-<td>$22,665.20</td>
-<td>5,802</td>
+<td>🥈</td>
+<td style="color:#fbbf24;font-weight:bold">A. 新SEQ (SEQ_COUNTER)</td>
+<td style="color:#4ade80">0 / 30</td>
+<td style="color:#4ade80;font-weight:bold">$+92,945</td>
+<td style="color:#4ade80">$+92,683</td>
+<td style="color:#4ade80">$+74,305</td>
+<td style="color:#4ade80">$+110,427</td>
+<td>$3,168</td>
+<td style="color:#fbbf24">$8,149</td>
+<td>1,808</td>
+<td>[28]</td>
+</tr>
+
+<tr>
+<td>🥉</td>
+<td style="color:#4ade80;font-weight:bold">D. 指数1.44x理論最適</td>
+<td style="color:#4ade80">0 / 30</td>
+<td style="color:#4ade80;font-weight:bold">$+71,973</td>
+<td style="color:#4ade80">$+74,146</td>
+<td style="color:#4ade80">$+36,215</td>
+<td style="color:#4ade80">$+93,851</td>
+<td>$10,014</td>
+<td style="color:#fbbf24">$20,781</td>
+<td>1,418</td>
 <td>[16]</td>
 </tr>
 
 <tr>
-<td>   4</td>
-<td style="color:#a78bfa;font-weight:700">C: 指数1.30x圧縮</td>
-<td>0/30</td>
-<td style="color:#4ade80">$+60,093.32</td>
-<td style="color:#4ade80">$+59,552.22</td>
-<td style="color:#4ade80">$+48,657.90</td>
-<td style="color:#4ade80">$+68,805.55</td>
-<td>$4,056.94</td>
-<td>$8,605.35</td>
-<td>5,604</td>
-<td>[19]</td>
-</tr>
-
-<tr>
-<td>   5</td>
-<td style="color:#f87171;font-weight:700">E: 新SEQ2 (user, ÷10 正規化)</td>
-<td>0/30</td>
-<td style="color:#4ade80">$+58,880.33</td>
-<td style="color:#4ade80">$+58,674.65</td>
-<td style="color:#4ade80">$+52,310.25</td>
-<td style="color:#4ade80">$+67,894.25</td>
-<td>$2,226.39</td>
-<td>$4,409.35</td>
-<td>5,470</td>
+<td>  4</td>
+<td style="color:#60a5fa;font-weight:bold">B. 旧SEQ</td>
+<td style="color:#4ade80">0 / 30</td>
+<td style="color:#4ade80;font-weight:bold">$+65,582</td>
+<td style="color:#4ade80">$+64,402</td>
+<td style="color:#4ade80">$+57,801</td>
+<td style="color:#4ade80">$+73,291</td>
+<td>$1,891</td>
+<td style="color:#fbbf24">$3,344</td>
+<td>1,288</td>
 <td>[25]</td>
 </tr>
 
+<tr>
+<td>  5</td>
+<td style="color:#a78bfa;font-weight:bold">C. 指数1.30x圧縮</td>
+<td style="color:#4ade80">0 / 30</td>
+<td style="color:#4ade80;font-weight:bold">$+60,310</td>
+<td style="color:#4ade80">$+60,853</td>
+<td style="color:#4ade80">$+51,823</td>
+<td style="color:#4ade80">$+69,372</td>
+<td>$3,816</td>
+<td style="color:#fbbf24">$8,888</td>
+<td>1,190</td>
+<td>[19]</td>
+</tr>
+</tbody>
+</table>
+
+<h3 style="color:#4ade80">B = 52.00% (狙い打ち仮定) / 利確 $100</h3>
+<table>
+<thead>
+<tr><th>順位</th><th>SEQ</th><th>破綻</th><th>平均 PNL</th><th>中央値</th><th>最悪</th><th>最良</th><th>平均 DD</th><th>最大 DD</th><th>平均リセット</th><th>最大 SEQ</th></tr>
+</thead>
+<tbody>
+<tr>
+<td>🥇</td>
+<td style="color:#f87171;font-weight:bold">E. 新SEQ2 (user, $1 起点)</td>
+<td style="color:#4ade80">0 / 30</td>
+<td style="color:#4ade80;font-weight:bold">$+225,233</td>
+<td style="color:#4ade80">$+227,895</td>
+<td style="color:#4ade80">$+171,211</td>
+<td style="color:#4ade80">$+270,356</td>
+<td>$15,925</td>
+<td style="color:#fbbf24">$48,513</td>
+<td>2,137</td>
+<td>[28]</td>
+</tr>
+
+<tr>
+<td>🥈</td>
+<td style="color:#fbbf24;font-weight:bold">A. 新SEQ (SEQ_COUNTER)</td>
+<td style="color:#4ade80">0 / 30</td>
+<td style="color:#4ade80;font-weight:bold">$+93,160</td>
+<td style="color:#4ade80">$+92,308</td>
+<td style="color:#4ade80">$+78,582</td>
+<td style="color:#4ade80">$+109,148</td>
+<td>$3,341</td>
+<td style="color:#fbbf24">$6,927</td>
+<td>918</td>
+<td>[28]</td>
+</tr>
+
+<tr>
+<td>🥉</td>
+<td style="color:#4ade80;font-weight:bold">D. 指数1.44x理論最適</td>
+<td style="color:#4ade80">0 / 30</td>
+<td style="color:#4ade80;font-weight:bold">$+70,671</td>
+<td style="color:#4ade80">$+71,058</td>
+<td style="color:#4ade80">$+39,332</td>
+<td style="color:#4ade80">$+89,298</td>
+<td>$10,317</td>
+<td style="color:#fbbf24">$22,665</td>
+<td>707</td>
+<td>[16]</td>
+</tr>
+
+<tr>
+<td>  4</td>
+<td style="color:#60a5fa;font-weight:bold">B. 旧SEQ</td>
+<td style="color:#4ade80">0 / 30</td>
+<td style="color:#4ade80;font-weight:bold">$+64,976</td>
+<td style="color:#4ade80">$+63,920</td>
+<td style="color:#4ade80">$+56,486</td>
+<td style="color:#4ade80">$+74,602</td>
+<td>$2,140</td>
+<td style="color:#fbbf24">$4,458</td>
+<td>644</td>
+<td>[28]</td>
+</tr>
+
+<tr>
+<td>  5</td>
+<td style="color:#a78bfa;font-weight:bold">C. 指数1.30x圧縮</td>
+<td style="color:#4ade80">0 / 30</td>
+<td style="color:#4ade80;font-weight:bold">$+59,800</td>
+<td style="color:#4ade80">$+59,501</td>
+<td style="color:#4ade80">$+49,577</td>
+<td style="color:#4ade80">$+69,608</td>
+<td>$4,221</td>
+<td style="color:#fbbf24">$8,888</td>
+<td>595</td>
+<td>[19]</td>
+</tr>
+</tbody>
 </table>
 
 
-<div style="margin-top:30px;padding:20px;background:rgba(0,200,255,0.06);border-radius:8px;font-size:14px;line-height:1.7">
-<b style="color:#00c8ff">読み方</b>:<br>
-・<b>B=51.05%</b> は実データの Banker 勝率 (フィルタなしの基準)<br>
-・<b>B=52%</b> は「狙い撃ちできた場合」の仮定値<br>
-・B=51.05% で +PNL 出せる SEQ が本当に強い (実データ耐性)<br>
-・B=52% での PNL は上振れ期待値<br>
-・avgDD は平均ドローダウン、maxDD は全試行の最悪ケース
+<div class="note">
+<b>📖 読み方</b><br>
+・<b>B=51.05%</b> は Evolution 全ハンドの実データ Banker 勝率 — ここで +PNL 出せれば「実データ耐性」あり<br>
+・<b>B=52%</b> は「Banker 出やすい局面をフィルタで狙い撃ちできた場合」の仮定値 — 上振れ期待<br>
+・<b>平均 PNL</b> は 30 試行の平均 / <b>中央値</b> は外れ値に強い指標<br>
+・<b>最大 DD</b> は全試行中の最悪ドローダウン
 </div>
-
 </div></body></html>
