@@ -1,0 +1,58 @@
+<!DOCTYPE html>
+<html lang="ja"><head><meta charset="UTF-8">
+<title>SEQ × 元本スケールスキャン</title>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500;700;900&display=swap');
+* { box-sizing:border-box;margin:0;padding:0 }
+body { font-family:'Noto Sans JP',sans-serif;background:linear-gradient(135deg,#1a1a2e 0%,#16213e 100%);color:white;min-height:100vh;padding:40px 20px }
+.container { max-width:1400px;margin:0 auto }
+h1 { font-size:32px;font-weight:900;background:linear-gradient(135deg,#00c8ff 0%,#6bcf8f 100%);-webkit-background-clip:text;background-clip:text;color:transparent;margin-bottom:8px }
+.sub { color:#a0a0c0;margin-bottom:30px }
+h2 { color:#00c8ff;font-size:22px;margin:25px 0 15px;border-left:4px solid #00c8ff;padding-left:12px }
+table { width:100%;border-collapse:collapse;background:rgba(255,255,255,0.03);border-radius:8px;overflow:hidden;font-size:14px }
+th,td { padding:12px;text-align:center;border-bottom:1px solid rgba(255,255,255,0.08) }
+th { background:rgba(0,200,255,0.1);color:#00c8ff;font-weight:700 }
+td:first-child,th:first-child { text-align:left }
+.params { background:rgba(0,200,255,0.06);padding:15px;border-radius:8px;margin:15px 0;font-size:14px;line-height:1.7 }
+.back { display:inline-block;margin-bottom:20px;color:#00c8ff;text-decoration:none }
+.back:hover { text-decoration:underline }
+</style></head><body>
+<div class="container">
+<a href="index.html" class="back">← index に戻る</a>
+<h1>SEQ × 元本スケールスキャン</h1>
+<div class="sub">5 SEQ × 6 bankrolls × 2 B_rates × 20 trial = 1200 sims / 手数料補正なし / 7T</div>
+
+<div class="params">
+<b>狙い</b>: 各 SEQ が B=51.05% (実データ) で生き残るに最低いくら元本が必要か?<br>
+<b>条件</b>: base $1 統一 / 利確 $10 / BET そのまま / 勝ち 0.95× / 7ターン制 / N_TRIALS=20 / seed共有
+</div>
+
+
+<h2>B=51.05% (実データ)</h2>
+<table>
+<tr><th>SEQ \ 元本</th><th>$5,000</th><th>$10,000</th><th>$20,000</th><th>$50,000</th><th>$100,000</th><th>$200,000</th></tr>
+<tr><td style="color:#fbbf24;font-weight:700">A: 新SEQ (SEQ_COUNTER)</td><td><b style="color:#f87171">20/20</b><br><span style="color:#f87171;font-size:12px">$-4,979</span></td><td><b style="color:#f87171">20/20</b><br><span style="color:#f87171;font-size:12px">$-9,978</span></td><td><b style="color:#f87171">17/20</b><br><span style="color:#f87171;font-size:12px">$-19,592</span></td><td><b style="color:#fb923c">2/20</b><br><span style="color:#f87171;font-size:12px">$-32,549</span></td><td><b style="color:#4ade80">0/20</b><br><span style="color:#f87171;font-size:12px">$-33,845</span></td><td><b style="color:#4ade80">0/20</b><br><span style="color:#f87171;font-size:12px">$-33,845</span></td></tr><tr><td style="color:#60a5fa;font-weight:700">B: 旧SEQ</td><td><b style="color:#f87171">20/20</b><br><span style="color:#f87171;font-size:12px">$-4,982</span></td><td><b style="color:#f87171">20/20</b><br><span style="color:#f87171;font-size:12px">$-9,982</span></td><td><b style="color:#f87171">13/20</b><br><span style="color:#f87171;font-size:12px">$-17,950</span></td><td><b style="color:#fbbf24">1/20</b><br><span style="color:#f87171;font-size:12px">$-23,850</span></td><td><b style="color:#4ade80">0/20</b><br><span style="color:#f87171;font-size:12px">$-23,841</span></td><td><b style="color:#4ade80">0/20</b><br><span style="color:#f87171;font-size:12px">$-23,841</span></td></tr><tr><td style="color:#a78bfa;font-weight:700">C: 指数1.30x</td><td><b style="color:#f87171">20/20</b><br><span style="color:#f87171;font-size:12px">$-4,932</span></td><td><b style="color:#f87171">18/20</b><br><span style="color:#f87171;font-size:12px">$-9,458</span></td><td><b style="color:#f87171">13/20</b><br><span style="color:#f87171;font-size:12px">$-16,626</span></td><td><b style="color:#fbbf24">1/20</b><br><span style="color:#f87171;font-size:12px">$-22,480</span></td><td><b style="color:#4ade80">0/20</b><br><span style="color:#f87171;font-size:12px">$-22,574</span></td><td><b style="color:#4ade80">0/20</b><br><span style="color:#f87171;font-size:12px">$-22,574</span></td></tr><tr><td style="color:#4ade80;font-weight:700">D: 指数1.44x</td><td><b style="color:#f87171">20/20</b><br><span style="color:#f87171;font-size:12px">$-4,777</span></td><td><b style="color:#f87171">18/20</b><br><span style="color:#f87171;font-size:12px">$-9,199</span></td><td><b style="color:#f87171">14/20</b><br><span style="color:#f87171;font-size:12px">$-16,205</span></td><td><b style="color:#fb923c">3/20</b><br><span style="color:#f87171;font-size:12px">$-27,183</span></td><td><b style="color:#4ade80">0/20</b><br><span style="color:#f87171;font-size:12px">$-31,323</span></td><td><b style="color:#4ade80">0/20</b><br><span style="color:#f87171;font-size:12px">$-31,323</span></td></tr><tr><td style="color:#f87171;font-weight:700">E: 新SEQ2 (÷10)</td><td><b style="color:#f87171">20/20</b><br><span style="color:#f87171;font-size:12px">$-4,981</span></td><td><b style="color:#f87171">19/20</b><br><span style="color:#f87171;font-size:12px">$-9,875</span></td><td><b style="color:#f87171">11/20</b><br><span style="color:#f87171;font-size:12px">$-17,274</span></td><td><b style="color:#4ade80">0/20</b><br><span style="color:#f87171;font-size:12px">$-20,910</span></td><td><b style="color:#4ade80">0/20</b><br><span style="color:#f87171;font-size:12px">$-20,910</span></td><td><b style="color:#4ade80">0/20</b><br><span style="color:#f87171;font-size:12px">$-20,910</span></td></tr>
+</table>
+<div style="font-size:12px;color:#a0a0c0;margin:5px 0 20px">
+上段: 破綻数 / 20 (緑=0破綻 / 黄=少数 / 橙=過半数 / 赤=全滅) / 下段: 平均PNL
+</div>
+
+<h2>B=52.00% (狙い打ち)</h2>
+<table>
+<tr><th>SEQ \ 元本</th><th>$5,000</th><th>$10,000</th><th>$20,000</th><th>$50,000</th><th>$100,000</th><th>$200,000</th></tr>
+<tr><td style="color:#fbbf24;font-weight:700">A: 新SEQ (SEQ_COUNTER)</td><td><b style="color:#4ade80">0/20</b><br><span style="color:#4ade80;font-size:12px">$+96,633</span></td><td><b style="color:#4ade80">0/20</b><br><span style="color:#4ade80;font-size:12px">$+96,633</span></td><td><b style="color:#4ade80">0/20</b><br><span style="color:#4ade80;font-size:12px">$+96,633</span></td><td><b style="color:#4ade80">0/20</b><br><span style="color:#4ade80;font-size:12px">$+96,633</span></td><td><b style="color:#4ade80">0/20</b><br><span style="color:#4ade80;font-size:12px">$+96,633</span></td><td><b style="color:#4ade80">0/20</b><br><span style="color:#4ade80;font-size:12px">$+96,633</span></td></tr><tr><td style="color:#60a5fa;font-weight:700">B: 旧SEQ</td><td><b style="color:#4ade80">0/20</b><br><span style="color:#4ade80;font-size:12px">$+68,235</span></td><td><b style="color:#4ade80">0/20</b><br><span style="color:#4ade80;font-size:12px">$+68,235</span></td><td><b style="color:#4ade80">0/20</b><br><span style="color:#4ade80;font-size:12px">$+68,235</span></td><td><b style="color:#4ade80">0/20</b><br><span style="color:#4ade80;font-size:12px">$+68,235</span></td><td><b style="color:#4ade80">0/20</b><br><span style="color:#4ade80;font-size:12px">$+68,235</span></td><td><b style="color:#4ade80">0/20</b><br><span style="color:#4ade80;font-size:12px">$+68,235</span></td></tr><tr><td style="color:#a78bfa;font-weight:700">C: 指数1.30x</td><td><b style="color:#4ade80">0/20</b><br><span style="color:#4ade80;font-size:12px">$+63,295</span></td><td><b style="color:#4ade80">0/20</b><br><span style="color:#4ade80;font-size:12px">$+63,295</span></td><td><b style="color:#4ade80">0/20</b><br><span style="color:#4ade80;font-size:12px">$+63,295</span></td><td><b style="color:#4ade80">0/20</b><br><span style="color:#4ade80;font-size:12px">$+63,295</span></td><td><b style="color:#4ade80">0/20</b><br><span style="color:#4ade80;font-size:12px">$+63,295</span></td><td><b style="color:#4ade80">0/20</b><br><span style="color:#4ade80;font-size:12px">$+63,295</span></td></tr><tr><td style="color:#4ade80;font-weight:700">D: 指数1.44x</td><td><b style="color:#fbbf24">1/20</b><br><span style="color:#4ade80;font-size:12px">$+72,549</span></td><td><b style="color:#4ade80">0/20</b><br><span style="color:#4ade80;font-size:12px">$+76,224</span></td><td><b style="color:#4ade80">0/20</b><br><span style="color:#4ade80;font-size:12px">$+76,224</span></td><td><b style="color:#4ade80">0/20</b><br><span style="color:#4ade80;font-size:12px">$+76,224</span></td><td><b style="color:#4ade80">0/20</b><br><span style="color:#4ade80;font-size:12px">$+76,224</span></td><td><b style="color:#4ade80">0/20</b><br><span style="color:#4ade80;font-size:12px">$+76,224</span></td></tr><tr><td style="color:#f87171;font-weight:700">E: 新SEQ2 (÷10)</td><td><b style="color:#4ade80">0/20</b><br><span style="color:#4ade80;font-size:12px">$+62,056</span></td><td><b style="color:#4ade80">0/20</b><br><span style="color:#4ade80;font-size:12px">$+62,056</span></td><td><b style="color:#4ade80">0/20</b><br><span style="color:#4ade80;font-size:12px">$+62,056</span></td><td><b style="color:#4ade80">0/20</b><br><span style="color:#4ade80;font-size:12px">$+62,056</span></td><td><b style="color:#4ade80">0/20</b><br><span style="color:#4ade80;font-size:12px">$+62,056</span></td><td><b style="color:#4ade80">0/20</b><br><span style="color:#4ade80;font-size:12px">$+62,056</span></td></tr>
+</table>
+<div style="font-size:12px;color:#a0a0c0;margin:5px 0 20px">
+上段: 破綻数 / 20 (緑=0破綻 / 黄=少数 / 橙=過半数 / 赤=全滅) / 下段: 平均PNL
+</div>
+
+
+<div style="margin-top:30px;padding:20px;background:rgba(0,200,255,0.06);border-radius:8px;font-size:14px;line-height:1.7">
+<b style="color:#00c8ff">読み方</b>:<br>
+・<b>破綻数</b>: 20 試行中、元本が尽きて BET 不能になった数<br>
+・<b>平均PNL</b>: 元本からの純損益 ($ — 破綻すれば -元本 相当の損失が記録される)<br>
+・<b>B=51.05%</b>: 実データ勝率 (フィルタなし)、負け戦略<br>
+・<b>B=52%</b>: 狙い打ちできた場合、+1.4% EV の勝ち戦略<br>
+・<b>破綻 0/20</b> = 緑、<b>全滅 20/20</b> = 赤
+</div>
+</div></body></html>

@@ -1,0 +1,1127 @@
+<!DOCTYPE html>
+<html lang="ja"><head><meta charset="UTF-8">
+<title>B=52% 狙い打ちフィルタ探索 — 実データ分析</title>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500;700;900&display=swap');
+* { box-sizing:border-box;margin:0;padding:0 }
+body { font-family:'Noto Sans JP',sans-serif;background:linear-gradient(135deg,#1a1a2e 0%,#16213e 100%);color:white;min-height:100vh;padding:40px 20px }
+.container { max-width:1300px;margin:0 auto }
+h1 { font-size:32px;font-weight:900;background:linear-gradient(135deg,#00c8ff 0%,#6bcf8f 100%);-webkit-background-clip:text;background-clip:text;color:transparent;margin-bottom:8px }
+.sub { color:#a0a0c0;margin-bottom:30px }
+h2 { color:#00c8ff;font-size:22px;margin:25px 0 10px;border-left:4px solid #00c8ff;padding-left:12px }
+table { width:100%;border-collapse:collapse;background:rgba(255,255,255,0.03);border-radius:8px;overflow:hidden;font-size:13px;margin-top:8px }
+th,td { padding:8px 10px;text-align:right;border-bottom:1px solid rgba(255,255,255,0.08) }
+th { background:rgba(0,200,255,0.1);color:#00c8ff;font-weight:700 }
+td:first-child,th:first-child { text-align:left;font-family:monospace }
+.params { background:rgba(0,200,255,0.06);padding:15px;border-radius:8px;margin:15px 0;font-size:14px;line-height:1.7 }
+.back { display:inline-block;margin-bottom:20px;color:#00c8ff;text-decoration:none }
+.back:hover { text-decoration:underline }
+</style></head><body>
+<div class="container">
+<a href="index.html" class="back">← index に戻る</a>
+<h1>B=52% 狙い打ちフィルタ探索</h1>
+<div class="sub">実データ 1,887,187 ハンドから「次=Banker が出やすい条件」を多角的に抽出</div>
+
+<div class="params">
+<b>ベースライン</b>: 全体 B 率 (非Tie) = <b style="color:#fbbf24">50.929%</b><br>
+<b>使える候補</b>: P(B) &gt; 52.00% <b>AND</b> 非Tie 件数 &gt; 5,000 (統計的ノイズ排除)<br>
+<b>score</b> = (P(B) - baseline) × √非Tie件数 — edge の大きさ × サンプルサイズで統計的有意性を反映<br>
+<b>使い方</b>: ⭐付き条件が見つかれば、それを入場トリガーとして実運用で B=52%+ を狙える候補
+</div>
+
+
+<h2>直近2ハンド</h2>
+<div style="margin-bottom:10px"><b style='color:#f87171'>使える候補なし</b> (条件: P(B) &gt; 52.00% AND 非Tie &gt; 5,000)</div>
+<table>
+<tr><th>条件</th><th>件数</th><th>非Tie</th><th>P(次=B)</th><th>P(次=P)</th><th>edge vs baseline</th><th>score (edge×√N)</th></tr>
+
+<tr>
+<td>BB</td>
+<td>473,773</td>
+<td>432,588</td>
+<td style="color:#cbd5e1;font-weight:700">51.028% </td>
+<td>48.972%</td>
+<td style="color:#4ade80">+0.099%</td>
+<td>+0.7</td>
+</tr>
+
+<tr>
+<td>BP</td>
+<td>455,958</td>
+<td>416,389</td>
+<td style="color:#cbd5e1;font-weight:700">50.940% </td>
+<td>49.060%</td>
+<td style="color:#4ade80">+0.011%</td>
+<td>+0.1</td>
+</tr>
+
+<tr>
+<td>PB</td>
+<td>455,810</td>
+<td>416,396</td>
+<td style="color:#cbd5e1;font-weight:700">50.899% </td>
+<td>49.101%</td>
+<td style="color:#f87171">-0.029%</td>
+<td>-0.2</td>
+</tr>
+
+<tr>
+<td>PP</td>
+<td>439,859</td>
+<td>401,686</td>
+<td style="color:#cbd5e1;font-weight:700">50.854% </td>
+<td>49.146%</td>
+<td style="color:#f87171">-0.075%</td>
+<td>-0.5</td>
+</tr>
+
+</table>
+
+<h2>直近3ハンド</h2>
+<div style="margin-bottom:10px"><b style='color:#f87171'>使える候補なし</b> (条件: P(B) &gt; 52.00% AND 非Tie &gt; 5,000)</div>
+<table>
+<tr><th>条件</th><th>件数</th><th>非Tie</th><th>P(次=B)</th><th>P(次=P)</th><th>edge vs baseline</th><th>score (edge×√N)</th></tr>
+
+<tr>
+<td>BBB</td>
+<td>237,703</td>
+<td>216,949</td>
+<td style="color:#cbd5e1;font-weight:700">51.237% </td>
+<td>48.763%</td>
+<td style="color:#4ade80">+0.308%</td>
+<td>+1.4</td>
+</tr>
+
+<tr>
+<td>BBP</td>
+<td>228,179</td>
+<td>208,347</td>
+<td style="color:#cbd5e1;font-weight:700">51.163% </td>
+<td>48.837%</td>
+<td style="color:#4ade80">+0.235%</td>
+<td>+1.1</td>
+</tr>
+
+<tr>
+<td>BPB</td>
+<td>228,336</td>
+<td>208,584</td>
+<td style="color:#cbd5e1;font-weight:700">50.990% </td>
+<td>49.010%</td>
+<td style="color:#4ade80">+0.062%</td>
+<td>+0.3</td>
+</tr>
+
+<tr>
+<td>BPP</td>
+<td>219,963</td>
+<td>200,820</td>
+<td style="color:#cbd5e1;font-weight:700">50.851% </td>
+<td>49.149%</td>
+<td style="color:#f87171">-0.078%</td>
+<td>-0.3</td>
+</tr>
+
+<tr>
+<td>PPP</td>
+<td>212,404</td>
+<td>194,073</td>
+<td style="color:#cbd5e1;font-weight:700">50.840% </td>
+<td>49.160%</td>
+<td style="color:#f87171">-0.088%</td>
+<td>-0.4</td>
+</tr>
+
+<tr>
+<td>PBB</td>
+<td>228,086</td>
+<td>208,378</td>
+<td style="color:#cbd5e1;font-weight:700">50.789% </td>
+<td>49.211%</td>
+<td style="color:#f87171">-0.139%</td>
+<td>-0.6</td>
+</tr>
+
+<tr>
+<td>PPB</td>
+<td>219,792</td>
+<td>200,801</td>
+<td style="color:#cbd5e1;font-weight:700">50.774% </td>
+<td>49.226%</td>
+<td style="color:#f87171">-0.154%</td>
+<td>-0.7</td>
+</tr>
+
+<tr>
+<td>PBP</td>
+<td>220,010</td>
+<td>200,965</td>
+<td style="color:#cbd5e1;font-weight:700">50.755% </td>
+<td>49.245%</td>
+<td style="color:#f87171">-0.174%</td>
+<td>-0.8</td>
+</tr>
+
+</table>
+
+<h2>直近4ハンド</h2>
+<div style="margin-bottom:10px"><b style='color:#f87171'>使える候補なし</b> (条件: P(B) &gt; 52.00% AND 非Tie &gt; 5,000)</div>
+<table>
+<tr><th>条件</th><th>件数</th><th>非Tie</th><th>P(次=B)</th><th>P(次=P)</th><th>edge vs baseline</th><th>score (edge×√N)</th></tr>
+
+<tr>
+<td>BBBB</td>
+<td>119,733</td>
+<td>109,267</td>
+<td style="color:#cbd5e1;font-weight:700">51.276% </td>
+<td>48.724%</td>
+<td style="color:#4ade80">+0.348%</td>
+<td>+1.1</td>
+</tr>
+
+<tr>
+<td>BBBP</td>
+<td>113,867</td>
+<td>104,011</td>
+<td style="color:#cbd5e1;font-weight:700">51.275% </td>
+<td>48.725%</td>
+<td style="color:#4ade80">+0.347%</td>
+<td>+1.1</td>
+</tr>
+
+<tr>
+<td>PBBB</td>
+<td>113,871</td>
+<td>103,933</td>
+<td style="color:#cbd5e1;font-weight:700">51.218% </td>
+<td>48.782%</td>
+<td style="color:#4ade80">+0.289%</td>
+<td>+0.9</td>
+</tr>
+
+<tr>
+<td>BBPB</td>
+<td>114,663</td>
+<td>104,792</td>
+<td style="color:#cbd5e1;font-weight:700">51.111% </td>
+<td>48.889%</td>
+<td style="color:#4ade80">+0.182%</td>
+<td>+0.6</td>
+</tr>
+
+<tr>
+<td>PBBP</td>
+<td>110,450</td>
+<td>100,824</td>
+<td style="color:#cbd5e1;font-weight:700">51.053% </td>
+<td>48.947%</td>
+<td style="color:#4ade80">+0.125%</td>
+<td>+0.4</td>
+</tr>
+
+<tr>
+<td>BBPP</td>
+<td>109,604</td>
+<td>100,054</td>
+<td style="color:#cbd5e1;font-weight:700">50.964% </td>
+<td>49.036%</td>
+<td style="color:#4ade80">+0.036%</td>
+<td>+0.1</td>
+</tr>
+
+<tr>
+<td>PPPP</td>
+<td>102,559</td>
+<td>93,742</td>
+<td style="color:#cbd5e1;font-weight:700">50.917% </td>
+<td>49.083%</td>
+<td style="color:#f87171">-0.011%</td>
+<td>-0.0</td>
+</tr>
+
+<tr>
+<td>BPBP</td>
+<td>110,030</td>
+<td>100,461</td>
+<td style="color:#cbd5e1;font-weight:700">50.902% </td>
+<td>49.098%</td>
+<td style="color:#f87171">-0.026%</td>
+<td>-0.1</td>
+</tr>
+
+<tr>
+<td>PBPB</td>
+<td>109,821</td>
+<td>100,280</td>
+<td style="color:#cbd5e1;font-weight:700">50.897% </td>
+<td>49.103%</td>
+<td style="color:#f87171">-0.031%</td>
+<td>-0.1</td>
+</tr>
+
+<tr>
+<td>BPBB</td>
+<td>114,259</td>
+<td>104,523</td>
+<td style="color:#cbd5e1;font-weight:700">50.884% </td>
+<td>49.116%</td>
+<td style="color:#f87171">-0.045%</td>
+<td>-0.1</td>
+</tr>
+
+<tr>
+<td>PPPB</td>
+<td>106,135</td>
+<td>96,910</td>
+<td style="color:#cbd5e1;font-weight:700">50.869% </td>
+<td>49.131%</td>
+<td style="color:#f87171">-0.060%</td>
+<td>-0.2</td>
+</tr>
+
+<tr>
+<td>BPPP</td>
+<td>106,247</td>
+<td>97,024</td>
+<td style="color:#cbd5e1;font-weight:700">50.828% </td>
+<td>49.172%</td>
+<td style="color:#f87171">-0.101%</td>
+<td>-0.3</td>
+</tr>
+
+<tr>
+<td>BPPB</td>
+<td>109,844</td>
+<td>100,405</td>
+<td style="color:#cbd5e1;font-weight:700">50.709% </td>
+<td>49.291%</td>
+<td style="color:#f87171">-0.220%</td>
+<td>-0.7</td>
+</tr>
+
+<tr>
+<td>PBPP</td>
+<td>106,468</td>
+<td>97,201</td>
+<td style="color:#cbd5e1;font-weight:700">50.697% </td>
+<td>49.303%</td>
+<td style="color:#f87171">-0.232%</td>
+<td>-0.7</td>
+</tr>
+
+<tr>
+<td>PPBB</td>
+<td>109,861</td>
+<td>100,225</td>
+<td style="color:#cbd5e1;font-weight:700">50.662% </td>
+<td>49.338%</td>
+<td style="color:#f87171">-0.267%</td>
+<td>-0.8</td>
+</tr>
+
+<tr>
+<td>PPBP</td>
+<td>106,260</td>
+<td>97,123</td>
+<td style="color:#cbd5e1;font-weight:700">50.587% </td>
+<td>49.413%</td>
+<td style="color:#f87171">-0.341%</td>
+<td>-1.1</td>
+</tr>
+
+</table>
+
+<h2>ストリーク後</h2>
+<div style="margin-bottom:10px"><b style='color:#f87171'>使える候補なし</b> (条件: P(B) &gt; 52.00% AND 非Tie &gt; 5,000)</div>
+<table>
+<tr><th>条件</th><th>件数</th><th>非Tie</th><th>P(次=B)</th><th>P(次=P)</th><th>edge vs baseline</th><th>score (edge×√N)</th></tr>
+
+<tr>
+<td>B×5連続後</td>
+<td>60,352</td>
+<td>55,074</td>
+<td style="color:#fbbf24;font-weight:700">51.552% </td>
+<td>48.448%</td>
+<td style="color:#4ade80">+0.624%</td>
+<td>+1.5</td>
+</tr>
+
+<tr>
+<td>B×3連続後</td>
+<td>237,703</td>
+<td>216,949</td>
+<td style="color:#cbd5e1;font-weight:700">51.237% </td>
+<td>48.763%</td>
+<td style="color:#4ade80">+0.308%</td>
+<td>+1.4</td>
+</tr>
+
+<tr>
+<td>B×6連続後</td>
+<td>30,545</td>
+<td>27,906</td>
+<td style="color:#fbbf24;font-weight:700">51.673% </td>
+<td>48.327%</td>
+<td style="color:#4ade80">+0.745%</td>
+<td>+1.2</td>
+</tr>
+
+<tr>
+<td>B×4連続後</td>
+<td>119,733</td>
+<td>109,267</td>
+<td style="color:#cbd5e1;font-weight:700">51.276% </td>
+<td>48.724%</td>
+<td style="color:#4ade80">+0.348%</td>
+<td>+1.1</td>
+</tr>
+
+<tr>
+<td>B×2連続後</td>
+<td>473,773</td>
+<td>432,588</td>
+<td style="color:#cbd5e1;font-weight:700">51.028% </td>
+<td>48.972%</td>
+<td style="color:#4ade80">+0.099%</td>
+<td>+0.7</td>
+</tr>
+
+<tr>
+<td>P×4連続後</td>
+<td>102,559</td>
+<td>93,742</td>
+<td style="color:#cbd5e1;font-weight:700">50.917% </td>
+<td>49.083%</td>
+<td style="color:#f87171">-0.011%</td>
+<td>-0.0</td>
+</tr>
+
+<tr>
+<td>P×5連続後</td>
+<td>49,469</td>
+<td>45,199</td>
+<td style="color:#cbd5e1;font-weight:700">50.864% </td>
+<td>49.136%</td>
+<td style="color:#f87171">-0.065%</td>
+<td>-0.1</td>
+</tr>
+
+<tr>
+<td>P×3連続後</td>
+<td>212,404</td>
+<td>194,073</td>
+<td style="color:#cbd5e1;font-weight:700">50.840% </td>
+<td>49.160%</td>
+<td style="color:#f87171">-0.088%</td>
+<td>-0.4</td>
+</tr>
+
+<tr>
+<td>P×2連続後</td>
+<td>439,859</td>
+<td>401,686</td>
+<td style="color:#cbd5e1;font-weight:700">50.854% </td>
+<td>49.146%</td>
+<td style="color:#f87171">-0.075%</td>
+<td>-0.5</td>
+</tr>
+
+<tr>
+<td>P×6連続後</td>
+<td>23,856</td>
+<td>21,801</td>
+<td style="color:#cbd5e1;font-weight:700">50.429% </td>
+<td>49.571%</td>
+<td style="color:#f87171">-0.500%</td>
+<td>-0.7</td>
+</tr>
+
+</table>
+
+<h2>時間帯JST</h2>
+<div style="margin-bottom:10px"><b style='color:#f87171'>使える候補なし</b> (条件: P(B) &gt; 52.00% AND 非Tie &gt; 5,000)</div>
+<table>
+<tr><th>条件</th><th>件数</th><th>非Tie</th><th>P(次=B)</th><th>P(次=P)</th><th>edge vs baseline</th><th>score (edge×√N)</th></tr>
+
+<tr>
+<td>22</td>
+<td>75,708</td>
+<td>69,202</td>
+<td style="color:#cbd5e1;font-weight:700">51.286% </td>
+<td>48.714%</td>
+<td style="color:#4ade80">+0.358%</td>
+<td>+0.9</td>
+</tr>
+
+<tr>
+<td>14</td>
+<td>77,850</td>
+<td>71,184</td>
+<td style="color:#cbd5e1;font-weight:700">51.224% </td>
+<td>48.776%</td>
+<td style="color:#4ade80">+0.295%</td>
+<td>+0.8</td>
+</tr>
+
+<tr>
+<td>0</td>
+<td>83,451</td>
+<td>76,310</td>
+<td style="color:#cbd5e1;font-weight:700">51.144% </td>
+<td>48.856%</td>
+<td style="color:#4ade80">+0.215%</td>
+<td>+0.6</td>
+</tr>
+
+<tr>
+<td>16</td>
+<td>76,087</td>
+<td>69,592</td>
+<td style="color:#cbd5e1;font-weight:700">51.068% </td>
+<td>48.932%</td>
+<td style="color:#4ade80">+0.139%</td>
+<td>+0.4</td>
+</tr>
+
+<tr>
+<td>1</td>
+<td>83,444</td>
+<td>76,216</td>
+<td style="color:#cbd5e1;font-weight:700">51.052% </td>
+<td>48.948%</td>
+<td style="color:#4ade80">+0.124%</td>
+<td>+0.3</td>
+</tr>
+
+<tr>
+<td>11</td>
+<td>73,469</td>
+<td>67,093</td>
+<td style="color:#cbd5e1;font-weight:700">51.043% </td>
+<td>48.957%</td>
+<td style="color:#4ade80">+0.114%</td>
+<td>+0.3</td>
+</tr>
+
+<tr>
+<td>10</td>
+<td>76,639</td>
+<td>70,019</td>
+<td style="color:#cbd5e1;font-weight:700">51.036% </td>
+<td>48.964%</td>
+<td style="color:#4ade80">+0.108%</td>
+<td>+0.3</td>
+</tr>
+
+<tr>
+<td>18</td>
+<td>77,363</td>
+<td>70,657</td>
+<td style="color:#cbd5e1;font-weight:700">51.021% </td>
+<td>48.979%</td>
+<td style="color:#4ade80">+0.093%</td>
+<td>+0.2</td>
+</tr>
+
+<tr>
+<td>2</td>
+<td>78,968</td>
+<td>72,134</td>
+<td style="color:#cbd5e1;font-weight:700">51.019% </td>
+<td>48.981%</td>
+<td style="color:#4ade80">+0.090%</td>
+<td>+0.2</td>
+</tr>
+
+<tr>
+<td>13</td>
+<td>74,454</td>
+<td>67,955</td>
+<td style="color:#cbd5e1;font-weight:700">51.021% </td>
+<td>48.979%</td>
+<td style="color:#4ade80">+0.092%</td>
+<td>+0.2</td>
+</tr>
+
+<tr>
+<td>20</td>
+<td>73,776</td>
+<td>67,232</td>
+<td style="color:#cbd5e1;font-weight:700">51.017% </td>
+<td>48.983%</td>
+<td style="color:#4ade80">+0.089%</td>
+<td>+0.2</td>
+</tr>
+
+<tr>
+<td>19</td>
+<td>77,575</td>
+<td>70,733</td>
+<td style="color:#cbd5e1;font-weight:700">51.014% </td>
+<td>48.986%</td>
+<td style="color:#4ade80">+0.086%</td>
+<td>+0.2</td>
+</tr>
+
+<tr>
+<td>23</td>
+<td>78,216</td>
+<td>71,387</td>
+<td style="color:#cbd5e1;font-weight:700">50.994% </td>
+<td>49.006%</td>
+<td style="color:#4ade80">+0.065%</td>
+<td>+0.2</td>
+</tr>
+
+<tr>
+<td>5</td>
+<td>83,283</td>
+<td>75,951</td>
+<td style="color:#cbd5e1;font-weight:700">50.966% </td>
+<td>49.034%</td>
+<td style="color:#4ade80">+0.037%</td>
+<td>+0.1</td>
+</tr>
+
+<tr>
+<td>21</td>
+<td>78,159</td>
+<td>71,369</td>
+<td style="color:#cbd5e1;font-weight:700">50.902% </td>
+<td>49.098%</td>
+<td style="color:#f87171">-0.027%</td>
+<td>-0.1</td>
+</tr>
+
+<tr>
+<td>3</td>
+<td>86,741</td>
+<td>79,333</td>
+<td style="color:#cbd5e1;font-weight:700">50.875% </td>
+<td>49.125%</td>
+<td style="color:#f87171">-0.053%</td>
+<td>-0.1</td>
+</tr>
+
+<tr>
+<td>8</td>
+<td>89,598</td>
+<td>81,787</td>
+<td style="color:#cbd5e1;font-weight:700">50.850% </td>
+<td>49.150%</td>
+<td style="color:#f87171">-0.078%</td>
+<td>-0.2</td>
+</tr>
+
+<tr>
+<td>4</td>
+<td>82,016</td>
+<td>74,941</td>
+<td style="color:#cbd5e1;font-weight:700">50.827% </td>
+<td>49.173%</td>
+<td style="color:#f87171">-0.102%</td>
+<td>-0.3</td>
+</tr>
+
+<tr>
+<td>9</td>
+<td>76,691</td>
+<td>70,225</td>
+<td style="color:#cbd5e1;font-weight:700">50.760% </td>
+<td>49.240%</td>
+<td style="color:#f87171">-0.169%</td>
+<td>-0.4</td>
+</tr>
+
+<tr>
+<td>12</td>
+<td>75,184</td>
+<td>68,703</td>
+<td style="color:#cbd5e1;font-weight:700">50.739% </td>
+<td>49.261%</td>
+<td style="color:#f87171">-0.190%</td>
+<td>-0.5</td>
+</tr>
+
+<tr>
+<td>15</td>
+<td>77,081</td>
+<td>70,351</td>
+<td style="color:#cbd5e1;font-weight:700">50.710% </td>
+<td>49.290%</td>
+<td style="color:#f87171">-0.219%</td>
+<td>-0.6</td>
+</tr>
+
+<tr>
+<td>7</td>
+<td>78,868</td>
+<td>71,887</td>
+<td style="color:#cbd5e1;font-weight:700">50.611% </td>
+<td>49.389%</td>
+<td style="color:#f87171">-0.317%</td>
+<td>-0.9</td>
+</tr>
+
+<tr>
+<td>6</td>
+<td>80,880</td>
+<td>73,760</td>
+<td style="color:#cbd5e1;font-weight:700">50.601% </td>
+<td>49.399%</td>
+<td style="color:#f87171">-0.328%</td>
+<td>-0.9</td>
+</tr>
+
+<tr>
+<td>17</td>
+<td>71,686</td>
+<td>65,322</td>
+<td style="color:#cbd5e1;font-weight:700">50.502% </td>
+<td>49.498%</td>
+<td style="color:#f87171">-0.426%</td>
+<td>-1.1</td>
+</tr>
+
+</table>
+
+<h2>テーブル別</h2>
+<div style="margin-bottom:10px"><b style='color:#4ade80'>使える候補: 1 個</b> (条件: P(B) &gt; 52.00% AND 非Tie &gt; 5,000)</div>
+<table>
+<tr><th>条件</th><th>件数</th><th>非Tie</th><th>P(次=B)</th><th>P(次=P)</th><th>edge vs baseline</th><th>score (edge×√N)</th></tr>
+
+<tr>
+<td>Always 9 Baccarat</td>
+<td>33,513</td>
+<td>30,545</td>
+<td style="color:#4ade80;font-weight:700">63.307% ⭐</td>
+<td>36.693%</td>
+<td style="color:#4ade80">+12.378%</td>
+<td>+21.6</td>
+</tr>
+
+<tr>
+<td>Speed Baccarat C</td>
+<td>33,029</td>
+<td>30,196</td>
+<td style="color:#fbbf24;font-weight:700">51.460% </td>
+<td>48.540%</td>
+<td style="color:#4ade80">+0.532%</td>
+<td>+0.9</td>
+</tr>
+
+<tr>
+<td>Speed Baccarat T</td>
+<td>32,574</td>
+<td>29,794</td>
+<td style="color:#cbd5e1;font-weight:700">51.326% </td>
+<td>48.674%</td>
+<td style="color:#4ade80">+0.397%</td>
+<td>+0.7</td>
+</tr>
+
+<tr>
+<td>Korean Speed Baccarat G</td>
+<td>30,676</td>
+<td>28,009</td>
+<td style="color:#cbd5e1;font-weight:700">51.169% </td>
+<td>48.831%</td>
+<td style="color:#4ade80">+0.241%</td>
+<td>+0.4</td>
+</tr>
+
+<tr>
+<td>Thai Speed Baccarat A</td>
+<td>29,404</td>
+<td>26,847</td>
+<td style="color:#cbd5e1;font-weight:700">51.160% </td>
+<td>48.840%</td>
+<td style="color:#4ade80">+0.232%</td>
+<td>+0.4</td>
+</tr>
+
+<tr>
+<td>Korean Speed Baccarat C</td>
+<td>30,384</td>
+<td>27,739</td>
+<td style="color:#cbd5e1;font-weight:700">51.155% </td>
+<td>48.845%</td>
+<td style="color:#4ade80">+0.227%</td>
+<td>+0.4</td>
+</tr>
+
+<tr>
+<td>Speed Baccarat 2</td>
+<td>27,586</td>
+<td>25,177</td>
+<td style="color:#cbd5e1;font-weight:700">51.162% </td>
+<td>48.838%</td>
+<td style="color:#4ade80">+0.233%</td>
+<td>+0.4</td>
+</tr>
+
+<tr>
+<td>Baccarat RÃ¡pido ao Vivo 1</td>
+<td>27,214</td>
+<td>24,913</td>
+<td style="color:#cbd5e1;font-weight:700">51.154% </td>
+<td>48.846%</td>
+<td style="color:#4ade80">+0.225%</td>
+<td>+0.4</td>
+</tr>
+
+<tr>
+<td>Emperor Speed Baccarat D</td>
+<td>29,509</td>
+<td>26,935</td>
+<td style="color:#cbd5e1;font-weight:700">51.093% </td>
+<td>48.907%</td>
+<td style="color:#4ade80">+0.165%</td>
+<td>+0.3</td>
+</tr>
+
+<tr>
+<td>Dynasty Speed Baccarat 3</td>
+<td>30,579</td>
+<td>27,973</td>
+<td style="color:#cbd5e1;font-weight:700">51.060% </td>
+<td>48.940%</td>
+<td style="color:#4ade80">+0.131%</td>
+<td>+0.2</td>
+</tr>
+
+<tr>
+<td>Japanese Speed Baccarat E</td>
+<td>29,274</td>
+<td>26,662</td>
+<td style="color:#cbd5e1;font-weight:700">51.005% </td>
+<td>48.995%</td>
+<td style="color:#4ade80">+0.077%</td>
+<td>+0.1</td>
+</tr>
+
+<tr>
+<td>Baccarat A</td>
+<td>23,554</td>
+<td>21,442</td>
+<td style="color:#cbd5e1;font-weight:700">50.998% </td>
+<td>49.002%</td>
+<td style="color:#4ade80">+0.069%</td>
+<td>+0.1</td>
+</tr>
+
+<tr>
+<td>Dynasty Speed Baccarat 2</td>
+<td>30,565</td>
+<td>27,875</td>
+<td style="color:#cbd5e1;font-weight:700">50.970% </td>
+<td>49.030%</td>
+<td style="color:#4ade80">+0.042%</td>
+<td>+0.1</td>
+</tr>
+
+<tr>
+<td>Dynasty Speed Baccarat 4</td>
+<td>30,686</td>
+<td>28,008</td>
+<td style="color:#cbd5e1;font-weight:700">50.960% </td>
+<td>49.040%</td>
+<td style="color:#4ade80">+0.032%</td>
+<td>+0.1</td>
+</tr>
+
+<tr>
+<td>Baccarat B</td>
+<td>23,747</td>
+<td>21,607</td>
+<td style="color:#cbd5e1;font-weight:700">50.956% </td>
+<td>49.044%</td>
+<td style="color:#4ade80">+0.027%</td>
+<td>+0.0</td>
+</tr>
+
+<tr>
+<td>Dynasty Speed Baccarat 8</td>
+<td>28,920</td>
+<td>26,387</td>
+<td style="color:#cbd5e1;font-weight:700">50.949% </td>
+<td>49.051%</td>
+<td style="color:#4ade80">+0.021%</td>
+<td>+0.0</td>
+</tr>
+
+<tr>
+<td>Hindi Speed Baccarat B</td>
+<td>31,676</td>
+<td>28,951</td>
+<td style="color:#cbd5e1;font-weight:700">50.872% </td>
+<td>49.128%</td>
+<td style="color:#f87171">-0.056%</td>
+<td>-0.1</td>
+</tr>
+
+<tr>
+<td>Dynasty Speed Baccarat 7</td>
+<td>28,857</td>
+<td>26,463</td>
+<td style="color:#cbd5e1;font-weight:700">50.852% </td>
+<td>49.148%</td>
+<td style="color:#f87171">-0.076%</td>
+<td>-0.1</td>
+</tr>
+
+<tr>
+<td>Speed Baccarat 3</td>
+<td>26,789</td>
+<td>24,471</td>
+<td style="color:#cbd5e1;font-weight:700">50.828% </td>
+<td>49.172%</td>
+<td style="color:#f87171">-0.101%</td>
+<td>-0.2</td>
+</tr>
+
+<tr>
+<td>Korean Speaking Speed Baccarat</td>
+<td>30,698</td>
+<td>28,083</td>
+<td style="color:#cbd5e1;font-weight:700">50.828% </td>
+<td>49.172%</td>
+<td style="color:#f87171">-0.101%</td>
+<td>-0.2</td>
+</tr>
+
+<tr>
+<td>Lotus Speed Baccarat B</td>
+<td>31,810</td>
+<td>29,093</td>
+<td style="color:#cbd5e1;font-weight:700">50.820% </td>
+<td>49.180%</td>
+<td style="color:#f87171">-0.109%</td>
+<td>-0.2</td>
+</tr>
+
+<tr>
+<td>Speed Baccarat V</td>
+<td>32,650</td>
+<td>29,824</td>
+<td style="color:#cbd5e1;font-weight:700">50.808% </td>
+<td>49.192%</td>
+<td style="color:#f87171">-0.120%</td>
+<td>-0.2</td>
+</tr>
+
+<tr>
+<td>Speed Baccarat A</td>
+<td>30,533</td>
+<td>27,898</td>
+<td style="color:#cbd5e1;font-weight:700">50.803% </td>
+<td>49.197%</td>
+<td style="color:#f87171">-0.126%</td>
+<td>-0.2</td>
+</tr>
+
+<tr>
+<td>Speed Baccarat E</td>
+<td>32,933</td>
+<td>30,057</td>
+<td style="color:#cbd5e1;font-weight:700">50.787% </td>
+<td>49.213%</td>
+<td style="color:#f87171">-0.142%</td>
+<td>-0.2</td>
+</tr>
+
+<tr>
+<td>Speed Baccarat B</td>
+<td>32,665</td>
+<td>29,810</td>
+<td style="color:#cbd5e1;font-weight:700">50.785% </td>
+<td>49.215%</td>
+<td style="color:#f87171">-0.144%</td>
+<td>-0.2</td>
+</tr>
+
+<tr>
+<td>Super Speed Baccarat</td>
+<td>43,490</td>
+<td>39,758</td>
+<td style="color:#cbd5e1;font-weight:700">50.790% </td>
+<td>49.210%</td>
+<td style="color:#f87171">-0.139%</td>
+<td>-0.3</td>
+</tr>
+
+<tr>
+<td>Emperor Speed Baccarat B</td>
+<td>30,007</td>
+<td>27,426</td>
+<td style="color:#cbd5e1;font-weight:700">50.715% </td>
+<td>49.285%</td>
+<td style="color:#f87171">-0.214%</td>
+<td>-0.4</td>
+</tr>
+
+<tr>
+<td>Korean Speed Baccarat D</td>
+<td>30,337</td>
+<td>27,709</td>
+<td style="color:#cbd5e1;font-weight:700">50.713% </td>
+<td>49.287%</td>
+<td style="color:#f87171">-0.216%</td>
+<td>-0.4</td>
+</tr>
+
+<tr>
+<td>Lotus Speed Baccarat C</td>
+<td>31,847</td>
+<td>29,130</td>
+<td style="color:#cbd5e1;font-weight:700">50.714% </td>
+<td>49.286%</td>
+<td style="color:#f87171">-0.215%</td>
+<td>-0.4</td>
+</tr>
+
+<tr>
+<td>Speed Baccarat D</td>
+<td>32,622</td>
+<td>29,872</td>
+<td style="color:#cbd5e1;font-weight:700">50.710% </td>
+<td>49.290%</td>
+<td style="color:#f87171">-0.219%</td>
+<td>-0.4</td>
+</tr>
+
+</table>
+
+<h2>シュー位置</h2>
+<div style="margin-bottom:10px"><b style='color:#f87171'>使える候補なし</b> (条件: P(B) &gt; 52.00% AND 非Tie &gt; 5,000)</div>
+<table>
+<tr><th>条件</th><th>件数</th><th>非Tie</th><th>P(次=B)</th><th>P(次=P)</th><th>edge vs baseline</th><th>score (edge×√N)</th></tr>
+
+<tr>
+<td>61+</td>
+<td>178,623</td>
+<td>162,948</td>
+<td style="color:#cbd5e1;font-weight:700">51.142% </td>
+<td>48.858%</td>
+<td style="color:#4ade80">+0.214%</td>
+<td>+0.9</td>
+</tr>
+
+<tr>
+<td>41-60</td>
+<td>555,692</td>
+<td>507,775</td>
+<td style="color:#cbd5e1;font-weight:700">50.960% </td>
+<td>49.040%</td>
+<td style="color:#4ade80">+0.031%</td>
+<td>+0.2</td>
+</tr>
+
+<tr>
+<td>21-40</td>
+<td>561,933</td>
+<td>513,235</td>
+<td style="color:#cbd5e1;font-weight:700">50.921% </td>
+<td>49.079%</td>
+<td style="color:#f87171">-0.007%</td>
+<td>-0.1</td>
+</tr>
+
+<tr>
+<td>1-20</td>
+<td>590,939</td>
+<td>539,385</td>
+<td style="color:#cbd5e1;font-weight:700">50.842% </td>
+<td>49.158%</td>
+<td style="color:#f87171">-0.087%</td>
+<td>-0.6</td>
+</tr>
+
+</table>
+
+<h2>曜日JST</h2>
+<div style="margin-bottom:10px"><b style='color:#f87171'>使える候補なし</b> (条件: P(B) &gt; 52.00% AND 非Tie &gt; 5,000)</div>
+<table>
+<tr><th>条件</th><th>件数</th><th>非Tie</th><th>P(次=B)</th><th>P(次=P)</th><th>edge vs baseline</th><th>score (edge×√N)</th></tr>
+
+<tr>
+<td>Tue</td>
+<td>361,889</td>
+<td>330,644</td>
+<td style="color:#cbd5e1;font-weight:700">51.018% </td>
+<td>48.982%</td>
+<td style="color:#4ade80">+0.089%</td>
+<td>+0.5</td>
+</tr>
+
+<tr>
+<td>Mon</td>
+<td>365,553</td>
+<td>333,544</td>
+<td style="color:#cbd5e1;font-weight:700">51.000% </td>
+<td>49.000%</td>
+<td style="color:#4ade80">+0.071%</td>
+<td>+0.4</td>
+</tr>
+
+<tr>
+<td>Sat</td>
+<td>188,105</td>
+<td>172,021</td>
+<td style="color:#cbd5e1;font-weight:700">50.989% </td>
+<td>49.011%</td>
+<td style="color:#4ade80">+0.061%</td>
+<td>+0.3</td>
+</tr>
+
+<tr>
+<td>Thu</td>
+<td>244,786</td>
+<td>223,514</td>
+<td style="color:#cbd5e1;font-weight:700">50.959% </td>
+<td>49.041%</td>
+<td style="color:#4ade80">+0.030%</td>
+<td>+0.1</td>
+</tr>
+
+<tr>
+<td>Wed</td>
+<td>361,798</td>
+<td>330,361</td>
+<td style="color:#cbd5e1;font-weight:700">50.866% </td>
+<td>49.134%</td>
+<td style="color:#f87171">-0.063%</td>
+<td>-0.4</td>
+</tr>
+
+<tr>
+<td>Fri</td>
+<td>180,459</td>
+<td>164,651</td>
+<td style="color:#cbd5e1;font-weight:700">50.800% </td>
+<td>49.200%</td>
+<td style="color:#f87171">-0.128%</td>
+<td>-0.5</td>
+</tr>
+
+<tr>
+<td>Sun</td>
+<td>184,597</td>
+<td>168,608</td>
+<td style="color:#cbd5e1;font-weight:700">50.759% </td>
+<td>49.241%</td>
+<td style="color:#f87171">-0.169%</td>
+<td>-0.7</td>
+</tr>
+
+</table>
+
+
+<div style="margin-top:30px;padding:20px;background:rgba(0,200,255,0.06);border-radius:8px;font-size:14px;line-height:1.7">
+<b style="color:#00c8ff">解釈</b>:<br>
+・<b>edge &gt; +1%</b>: バカラの理論 edge (~0.5%) を超える異常値。モデル化 or データ取り違え疑うレベル<br>
+・<b>edge &lt; baseline ± 0.5%</b>: 統計ノイズ、エッジなし<br>
+・<b>⭐条件が 0 個</b>: この軸では Banker 52% を狙えない (自動化 edge 無しの裏付け)<br>
+・<b>⭐条件が複数</b>: 組み合わせフィルタの基礎材料、次は AND/OR 合成で検証
+</div>
+</div></body></html>

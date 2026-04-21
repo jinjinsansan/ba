@@ -1,0 +1,139 @@
+<!DOCTYPE html>
+<html lang="ja"><head><meta charset="UTF-8">
+<title>B=52% 組み合わせフィルタ全探索</title>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500;700;900&display=swap');
+* { box-sizing:border-box;margin:0;padding:0 }
+body { font-family:'Noto Sans JP',sans-serif;background:linear-gradient(135deg,#1a1a2e 0%,#16213e 100%);color:white;min-height:100vh;padding:40px 20px }
+.container { max-width:1400px;margin:0 auto }
+h1 { font-size:32px;font-weight:900;background:linear-gradient(135deg,#00c8ff 0%,#6bcf8f 100%);-webkit-background-clip:text;background-clip:text;color:transparent;margin-bottom:8px }
+.sub { color:#a0a0c0;margin-bottom:30px }
+h2 { color:#00c8ff;font-size:22px;margin:25px 0 10px;border-left:4px solid #00c8ff;padding-left:12px }
+table { width:100%;border-collapse:collapse;background:rgba(255,255,255,0.03);border-radius:8px;overflow:hidden;font-size:13px;margin:10px 0 }
+th,td { padding:8px 12px;text-align:right;border-bottom:1px solid rgba(255,255,255,0.08) }
+th { background:rgba(0,200,255,0.1);color:#00c8ff;font-weight:700 }
+td:first-child,th:first-child { text-align:left;font-family:monospace;font-size:12px }
+.params { background:rgba(0,200,255,0.06);padding:15px;border-radius:8px;margin:15px 0;font-size:14px;line-height:1.7 }
+.back { display:inline-block;margin-bottom:20px;color:#00c8ff;text-decoration:none }
+.verdict { margin-top:30px;padding:25px;border-radius:8px;font-size:16px;line-height:1.8 }
+.verdict.fail { background:rgba(248,113,113,0.12);border:2px solid #f87171 }
+.verdict.pass { background:rgba(74,222,128,0.12);border:2px solid #4ade80 }
+</style></head><body>
+<div class="container">
+<a href="index.html" class="back">← index に戻る</a>
+<h1>B=52% 組み合わせフィルタ全探索</h1>
+<div class="sub">14 個別フィルタ × 1/2/3-way AND 合成 = 計 286 通り</div>
+
+<div class="params">
+<b>ベースライン</b>: 全体 B 率 (非Tie) = 50.929%<br>
+<b>最低サンプル数</b>: 非Tie &gt; 3,000 (統計ノイズ除外)<br>
+<b>使える候補</b>: P(B) &gt; 52.00% ⭐
+</div>
+
+<h2>🎯 使える候補サマリ</h2>
+<table>
+<tr><th>次数</th><th>評価数</th><th>⭐候補 (P(B)&gt;52%)</th></tr>
+<tr><td>1-way (単体)</td><td>17</td><td style="color:#f87171">0</td></tr>
+<tr><td>2-way (AND)</td><td>87</td><td style="color:#4ade80">8</td></tr>
+<tr><td>3-way (AND)</td><td>182</td><td style="color:#4ade80">19</td></tr>
+</table>
+
+<h2>1-way 単体フィルタ</h2>
+<table>
+<tr><th>フィルタ</th><th>非Tie</th><th>P(B)</th><th>edge</th><th>score</th></tr>
+<tr><td>Bstreak>=5</td><td>55,074</td><td style='color:#fbbf24;font-weight:700'>51.552% </td><td>+0.624%</td><td>+1.46</td></tr>
+<tr><td>last3=BBB</td><td>216,949</td><td style='color:#fbbf24;font-weight:700'>51.237% </td><td>+0.308%</td><td>+1.44</td></tr>
+<tr><td>Bstreak>=3</td><td>216,949</td><td style='color:#fbbf24;font-weight:700'>51.237% </td><td>+0.308%</td><td>+1.44</td></tr>
+<tr><td>Bstreak>=6</td><td>27,906</td><td style='color:#fbbf24;font-weight:700'>51.673% </td><td>+0.745%</td><td>+1.24</td></tr>
+<tr><td>last4=BBBB</td><td>109,267</td><td style='color:#fbbf24;font-weight:700'>51.276% </td><td>+0.348%</td><td>+1.15</td></tr>
+<tr><td>Bstreak>=4</td><td>109,267</td><td style='color:#fbbf24;font-weight:700'>51.276% </td><td>+0.348%</td><td>+1.15</td></tr>
+<tr><td>last4=BBBP</td><td>104,011</td><td style='color:#fbbf24;font-weight:700'>51.275% </td><td>+0.347%</td><td>+1.12</td></tr>
+<tr><td>hour=22</td><td>69,202</td><td style='color:#fbbf24;font-weight:700'>51.286% </td><td>+0.358%</td><td>+0.94</td></tr>
+<tr><td>last4=PBBB</td><td>103,933</td><td style='color:#cbd5e1;font-weight:700'>51.218% </td><td>+0.289%</td><td>+0.93</td></tr>
+<tr><td>table=SpeedBaccaratC</td><td>30,196</td><td style='color:#fbbf24;font-weight:700'>51.460% </td><td>+0.532%</td><td>+0.92</td></tr>
+<tr><td>shoe>=61</td><td>162,948</td><td style='color:#cbd5e1;font-weight:700'>51.142% </td><td>+0.214%</td><td>+0.86</td></tr>
+<tr><td>hour=14</td><td>71,184</td><td style='color:#cbd5e1;font-weight:700'>51.224% </td><td>+0.295%</td><td>+0.79</td></tr>
+<tr><td>table=SpeedBaccaratT</td><td>29,794</td><td style='color:#fbbf24;font-weight:700'>51.326% </td><td>+0.397%</td><td>+0.69</td></tr>
+<tr><td>last2=BB</td><td>432,588</td><td style='color:#cbd5e1;font-weight:700'>51.028% </td><td>+0.099%</td><td>+0.65</td></tr>
+<tr><td>Bstreak>=2</td><td>432,588</td><td style='color:#cbd5e1;font-weight:700'>51.028% </td><td>+0.099%</td><td>+0.65</td></tr>
+<tr><td>hour=0</td><td>76,310</td><td style='color:#cbd5e1;font-weight:700'>51.144% </td><td>+0.215%</td><td>+0.60</td></tr>
+<tr><td>hour=16</td><td>69,592</td><td style='color:#cbd5e1;font-weight:700'>51.068% </td><td>+0.139%</td><td>+0.37</td></tr>
+</table>
+
+<h2>2-way AND 組み合わせ (Top 30 by score)</h2>
+<table>
+<tr><th>フィルタ</th><th>非Tie</th><th>P(B)</th><th>edge</th><th>score</th></tr>
+<tr><td>last2=BB ∧ shoe>=61</td><td>42,795</td><td style='color:#fbbf24;font-weight:700'>51.658% </td><td>+0.729%</td><td>+1.51</td></tr>
+<tr><td>Bstreak>=2 ∧ shoe>=61</td><td>42,795</td><td style='color:#fbbf24;font-weight:700'>51.658% </td><td>+0.729%</td><td>+1.51</td></tr>
+<tr><td>Bstreak>=5 ∧ shoe>=61</td><td>5,922</td><td style='color:#4ade80;font-weight:700'>52.837% ⭐</td><td>+1.908%</td><td>+1.47</td></tr>
+<tr><td>last2=BB ∧ Bstreak>=5</td><td>55,074</td><td style='color:#fbbf24;font-weight:700'>51.552% </td><td>+0.624%</td><td>+1.46</td></tr>
+<tr><td>last3=BBB ∧ Bstreak>=5</td><td>55,074</td><td style='color:#fbbf24;font-weight:700'>51.552% </td><td>+0.624%</td><td>+1.46</td></tr>
+<tr><td>last4=BBBB ∧ Bstreak>=5</td><td>55,074</td><td style='color:#fbbf24;font-weight:700'>51.552% </td><td>+0.624%</td><td>+1.46</td></tr>
+<tr><td>Bstreak>=2 ∧ Bstreak>=5</td><td>55,074</td><td style='color:#fbbf24;font-weight:700'>51.552% </td><td>+0.624%</td><td>+1.46</td></tr>
+<tr><td>Bstreak>=3 ∧ Bstreak>=5</td><td>55,074</td><td style='color:#fbbf24;font-weight:700'>51.552% </td><td>+0.624%</td><td>+1.46</td></tr>
+<tr><td>Bstreak>=4 ∧ Bstreak>=5</td><td>55,074</td><td style='color:#fbbf24;font-weight:700'>51.552% </td><td>+0.624%</td><td>+1.46</td></tr>
+<tr><td>last2=BB ∧ last3=BBB</td><td>216,949</td><td style='color:#fbbf24;font-weight:700'>51.237% </td><td>+0.308%</td><td>+1.44</td></tr>
+<tr><td>last2=BB ∧ Bstreak>=3</td><td>216,949</td><td style='color:#fbbf24;font-weight:700'>51.237% </td><td>+0.308%</td><td>+1.44</td></tr>
+<tr><td>last3=BBB ∧ Bstreak>=2</td><td>216,949</td><td style='color:#fbbf24;font-weight:700'>51.237% </td><td>+0.308%</td><td>+1.44</td></tr>
+<tr><td>last3=BBB ∧ Bstreak>=3</td><td>216,949</td><td style='color:#fbbf24;font-weight:700'>51.237% </td><td>+0.308%</td><td>+1.44</td></tr>
+<tr><td>Bstreak>=2 ∧ Bstreak>=3</td><td>216,949</td><td style='color:#fbbf24;font-weight:700'>51.237% </td><td>+0.308%</td><td>+1.44</td></tr>
+<tr><td>last3=BBB ∧ shoe>=61</td><td>21,973</td><td style='color:#fbbf24;font-weight:700'>51.886% </td><td>+0.958%</td><td>+1.42</td></tr>
+<tr><td>Bstreak>=3 ∧ shoe>=61</td><td>21,973</td><td style='color:#fbbf24;font-weight:700'>51.886% </td><td>+0.958%</td><td>+1.42</td></tr>
+<tr><td>last2=BB ∧ table=SpeedBaccaratC</td><td>7,806</td><td style='color:#4ade80;font-weight:700'>52.511% ⭐</td><td>+1.582%</td><td>+1.40</td></tr>
+<tr><td>Bstreak>=2 ∧ table=SpeedBaccaratC</td><td>7,806</td><td style='color:#4ade80;font-weight:700'>52.511% ⭐</td><td>+1.582%</td><td>+1.40</td></tr>
+<tr><td>last2=BB ∧ Bstreak>=6</td><td>27,906</td><td style='color:#fbbf24;font-weight:700'>51.673% </td><td>+0.745%</td><td>+1.24</td></tr>
+<tr><td>last3=BBB ∧ Bstreak>=6</td><td>27,906</td><td style='color:#fbbf24;font-weight:700'>51.673% </td><td>+0.745%</td><td>+1.24</td></tr>
+<tr><td>last4=BBBB ∧ Bstreak>=6</td><td>27,906</td><td style='color:#fbbf24;font-weight:700'>51.673% </td><td>+0.745%</td><td>+1.24</td></tr>
+<tr><td>Bstreak>=2 ∧ Bstreak>=6</td><td>27,906</td><td style='color:#fbbf24;font-weight:700'>51.673% </td><td>+0.745%</td><td>+1.24</td></tr>
+<tr><td>Bstreak>=3 ∧ Bstreak>=6</td><td>27,906</td><td style='color:#fbbf24;font-weight:700'>51.673% </td><td>+0.745%</td><td>+1.24</td></tr>
+<tr><td>Bstreak>=4 ∧ Bstreak>=6</td><td>27,906</td><td style='color:#fbbf24;font-weight:700'>51.673% </td><td>+0.745%</td><td>+1.24</td></tr>
+<tr><td>Bstreak>=5 ∧ Bstreak>=6</td><td>27,906</td><td style='color:#fbbf24;font-weight:700'>51.673% </td><td>+0.745%</td><td>+1.24</td></tr>
+<tr><td>last4=BBBP ∧ hour=0</td><td>4,640</td><td style='color:#4ade80;font-weight:700'>52.651% ⭐</td><td>+1.722%</td><td>+1.17</td></tr>
+<tr><td>last2=BB ∧ last4=BBBB</td><td>109,267</td><td style='color:#fbbf24;font-weight:700'>51.276% </td><td>+0.348%</td><td>+1.15</td></tr>
+<tr><td>last2=BB ∧ Bstreak>=4</td><td>109,267</td><td style='color:#fbbf24;font-weight:700'>51.276% </td><td>+0.348%</td><td>+1.15</td></tr>
+<tr><td>last3=BBB ∧ last4=BBBB</td><td>109,267</td><td style='color:#fbbf24;font-weight:700'>51.276% </td><td>+0.348%</td><td>+1.15</td></tr>
+<tr><td>last3=BBB ∧ Bstreak>=4</td><td>109,267</td><td style='color:#fbbf24;font-weight:700'>51.276% </td><td>+0.348%</td><td>+1.15</td></tr>
+</table>
+
+<h2>3-way AND 組み合わせ (Top 30 by score)</h2>
+<table>
+<tr><th>フィルタ</th><th>非Tie</th><th>P(B)</th><th>edge</th><th>score</th></tr>
+<tr><td>last2=BB ∧ Bstreak>=2 ∧ shoe>=61</td><td>42,795</td><td style='color:#fbbf24;font-weight:700'>51.658% </td><td>+0.729%</td><td>+1.51</td></tr>
+<tr><td>last2=BB ∧ Bstreak>=5 ∧ shoe>=61</td><td>5,922</td><td style='color:#4ade80;font-weight:700'>52.837% ⭐</td><td>+1.908%</td><td>+1.47</td></tr>
+<tr><td>last3=BBB ∧ Bstreak>=5 ∧ shoe>=61</td><td>5,922</td><td style='color:#4ade80;font-weight:700'>52.837% ⭐</td><td>+1.908%</td><td>+1.47</td></tr>
+<tr><td>last4=BBBB ∧ Bstreak>=5 ∧ shoe>=61</td><td>5,922</td><td style='color:#4ade80;font-weight:700'>52.837% ⭐</td><td>+1.908%</td><td>+1.47</td></tr>
+<tr><td>Bstreak>=2 ∧ Bstreak>=5 ∧ shoe>=61</td><td>5,922</td><td style='color:#4ade80;font-weight:700'>52.837% ⭐</td><td>+1.908%</td><td>+1.47</td></tr>
+<tr><td>Bstreak>=3 ∧ Bstreak>=5 ∧ shoe>=61</td><td>5,922</td><td style='color:#4ade80;font-weight:700'>52.837% ⭐</td><td>+1.908%</td><td>+1.47</td></tr>
+<tr><td>Bstreak>=4 ∧ Bstreak>=5 ∧ shoe>=61</td><td>5,922</td><td style='color:#4ade80;font-weight:700'>52.837% ⭐</td><td>+1.908%</td><td>+1.47</td></tr>
+<tr><td>last2=BB ∧ last3=BBB ∧ Bstreak>=5</td><td>55,074</td><td style='color:#fbbf24;font-weight:700'>51.552% </td><td>+0.624%</td><td>+1.46</td></tr>
+<tr><td>last2=BB ∧ last4=BBBB ∧ Bstreak>=5</td><td>55,074</td><td style='color:#fbbf24;font-weight:700'>51.552% </td><td>+0.624%</td><td>+1.46</td></tr>
+<tr><td>last2=BB ∧ Bstreak>=2 ∧ Bstreak>=5</td><td>55,074</td><td style='color:#fbbf24;font-weight:700'>51.552% </td><td>+0.624%</td><td>+1.46</td></tr>
+<tr><td>last2=BB ∧ Bstreak>=3 ∧ Bstreak>=5</td><td>55,074</td><td style='color:#fbbf24;font-weight:700'>51.552% </td><td>+0.624%</td><td>+1.46</td></tr>
+<tr><td>last2=BB ∧ Bstreak>=4 ∧ Bstreak>=5</td><td>55,074</td><td style='color:#fbbf24;font-weight:700'>51.552% </td><td>+0.624%</td><td>+1.46</td></tr>
+<tr><td>last3=BBB ∧ last4=BBBB ∧ Bstreak>=5</td><td>55,074</td><td style='color:#fbbf24;font-weight:700'>51.552% </td><td>+0.624%</td><td>+1.46</td></tr>
+<tr><td>last3=BBB ∧ Bstreak>=2 ∧ Bstreak>=5</td><td>55,074</td><td style='color:#fbbf24;font-weight:700'>51.552% </td><td>+0.624%</td><td>+1.46</td></tr>
+<tr><td>last3=BBB ∧ Bstreak>=3 ∧ Bstreak>=5</td><td>55,074</td><td style='color:#fbbf24;font-weight:700'>51.552% </td><td>+0.624%</td><td>+1.46</td></tr>
+<tr><td>last3=BBB ∧ Bstreak>=4 ∧ Bstreak>=5</td><td>55,074</td><td style='color:#fbbf24;font-weight:700'>51.552% </td><td>+0.624%</td><td>+1.46</td></tr>
+<tr><td>last4=BBBB ∧ Bstreak>=2 ∧ Bstreak>=5</td><td>55,074</td><td style='color:#fbbf24;font-weight:700'>51.552% </td><td>+0.624%</td><td>+1.46</td></tr>
+<tr><td>last4=BBBB ∧ Bstreak>=3 ∧ Bstreak>=5</td><td>55,074</td><td style='color:#fbbf24;font-weight:700'>51.552% </td><td>+0.624%</td><td>+1.46</td></tr>
+<tr><td>last4=BBBB ∧ Bstreak>=4 ∧ Bstreak>=5</td><td>55,074</td><td style='color:#fbbf24;font-weight:700'>51.552% </td><td>+0.624%</td><td>+1.46</td></tr>
+<tr><td>Bstreak>=2 ∧ Bstreak>=3 ∧ Bstreak>=5</td><td>55,074</td><td style='color:#fbbf24;font-weight:700'>51.552% </td><td>+0.624%</td><td>+1.46</td></tr>
+<tr><td>Bstreak>=2 ∧ Bstreak>=4 ∧ Bstreak>=5</td><td>55,074</td><td style='color:#fbbf24;font-weight:700'>51.552% </td><td>+0.624%</td><td>+1.46</td></tr>
+<tr><td>Bstreak>=3 ∧ Bstreak>=4 ∧ Bstreak>=5</td><td>55,074</td><td style='color:#fbbf24;font-weight:700'>51.552% </td><td>+0.624%</td><td>+1.46</td></tr>
+<tr><td>last2=BB ∧ last3=BBB ∧ Bstreak>=2</td><td>216,949</td><td style='color:#fbbf24;font-weight:700'>51.237% </td><td>+0.308%</td><td>+1.44</td></tr>
+<tr><td>last2=BB ∧ last3=BBB ∧ Bstreak>=3</td><td>216,949</td><td style='color:#fbbf24;font-weight:700'>51.237% </td><td>+0.308%</td><td>+1.44</td></tr>
+<tr><td>last2=BB ∧ Bstreak>=2 ∧ Bstreak>=3</td><td>216,949</td><td style='color:#fbbf24;font-weight:700'>51.237% </td><td>+0.308%</td><td>+1.44</td></tr>
+<tr><td>last3=BBB ∧ Bstreak>=2 ∧ Bstreak>=3</td><td>216,949</td><td style='color:#fbbf24;font-weight:700'>51.237% </td><td>+0.308%</td><td>+1.44</td></tr>
+<tr><td>last2=BB ∧ last3=BBB ∧ shoe>=61</td><td>21,973</td><td style='color:#fbbf24;font-weight:700'>51.886% </td><td>+0.958%</td><td>+1.42</td></tr>
+<tr><td>last2=BB ∧ Bstreak>=3 ∧ shoe>=61</td><td>21,973</td><td style='color:#fbbf24;font-weight:700'>51.886% </td><td>+0.958%</td><td>+1.42</td></tr>
+<tr><td>last3=BBB ∧ Bstreak>=2 ∧ shoe>=61</td><td>21,973</td><td style='color:#fbbf24;font-weight:700'>51.886% </td><td>+0.958%</td><td>+1.42</td></tr>
+<tr><td>last3=BBB ∧ Bstreak>=3 ∧ shoe>=61</td><td>21,973</td><td style='color:#fbbf24;font-weight:700'>51.886% </td><td>+0.958%</td><td>+1.42</td></tr>
+</table>
+
+<div class="verdict pass">
+<b style="color:#4ade80;font-size:20px">
+✅ 使える組み合わせが見つかりました
+</b><br><br>
+候補の out-of-sample 検証、及び過剰適合チェックが次の課題。
+</div>
+</div></body></html>

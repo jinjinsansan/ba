@@ -86,6 +86,36 @@ body {
 
 <div class="cards">
 
+<a href="banker52_combo_scan.html" class="card" style="border-color:#f87171;background:rgba(248,113,113,0.08)">
+<span class="icon">🔬</span>
+<h2>AM. B=52% 組み合わせフィルタ全探索</h2>
+<p>14 個別フィルタ × 1/2/3-way AND 合成 = 816 通り<br><b style="color:#fbbf24">唯一の候補: B×5連続 ∧ シュー61+ → 52.84% (n=5,922)</b><br>ただし多重検定で偶然の可能性大、out-of-sample 未検証</p>
+</a>
+
+<a href="banker52_filter_scan.html" class="card" style="border-color:#a78bfa;background:rgba(167,139,250,0.08)">
+<span class="icon">🔍</span>
+<h2>AL. B=52% 単一フィルタ探索</h2>
+<p>188万ハンドから直近パターン・ストリーク・時間帯・テーブル等で<br>「次=Banker が出やすい条件」を多角スキャン<br><b style="color:#f87171">通常テーブル最高 51.67% (B×6連続) → 52% 未到達</b></p>
+</a>
+
+<a href="seq_bankroll_scan.html" class="card" style="border-color:#00c8ff;background:rgba(0,200,255,0.08)">
+<span class="icon">💰</span>
+<h2>AK. SEQ × 元本スケールスキャン</h2>
+<p>5 SEQ × 6 元本 × 2 B_rate で破綻率を格子状測定<br><b style="color:#4ade80">B=52%→$10k でも破綻0</b> / <b style="color:#f87171">B=51.05%→$50k 必要 (E最強)</b></p>
+</a>
+
+<a href="seq_fair_comparison.html" class="card" style="border-color:#f87171;background:rgba(248,113,113,0.08)">
+<span class="icon">🏆</span>
+<h2>AJ. SEQ 5種 公平比較 (base $1 統一)</h2>
+<p>A/B/C/D/E を同条件で比較 (元本$5k / 勝ち0.95× / B=51.05% &amp; 52% / 利確$3 &amp; $10 / 30試行 seed共有)<br><b style="color:#4ade80">B=52%: A最強 +$92k</b> / <b style="color:#f87171">B=51.05%: 全員30/30破綻</b></p>
+</a>
+
+<a href="seq2_banker_52pct_30k.html" class="card" style="border-color:#fbbf24;background:rgba(251,191,36,0.08)">
+<span class="icon">⭐</span>
+<h2>AI. 新SEQ2 × 7T × Banker 52% × $30k</h2>
+<p>28段 SEQ / $10スタート / 手数料補正なし (勝ち0.95×)<br>$30 vs $100 利確比較 MC 20試行<br><b style="color:#4ade80">破綻 0 / 平均PNL +$594k / 最大DD $65k</b></p>
+</a>
+
 <a href="oldseq_7turn_winloss_distribution.html" class="card" style="border-color:#00c8ff;background:rgba(0,200,255,0.08)">
 <span class="icon">📊</span>
 <h2>AC. 旧SEQ × 7ターン 勝敗分布</h2>
