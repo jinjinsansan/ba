@@ -1,0 +1,63 @@
+<!DOCTYPE html>
+<html lang="ja"><head><meta charset="UTF-8">
+<title>ターン7 確率高方BET — 旧SEQ×7ターン</title>
+<style>
+body{font-family:'Noto Sans JP',sans-serif;background:#0f172a;color:#e2e8f0;padding:40px 20px;margin:0}
+.container{max-width:1100px;margin:0 auto}
+h1{font-size:30px;background:linear-gradient(135deg,#fbbf24,#f87171);-webkit-background-clip:text;background-clip:text;color:transparent;margin:0 0 8px}
+.sub{color:#94a3b8;margin-bottom:24px}
+.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:14px;margin:20px 0}
+.card{background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.1);border-radius:12px;padding:18px}
+.card .k{font-size:12px;color:#94a3b8}
+.card .v{font-size:22px;font-weight:700;margin-top:6px}
+table{width:100%;border-collapse:collapse;margin:24px 0;background:rgba(255,255,255,0.03);border-radius:12px;overflow:hidden}
+th,td{padding:10px 14px;border-bottom:1px solid rgba(255,255,255,0.08);text-align:right;font-variant-numeric:tabular-nums}
+th{background:rgba(251,191,36,0.15);color:#fbbf24;text-align:left}
+td:first-child,td:nth-child(2),th:first-child,th:nth-child(2){text-align:left}
+.pos{color:#4ade80}
+.neg{color:#f87171}
+.note{background:rgba(255,255,255,0.03);padding:16px 20px;border-left:3px solid #fbbf24;border-radius:6px;margin:20px 0;line-height:1.7;font-size:14px}
+.big{font-size:28px;font-weight:700;color:#f87171}
+</style></head><body>
+<div class="container">
+<h1>🎯 ターン7 確率高方BET 戦略</h1>
+<div class="sub">7ターン制 / ターン6終了時に最終分布 base rate を比較 → 確率が高い方がPlayerならBET、BankerならLOOK</div>
+
+<div class="note">
+<b>ユーザー理論</b>: ターン6終了時の状態から、7ターン目の結果によって到達する最終状態の
+「観測 base rate」を比較し、Player勝で行く先のほうがbase rateが高ければPlayer BET、
+そうでなければLOOK。<br>
+<b>結果ルール</b>: <code>wins_at_T6 ≤ 2 → BET Player</code> / <code>wins_at_T6 ≥ 3 → LOOK</code>
+</div>
+
+<div class="grid">
+  <div class="card"><div class="k">対象期間</div><div class="v">2026-04-06 〜 2026-04-19</div></div>
+  <div class="card"><div class="k">総セット数</div><div class="v">246,191</div></div>
+  <div class="card"><div class="k">BET数</div><div class="v">88,930</div></div>
+  <div class="card"><div class="k">LOOK数</div><div class="v">157,261</div></div>
+  <div class="card"><div class="k">BET率</div><div class="v">36.12%</div></div>
+  <div class="card"><div class="k">Player勝ち (win)</div><div class="v pos">43,341</div></div>
+  <div class="card"><div class="k">Player負け (loss)</div><div class="v neg">45,589</div></div>
+  <div class="card"><div class="k"><b>勝率</b></div><div class="big">48.736%</div></div>
+  <div class="card"><div class="k">フラット$1 PNL</div><div class="big">$-2,248</div></div>
+  <div class="card"><div class="k">ROI</div><div class="big">-2.528%</div></div>
+</div>
+
+<h2>📊 状態別内訳 (T6 勝数ごと)</h2>
+<table><tr><th>T6 勝数</th><th>判断</th><th>該当セット</th><th>BET数</th><th>勝</th><th>負</th><th>勝率</th><th>LOOK数</th><th>LOOK中P(見送った勝)</th><th>LOOK中B(回避した負)</th></tr><tr><td><b>0勝6負</b></td><td style='color:#4ade80'><b>P</b></td><td>4,391</td><td>4,391</td><td class='pos'>2,147</td><td class='neg'>2,244</td><td>48.895%</td><td>0</td><td>0</td><td>0</td></tr><tr><td><b>1勝5負</b></td><td style='color:#4ade80'><b>P</b></td><td>24,959</td><td>24,959</td><td class='pos'>12,101</td><td class='neg'>12,858</td><td>48.484%</td><td>0</td><td>0</td><td>0</td></tr><tr><td><b>2勝4負</b></td><td style='color:#4ade80'><b>P</b></td><td>59,580</td><td>59,580</td><td class='pos'>29,093</td><td class='neg'>30,487</td><td>48.830%</td><td>0</td><td>0</td><td>0</td></tr><tr><td><b>3勝3負</b></td><td style='color:#94a3b8'><b>LOOK</b></td><td>76,680</td><td>0</td><td class='pos'>0</td><td class='neg'>0</td><td>-</td><td>76,680</td><td>37,582</td><td>39,098</td></tr><tr><td><b>4勝2負</b></td><td style='color:#94a3b8'><b>LOOK</b></td><td>55,428</td><td>0</td><td class='pos'>0</td><td class='neg'>0</td><td>-</td><td>55,428</td><td>27,259</td><td>28,169</td></tr><tr><td><b>5勝1負</b></td><td style='color:#94a3b8'><b>LOOK</b></td><td>21,719</td><td>0</td><td class='pos'>0</td><td class='neg'>0</td><td>-</td><td>21,719</td><td>10,715</td><td>11,004</td></tr><tr><td><b>6勝0負</b></td><td style='color:#94a3b8'><b>LOOK</b></td><td>3,434</td><td>0</td><td class='pos'>0</td><td class='neg'>0</td><td>-</td><td>3,434</td><td>1,700</td><td>1,734</td></tr></table>
+
+<h2>LOOK の評価</h2>
+<div class="grid">
+  <div class="card"><div class="k">LOOKで見送った勝ち (T7=P)</div><div class="v pos">77,256</div></div>
+  <div class="card"><div class="k">LOOKで回避した負け (T7=B)</div><div class="v neg">80,005</div></div>
+  <div class="card"><div class="k">LOOK内 P率</div><div class="v">49.126%</div></div>
+</div>
+
+<div class="note" style="border-left-color:#f87171">
+<b>⚠️ 解釈の注意</b>: ユーザー理論は「最終分布 base rate」を根拠にしているが、
+バカラの各ハンドはほぼIID (Player=49.07%)。ターン6の状態に関わらず ターン7 の結果は
+独立に Player 49%, Banker 51%。base rate が高いのは組合せ数 C(7,k) の効果で、
+条件付き確率とは別物。BET勝率は状態間でほぼ一定になるはず。
+</div>
+
+</div></body></html>

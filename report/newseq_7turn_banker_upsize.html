@@ -1,0 +1,110 @@
+<!DOCTYPE html>
+<html lang="ja"><head><meta charset="UTF-8">
+<title>新SEQ × 7ターン × Banker only + 1.0526x上乗せ</title>
+<style>
+body{font-family:'Noto Sans JP',sans-serif;background:#0f172a;color:#e2e8f0;padding:40px 20px;margin:0}
+.container{max-width:1100px;margin:0 auto}
+h1{font-size:28px;background:linear-gradient(135deg,#fbbf24,#f87171);-webkit-background-clip:text;background-clip:text;color:transparent;margin:0 0 8px}
+.sub{color:#94a3b8;margin-bottom:24px}
+.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:14px;margin:20px 0}
+.card{background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.1);border-radius:12px;padding:18px}
+.card .k{font-size:12px;color:#94a3b8}
+.card .v{font-size:22px;font-weight:700;margin-top:6px}
+table{width:100%;border-collapse:collapse;margin:24px 0;background:rgba(255,255,255,0.03);border-radius:12px;overflow:hidden}
+th,td{padding:10px 14px;border-bottom:1px solid rgba(255,255,255,0.08);text-align:right;font-variant-numeric:tabular-nums}
+th{background:rgba(251,191,36,0.15);color:#fbbf24;text-align:left}
+td:first-child,th:first-child{text-align:left}
+.pos{color:#4ade80}
+.neg{color:#f87171}
+.note{background:rgba(255,255,255,0.03);padding:16px 20px;border-left:3px solid #fbbf24;border-radius:6px;margin:20px 0;line-height:1.7;font-size:14px}
+canvas{width:100%;height:360px;background:rgba(255,255,255,0.02);border-radius:12px;margin:20px 0}
+</style></head><body>
+<div class="container">
+<h1>🏦 新SEQ × 7ターン × Banker only + 1.0526x 上乗せ</h1>
+<div class="sub">対象: Evolution 62テーブル / 2026-04-06 〜 2026-04-19</div>
+
+<div class="note">
+<b>戦略</b>: 常時 Bankerに BET。手数料5%相殺のため賭け額を <code>1/(1-0.05) = 1.0526x</code> 上乗せ。<br>
+<b>資金管理</b>: 新SEQ (SEQ_COUNTER, 43レベル max $500) × 7ターン制 MaruBatsuロジック / chip_base $1 スタート<br>
+<b>破綻</b>: 残高が次BETの必要額を下回った時点で bust
+</div>
+
+<div class="grid">
+  <div class="card"><div class="k">総BET</div><div class="v">351,757</div></div>
+  <div class="card"><div class="k">Banker勝ち</div><div class="v pos">179,563</div></div>
+  <div class="card"><div class="k">Banker勝率</div><div class="v">51.047%</div></div>
+  <div class="card"><div class="k">Tieスキップ</div><div class="v">33,309</div></div>
+  <div class="card"><div class="k">完成セット</div><div class="v">50,251</div></div>
+  <div class="card"><div class="k">到達最大SEQ</div><div class="v">SEQ[42]=$500</div></div>
+  <div class="card"><div class="k">最終SEQ</div><div class="v">SEQ[42]=$500</div></div>
+</div>
+
+<h2>💰 元本別結果</h2>
+<table><tr><th>元本</th><th>最終残高</th><th>PNL</th><th>Peak</th><th>Trough</th><th>最大DD</th><th>破綻</th><th>破綻ハンド</th></tr><tr><td><b>$50,000</b></td><td style='color:#f87171'>$211</td><td style='color:#f87171'><b>$-49,789</b></td><td>$74,971</td><td>$211</td><td class='neg'>$74,759</td><td><span class='neg'><b>YES</b></span><br><small>bet#208,870, SEQ[42]=$500</small></td><td>208870</td></tr><tr><td><b>$100,000</b></td><td style='color:#f87171'>$374</td><td style='color:#f87171'><b>$-99,626</b></td><td>$124,971</td><td>$374</td><td class='neg'>$124,597</td><td><span class='neg'><b>YES</b></span><br><small>bet#351,758, SEQ[42]=$500</small></td><td>351758</td></tr></table>
+
+<h2>📉 残高推移 (5,000BETごと)</h2>
+<canvas id="eq"></canvas>
+
+<script>
+const eq50 = [[0,50000.0],[5000,50242.3],[10000,51882.2],[15000,53830.8],[20000,55408.2],[25000,53511.5],[30000,44707.1],[35000,49984.7],[40000,50123.9],[45000,51918.1],[50000,52047.5],[55000,55418.8],[60000,57308.8],[65000,59167.5],[70000,60928.1],[75000,62665.8],[80000,64954.9],[85000,65492.5],[90000,66196.2],[95000,66810.9],[100000,69791.2],[105000,70537.5],[110000,71813.2],[115000,74685.6],[120000,74264.9],[125000,68037.3],[130000,69983.7],[135000,72002.0],[140000,74031.1],[145000,65339.7],[150000,49754.4],[155000,51652.7],[160000,53531.2],[165000,48349.2],[170000,49615.6],[175000,51667.4],[180000,53496.5],[185000,55116.6],[190000,56932.3],[195000,57695.1],[200000,34730.7],[205000,37961.5],[351757,211.4]];
+const eq100 = [[0,100000.0],[5000,100242.3],[10000,101882.2],[15000,103830.8],[20000,105408.2],[25000,103511.5],[30000,94707.1],[35000,99984.7],[40000,100123.9],[45000,101918.1],[50000,102047.5],[55000,105418.8],[60000,107308.8],[65000,109167.5],[70000,110928.1],[75000,112665.8],[80000,114954.9],[85000,115492.5],[90000,116196.2],[95000,116810.9],[100000,119791.2],[105000,120537.5],[110000,121813.2],[115000,124685.6],[120000,124264.9],[125000,118037.3],[130000,119983.7],[135000,122002.0],[140000,124031.1],[145000,115339.7],[150000,99754.4],[155000,101652.7],[160000,103531.2],[165000,98349.2],[170000,99615.6],[175000,101667.4],[180000,103496.5],[185000,105116.6],[190000,106932.3],[195000,107695.1],[200000,84730.7],[205000,87961.5],[210000,64797.2],[215000,66603.5],[220000,64398.7],[225000,63364.1],[230000,65984.1],[235000,51558.2],[240000,58711.8],[245000,60449.3],[250000,60787.3],[255000,62820.2],[260000,64886.2],[265000,62245.9],[270000,54386.8],[275000,57943.6],[280000,60022.6],[285000,59988.8],[290000,62001.3],[295000,62442.3],[300000,61045.9],[305000,58085.6],[310000,44313.3],[315000,44805.9],[320000,47429.3],[325000,49825.3],[330000,50801.3],[335000,53347.7],[340000,43824.8],[345000,20284.3],[350000,29949.9],[351757,374.3]];
+const canvas = document.getElementById('eq');
+const ctx = canvas.getContext('2d');
+
+function draw() {
+  const dpr = window.devicePixelRatio || 1;
+  const W = canvas.clientWidth, H = canvas.clientHeight;
+  canvas.width = W*dpr; canvas.height = H*dpr; ctx.scale(dpr,dpr);
+  ctx.clearRect(0,0,W,H);
+  const all = [...eq50, ...eq100];
+  if (!all.length) return;
+  const xs = all.map(p=>p[0]); const ys = all.map(p=>p[1]);
+  const xmin=Math.min(...xs), xmax=Math.max(...xs);
+  const ymin=Math.min(0,...ys), ymax=Math.max(...ys);
+  const pad=60;
+  const sx = x=>pad+(x-xmin)/((xmax-xmin)||1)*(W-pad*2);
+  const sy = y=>H-pad-(y-ymin)/((ymax-ymin)||1)*(H-pad*2);
+  // zero line
+  ctx.strokeStyle='rgba(255,255,255,0.2)'; ctx.lineWidth=1;
+  ctx.beginPath(); ctx.moveTo(pad,sy(0)); ctx.lineTo(W-pad,sy(0)); ctx.stroke();
+  // starting bankrolls (dashed)
+  ctx.setLineDash([4,4]); ctx.strokeStyle='rgba(74,222,128,0.3)';
+  ctx.beginPath(); ctx.moveTo(pad,sy(50000)); ctx.lineTo(W-pad,sy(50000)); ctx.stroke();
+  ctx.strokeStyle='rgba(251,191,36,0.3)';
+  ctx.beginPath(); ctx.moveTo(pad,sy(100000)); ctx.lineTo(W-pad,sy(100000)); ctx.stroke();
+  ctx.setLineDash([]);
+  // labels
+  ctx.fillStyle='#94a3b8'; ctx.font='11px sans-serif';
+  ctx.fillText('0', 10, sy(0)+4);
+  ctx.fillText('$50k', 10, sy(50000)+4);
+  ctx.fillText('$100k', 10, sy(100000)+4);
+  ctx.fillText('ymax: '+ymax.toLocaleString(), 10, pad-6);
+  ctx.fillText(xmin.toLocaleString()+' bets', pad, H-30);
+  ctx.fillText(xmax.toLocaleString()+' bets', W-pad-80, H-30);
+  // line eq50
+  ctx.strokeStyle='#4ade80'; ctx.lineWidth=2;
+  ctx.beginPath();
+  eq50.forEach((p,i)=>{ const X=sx(p[0]),Y=sy(p[1]); if(i==0)ctx.moveTo(X,Y); else ctx.lineTo(X,Y); });
+  ctx.stroke();
+  // line eq100
+  ctx.strokeStyle='#fbbf24'; ctx.lineWidth=2;
+  ctx.beginPath();
+  eq100.forEach((p,i)=>{ const X=sx(p[0]),Y=sy(p[1]); if(i==0)ctx.moveTo(X,Y); else ctx.lineTo(X,Y); });
+  ctx.stroke();
+  // legend
+  ctx.fillStyle='#4ade80'; ctx.fillText('● 元本 $50,000', W-160, 30);
+  ctx.fillStyle='#fbbf24'; ctx.fillText('● 元本 $100,000', W-160, 48);
+}
+draw();
+window.addEventListener('resize', draw);
+</script>
+
+<div class="note" style="border-left-color:#f87171;line-height:1.9">
+<b>⚠️ 数学的な結論</b><br>
+Banker 50.93% × 上乗せ1.0526x の EV = <code>0.5093 × 1.00 - 0.4907 × 1.0526 = -0.00721</code><br>
+→ 1BET あたり <b>-0.72%</b> の期待値。賭け額を上乗せしても「負ける時も上乗せされる」ため、
+1.0526x 倍はハウスエッジを消さず、むしろわずかに悪化させる。<br>
+利益を出すための必要条件は <code>P(B) > 51.28%</code>。実測50.93%では<b>0.35%足りない</b> → 長期的には負ける。
+</div>
+
+</div></body></html>

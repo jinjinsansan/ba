@@ -1,0 +1,90 @@
+<!DOCTYPE html>
+<html lang="ja"><head><meta charset="UTF-8">
+<title>旧SEQ × 7ターン制 Player常時BET 分布 / 2026-04-06〜</title>
+<style>
+body{font-family:'Noto Sans JP',sans-serif;background:#0f172a;color:#e2e8f0;padding:40px 20px;margin:0}
+.container{max-width:1100px;margin:0 auto}
+h1{font-size:32px;background:linear-gradient(135deg,#00c8ff,#6bcf8f);-webkit-background-clip:text;background-clip:text;color:transparent;margin:0 0 8px}
+.sub{color:#94a3b8;margin-bottom:24px}
+.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:14px;margin:20px 0}
+.card{background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.1);border-radius:12px;padding:18px}
+.card .k{font-size:12px;color:#94a3b8}
+.card .v{font-size:22px;font-weight:700;margin-top:6px}
+table{width:100%;border-collapse:collapse;margin:24px 0;background:rgba(255,255,255,0.03);border-radius:12px;overflow:hidden}
+th,td{padding:10px 14px;border-bottom:1px solid rgba(255,255,255,0.08);text-align:right;font-variant-numeric:tabular-nums}
+th{background:rgba(0,200,255,0.1);color:#00c8ff;text-align:left}
+td:first-child,th:first-child{text-align:left}
+.pos{color:#4ade80}
+.neg{color:#f87171}
+.bar{display:inline-block;height:10px;background:linear-gradient(90deg,#00c8ff,#6bcf8f);border-radius:4px;margin-left:8px;vertical-align:middle}
+canvas{width:100%;height:300px;background:rgba(255,255,255,0.02);border-radius:12px;margin:20px 0}
+.note{background:rgba(255,255,255,0.03);padding:16px 20px;border-left:3px solid #00c8ff;border-radius:6px;margin:20px 0;line-height:1.7;font-size:14px}
+.profit{color:#f87171}
+</style></head><body>
+<div class="container">
+<h1>旧SEQ × 7ターン制 — 常時 Player BET</h1>
+<div class="sub">対象: Evolution Gaming 全テーブル / 2026-04-06 〜 2026-04-19</div>
+
+<div class="grid">
+  <div class="card"><div class="k">対象シュー</div><div class="v">28,142</div></div>
+  <div class="card"><div class="k">対象テーブル</div><div class="v">62</div></div>
+  <div class="card"><div class="k">総ハンド</div><div class="v">1,887,187</div></div>
+  <div class="card"><div class="k">有効BET</div><div class="v">1,723,343</div></div>
+  <div class="card"><div class="k">Tie(スキップ)</div><div class="v">163,844</div></div>
+  <div class="card"><div class="k">Player勝率</div><div class="v">49.071%</div></div>
+  <div class="card"><div class="k">完成セット数</div><div class="v">246,191</div></div>
+  <div class="card"><div class="k">累計損益 (chip)</div><div class="v profit">-7,987,461</div></div>
+  <div class="card"><div class="k">最終SEQ位置</div><div class="v">SEQ[47]=$250</div></div>
+</div>
+
+<div class="note">
+<b>旧SEQ</b> = [1, 2, 3, 5, 7, 9, 11, 13, 16, 19, 22, 25, 28, 31, 35, 39, 43, 47, 51, 55, 60, 65, 70, 75, 80, 85, 90, 95, 100, 106, 112, 118, 124, 130, 136, 142, 148, 154, 160, 170, 180, 190, 200, 210, 220, 230, 240, 250] (49要素)<br>
+<b>セット損益 (chip列)</b> は SEQ[0]=1 unit でBETした場合の1セットの chip 増減 (W-L) を示す。実際の累計は MaruBatsuTracker のSEQ進行ロジックで計算。
+</div>
+
+<h2>📊 N勝N負 分布</h2>
+<table><tr><th>W/L</th><th>観測セット数</th><th>観測%</th><th>理論% (Bin(7,p))</th><th>差</th><th>セット損益/chip</th></tr><tr><td><b>7勝0負</b></td><td>1,700</td><td>0.691% <span class='bar' style='width:2px'></span></td><td>0.685%</td><td class='pos'>+0.005%</td><td class='pos'>+7</td></tr><tr><td><b>6勝1負</b></td><td>12,449</td><td>5.057% <span class='bar' style='width:20px'></span></td><td>4.978%</td><td class='pos'>+0.079%</td><td class='pos'>+5</td></tr><tr><td><b>5勝2負</b></td><td>38,263</td><td>15.542% <span class='bar' style='width:62px'></span></td><td>15.498%</td><td class='pos'>+0.044%</td><td class='pos'>+3</td></tr><tr><td><b>4勝3負</b></td><td>65,751</td><td>26.707% <span class='bar' style='width:106px'></span></td><td>26.808%</td><td class='neg'>-0.101%</td><td class='pos'>+1</td></tr><tr><td><b>3勝4負</b></td><td>68,191</td><td>27.698% <span class='bar' style='width:110px'></span></td><td>27.823%</td><td class='neg'>-0.124%</td><td class='neg'>-1</td></tr><tr><td><b>2勝5負</b></td><td>42,588</td><td>17.299% <span class='bar' style='width:69px'></span></td><td>17.325%</td><td class='neg'>-0.027%</td><td class='neg'>-3</td></tr><tr><td><b>1勝6負</b></td><td>15,005</td><td>6.095% <span class='bar' style='width:24px'></span></td><td>5.994%</td><td class='pos'>+0.101%</td><td class='neg'>-5</td></tr><tr><td><b>0勝7負</b></td><td>2,244</td><td>0.911% <span class='bar' style='width:3px'></span></td><td>0.889%</td><td class='pos'>+0.023%</td><td class='neg'>-7</td></tr></table>
+
+<h2>📈 セット毎 累計損益 (chip, 10,000セット毎スナップショット)</h2>
+<canvas id="eq"></canvas>
+
+<script>
+const pts = [[10000,-384711],[20000,-843211],[30000,-1191711],[40000,-1539211],[50000,-1849711],[60000,-2093211],[70000,-2437211],[80000,-2763211],[90000,-3206211],[100000,-3418711],[110000,-3716711],[120000,-4020711],[130000,-4337711],[140000,-4742711],[150000,-4920711],[160000,-5212711],[170000,-5612711],[180000,-5900211],[190000,-6175711],[200000,-6498211],[210000,-6848211],[220000,-7247711],[230000,-7533711],[240000,-7824211],[246191,-7987461]];
+const canvas = document.getElementById('eq');
+const ctx = canvas.getContext('2d');
+function draw() {
+  const dpr = window.devicePixelRatio || 1;
+  const W = canvas.clientWidth, H = canvas.clientHeight;
+  canvas.width = W*dpr; canvas.height = H*dpr; ctx.scale(dpr,dpr);
+  ctx.clearRect(0,0,W,H);
+  if (!pts.length) return;
+  const xs = pts.map(p=>p[0]); const ys = pts.map(p=>p[1]);
+  const xmin=Math.min(...xs), xmax=Math.max(...xs);
+  const ymin=Math.min(0,...ys), ymax=Math.max(0,...ys);
+  const pad=40;
+  const sx = x=>pad+(x-xmin)/((xmax-xmin)||1)*(W-pad*2);
+  const sy = y=>H-pad-(y-ymin)/((ymax-ymin)||1)*(H-pad*2);
+  // zero line
+  ctx.strokeStyle='rgba(255,255,255,0.2)'; ctx.lineWidth=1;
+  ctx.beginPath(); ctx.moveTo(pad,sy(0)); ctx.lineTo(W-pad,sy(0)); ctx.stroke();
+  // axis labels
+  ctx.fillStyle='#94a3b8'; ctx.font='11px sans-serif';
+  ctx.fillText(xmin.toLocaleString()+' sets', pad, H-10);
+  ctx.fillText(xmax.toLocaleString()+' sets', W-pad-80, H-10);
+  ctx.fillText(ymax.toLocaleString()+' chip', 4, pad+10);
+  ctx.fillText(ymin.toLocaleString()+' chip', 4, H-pad);
+  // line
+  ctx.strokeStyle='#f87171'; ctx.lineWidth=2;
+  ctx.beginPath();
+  pts.forEach((p,i)=>{ const X=sx(p[0]),Y=sy(p[1]); if(i==0)ctx.moveTo(X,Y); else ctx.lineTo(X,Y); });
+  ctx.stroke();
+}
+draw();
+window.addEventListener('resize', draw);
+</script>
+
+<div class="note" style="border-left-color:#f87171">
+<b>⚠️ 注意</b>: テーブル乗換えなしで全ハンドを1本の時系列として流している。実運用ではテーブル切替・BET窓逃し・$500上限などの要因が効くため、ここで見えた分布はあくまで「Evolution P/B列を連続読みした場合の生の分布」。実運用のPNLとは一致しない。
+</div>
+
+</div></body></html>
