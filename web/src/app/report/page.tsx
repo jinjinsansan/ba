@@ -1,8 +1,10 @@
 'use client'
 
 import { useState } from 'react'
+import { useTranslations } from 'next-intl'
 
 export default function ReportPage() {
+  const t = useTranslations('report')
   const [password, setPassword] = useState('')
   const [authenticated, setAuthenticated] = useState(false)
   const [files, setFiles] = useState<string[]>([])
@@ -18,7 +20,7 @@ export default function ReportPage() {
       body: JSON.stringify({ password }),
     })
     if (!res.ok) {
-      setError('Invalid password')
+      setError(t('err.invalidPassword'))
       return
     }
     const data = await res.json()
@@ -33,7 +35,7 @@ export default function ReportPage() {
       body: JSON.stringify({ password, file }),
     })
     if (!res.ok) {
-      setError('Failed to load file')
+      setError(t('err.loadFail'))
       return
     }
     const html = await res.text()
@@ -62,7 +64,7 @@ export default function ReportPage() {
               padding: '4px 14px', borderRadius: '4px', cursor: 'pointer', fontSize: '12px',
             }}
           >
-            ← BACK
+            {t('back')}
           </button>
         </div>
         <iframe
@@ -88,7 +90,7 @@ export default function ReportPage() {
             LAPLACE
           </div>
           <div style={{ color: 'var(--text-dim)', fontSize: '11px', letterSpacing: '2px', marginBottom: '24px' }}>
-            REPORT ACCESS
+            {t('accessLabel')}
           </div>
           {error && (
             <div style={{ color: 'var(--lose)', fontSize: '12px', marginBottom: '12px' }}>{error}</div>
@@ -98,7 +100,7 @@ export default function ReportPage() {
             value={password}
             onChange={e => setPassword(e.target.value)}
             onKeyDown={e => e.key === 'Enter' && handleLogin()}
-            placeholder="Password"
+            placeholder={t('passwordPlaceholder')}
             style={{
               width: '100%', padding: '10px 14px', background: 'var(--bg)',
               border: '1px solid var(--border)', borderRadius: '6px', color: 'var(--text)',
@@ -113,7 +115,7 @@ export default function ReportPage() {
               fontWeight: 700, letterSpacing: '2px', cursor: 'pointer',
             }}
           >
-            ENTER
+            {t('enter')}
           </button>
         </div>
       </div>
@@ -124,7 +126,7 @@ export default function ReportPage() {
     <div style={{ background: 'var(--bg)', minHeight: '100vh', padding: '24px 16px' }}>
       <div style={{ maxWidth: '900px', margin: '0 auto' }}>
         <h1 style={{ color: 'var(--accent)', fontSize: 'clamp(20px, 3vw, 24px)', borderBottom: '2px solid var(--accent)', paddingBottom: '8px', marginBottom: '20px' }}>
-          LAPLACE Report
+          {t('title')}
         </h1>
         <div style={{
           display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))',

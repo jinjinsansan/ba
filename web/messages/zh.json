@@ -27,30 +27,12 @@
     "titleLine1": "为精度",
     "titleLine2": "而生。",
     "items": [
-      {
-        "title": "模式识别",
-        "desc": "独创的〇×策略。覆盖整个 shoe 历史的多层序列分析。"
-      },
-      {
-        "title": "零接触执行",
-        "desc": "桌台选择、投注金额、结果记录。从进入到退出完全自动化。"
-      },
-      {
-        "title": "风险架构",
-        "desc": "硬性盈利目标。硬性亏损上限。自动会话终止。无法覆盖。"
-      },
-      {
-        "title": "实时智能",
-        "desc": "胜率、盈亏曲线、逐局分解。每一手都有记录。"
-      },
-      {
-        "title": "云端逻辑引擎",
-        "desc": "预测在服务器端计算。本地设备仅负责执行。低延迟设计。"
-      },
-      {
-        "title": "绑定分发",
-        "desc": "每个二进制文件均以加密方式绑定许可证。结构上无法再分发。"
-      }
+      { "title": "模式识别", "desc": "独创的〇×策略。覆盖整个 shoe 历史的多层序列分析。" },
+      { "title": "零接触执行", "desc": "桌台选择、投注金额、结果记录。从进入到退出完全自动化。" },
+      { "title": "风险架构", "desc": "硬性盈利目标。硬性亏损上限。自动会话终止。无法覆盖。" },
+      { "title": "实时智能", "desc": "胜率、盈亏曲线、逐局分解。每一手都有记录。" },
+      { "title": "云端逻辑引擎", "desc": "预测在服务器端计算。本地设备仅负责执行。低延迟设计。" },
+      { "title": "绑定分发", "desc": "每个二进制文件均以加密方式绑定许可证。结构上无法再分发。" }
     ]
   },
   "pricing": {
@@ -74,22 +56,10 @@
     "titleLine1": "四个步骤。",
     "titleLine2": "之后全自动。",
     "steps": [
-      {
-        "title": "支付",
-        "desc": "使用 USDT 购买授权。TRC-20 或 ERC-20。30 分钟内确认。"
-      },
-      {
-        "title": "下载",
-        "desc": "获得您专属的 LAPLACE.exe。与授权密钥绑定。"
-      },
-      {
-        "title": "连接",
-        "desc": "在内置浏览器中登录 Stake 一次。凭证仅保留在本地。"
-      },
-      {
-        "title": "运行",
-        "desc": "按下 START。系统自主运行。无需进一步操作。"
-      }
+      { "title": "支付", "desc": "使用 USDT 购买授权。TRC-20 或 ERC-20。30 分钟内确认。" },
+      { "title": "下载", "desc": "获得您专属的 LAPLACE.exe。与授权密钥绑定。" },
+      { "title": "连接", "desc": "在内置浏览器中登录 Stake 一次。凭证仅保留在本地。" },
+      { "title": "运行", "desc": "按下 START。系统自主运行。无需进一步操作。" }
     ]
   },
   "faq": {
@@ -97,26 +67,11 @@
     "titleLine1": "常见",
     "titleLine2": "问题。",
     "items": [
-      {
-        "q": "利润分成如何运作?",
-        "a": "每个会话日结束时计算净利润,按比例从余额中扣除。亏损日结转——在先前的亏损被回收之前不产生费用。"
-      },
-      {
-        "q": "余额归零后会怎样?",
-        "a": "激活 24 小时宽限期,机器人暂停。随时充值即可恢复。无惩罚,不删账户。"
-      },
-      {
-        "q": "授权费用如何收取?",
-        "a": "从首次充值中自动扣除。支付 $2,000 授权 + $3,000 充值 = $3,000 运营余额。"
-      },
-      {
-        "q": "支持哪些支付方式?",
-        "a": "仅 USDT。TRC-20 (TRON) 或 ERC-20 (Ethereum)。人工确认,通常 30 分钟内完成。"
-      },
-      {
-        "q": "可以在云主机上运行吗?",
-        "a": "可以。任何 Windows 10/11 环境——本地或云端均可。AWS WorkSpaces、Paperspace、Shadow PC 均已确认。"
-      }
+      { "q": "利润分成如何运作?", "a": "每个会话日结束时计算净利润,按比例从余额中扣除。亏损日结转——在先前的亏损被回收之前不产生费用。" },
+      { "q": "余额归零后会怎样?", "a": "激活 24 小时宽限期,机器人暂停。随时充值即可恢复。无惩罚,不删账户。" },
+      { "q": "授权费用如何收取?", "a": "从首次充值中自动扣除。支付 $2,000 授权 + $3,000 充值 = $3,000 运营余额。" },
+      { "q": "支持哪些支付方式?", "a": "仅 USDT。TRC-20 (TRON) 或 ERC-20 (Ethereum)。人工确认,通常 30 分钟内完成。" },
+      { "q": "可以在云主机上运行吗?", "a": "可以。任何 Windows 10/11 环境——本地或云端均可。AWS WorkSpaces、Paperspace、Shadow PC 均已确认。" }
     ]
   },
   "finalCta": {
@@ -132,5 +87,209 @@
     "ja": "日本語",
     "ko": "한국어",
     "zh": "中文"
+  },
+  "auth": {
+    "accessLabel": "LAPLACE ACCESS",
+    "loading": "加载中...",
+    "login": {
+      "title": "欢迎回来",
+      "subtitle": "登录 LAPLACE 仪表板",
+      "email": "邮箱",
+      "password": "密码",
+      "emailPlaceholder": "you@example.com",
+      "passwordPlaceholder": "请输入密码",
+      "submitting": "登录中...",
+      "submit": "登录",
+      "noAccount": "还没有账户?",
+      "signupLink": "注册"
+    },
+    "signup": {
+      "title": "创建账户",
+      "subtitle": "加入 LAPLACE 开始赢取",
+      "confirmSent": "请查看邮箱并点击确认链接。",
+      "email": "邮箱",
+      "password": "密码",
+      "emailPlaceholder": "you@example.com",
+      "passwordPlaceholder": "至少 8 位",
+      "referralCode": "推荐码",
+      "optional": "(可选)",
+      "referralPlaceholder": "REF-XXXXXXXX",
+      "submitting": "创建中...",
+      "submit": "创建账户",
+      "hasAccount": "已有账户?",
+      "loginLink": "登录"
+    }
+  },
+  "dashboard": {
+    "admin": "管理",
+    "logout": "登出",
+    "hudLabel": "账户概览",
+    "title": "我的仪表板",
+    "status": {
+      "label": "账户状态",
+      "active": "运行中 — 实盘投注已启用",
+      "dryRun": "试运行 — 充值后启用实盘",
+      "pending": "待确认 — 等待付款确认",
+      "suspended": "已暂停 — 请联系支持",
+      "noPurchase": "未购买授权 — 购买以开始",
+      "purchaseCta": "购买授权",
+      "chargeCta": "充值余额"
+    },
+    "stats": {
+      "balance": "余额",
+      "profitShareRate": "利润分成率",
+      "totalCharged": "累计充值",
+      "carryLoss": "结转亏损",
+      "free": "FREE"
+    },
+    "download": {
+      "title": "软件下载",
+      "button": "下载 LAPLACE v{version}",
+      "updated": "更新:",
+      "directUrl": "直接 URL:",
+      "preparing": "正在准备下载...",
+      "needLicense": "需要购买授权才能下载。"
+    },
+    "chargeHistory": {
+      "title": "充值记录",
+      "add": "添加充值",
+      "date": "日期",
+      "amount": "金额",
+      "status": "状态",
+      "empty": "暂无充值记录。"
+    },
+    "settlements": {
+      "title": "每日结算",
+      "date": "日期",
+      "profit": "盈亏",
+      "fee": "手续费",
+      "note": "备注",
+      "empty": "暂无结算记录。"
+    },
+    "support": {
+      "title": "支持",
+      "sent": "已发送! 我们会尽快回复您。",
+      "placeholder": "描述您的问题...",
+      "send": "发送",
+      "sending": "..."
+    }
+  },
+  "charge": {
+    "hudLabel": "余额访问",
+    "title": "充值余额",
+    "subtitle": "添加资金以启用实盘投注",
+    "amountLabel": "金额 (USD)",
+    "amountPlaceholder": "最低 $100",
+    "networkLabel": "USDT 网络",
+    "promoLabel": "优惠码",
+    "optional": "(可选)",
+    "promoPlaceholder": "输入代码",
+    "apply": "应用",
+    "submit": "提交充值",
+    "submitting": "处理中...",
+    "promo": {
+      "invalid": "无效的优惠码",
+      "expired": "代码已过期",
+      "chargeFree": "免费充值!",
+      "discount": "{percent}% 折扣",
+      "applied": "代码已应用"
+    },
+    "done": {
+      "activated": "充值已激活!",
+      "submitted": "充值已提交",
+      "activatedMsg": "您的账户已激活,拥有无限余额。",
+      "sendPrefix": "请发送",
+      "sendSuffix": "至:",
+      "confirmMsg": "收到付款后,我们将在 30 分钟内确认。",
+      "goDashboard": "前往仪表板"
+    },
+    "walletMissing": {
+      "trc": "TRC20 钱包未配置",
+      "erc": "ERC20 钱包未配置"
+    }
+  },
+  "purchase": {
+    "hudLabel": "授权访问",
+    "title": "购买授权",
+    "subtitle": "获取 LAPLACE AI 引擎完整访问权限",
+    "licenseName": "LAPLACE 授权",
+    "features": [
+      "AI 预测引擎完整访问",
+      "自动投注执行",
+      "实时仪表板",
+      "云端逻辑处理",
+      "终身更新"
+    ],
+    "networkLabel": "USDT 网络",
+    "promoLabel": "优惠码",
+    "optional": "(可选)",
+    "promoPlaceholder": "输入代码",
+    "apply": "应用",
+    "promo": {
+      "invalid": "无效的优惠码",
+      "expired": "优惠码已过期",
+      "licenseFree": "授权免费!",
+      "discount": "{percent}% 折扣",
+      "applied": "代码已应用"
+    },
+    "summary": {
+      "license": "授权",
+      "network": "网络",
+      "total": "合计"
+    },
+    "submit": "提交订单",
+    "submitting": "处理中...",
+    "done": {
+      "activated": "已激活!",
+      "submitted": "订单已提交",
+      "activatedMsg": "您的授权已激活。请前往仪表板继续。",
+      "sendPrefix": "请发送",
+      "sendSuffix": "至:",
+      "orderIdLabel": "订单 ID:",
+      "confirmMsg": "收到付款后,我们将在 30 分钟内确认。",
+      "goDashboard": "前往仪表板"
+    }
+  },
+  "referral": {
+    "title": "推荐计划",
+    "urlLabel": "您的推荐 URL",
+    "copy": "复制",
+    "copied": "已复制!",
+    "totalEarned": "累计获得",
+    "withdrawn": "已提现",
+    "available": "可提现",
+    "referredLabel": "已推荐用户",
+    "tableEmail": "邮箱",
+    "tableJoined": "加入日期",
+    "tableCharged": "累计充值",
+    "tableCommission": "佣金 (5%)",
+    "withdrawHistory": "提现历史",
+    "requestWithdraw": "申请提现",
+    "withdrawForm": "提现申请",
+    "amountLabel": "金额 (USD) — 可提现: ${amount}",
+    "amountPlaceholder": "10.00",
+    "networkLabel": "网络",
+    "walletLabel": "USDT 钱包地址",
+    "walletPlaceholder": "T... 或 0x...",
+    "submit": "提交",
+    "submitting": "提交中...",
+    "cancel": "取消",
+    "err": {
+      "min": "最低提现金额为 $10",
+      "wallet": "请输入钱包地址",
+      "generic": "错误"
+    },
+    "minHint": "最低提现金额为 $10。继续赚取以达到提现门槛。"
+  },
+  "report": {
+    "title": "LAPLACE 报告",
+    "accessLabel": "REPORT ACCESS",
+    "passwordPlaceholder": "密码",
+    "enter": "ENTER",
+    "back": "← 返回",
+    "err": {
+      "invalidPassword": "密码错误",
+      "loadFail": "文件加载失败"
+    }
   }
 }

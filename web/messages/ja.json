@@ -27,30 +27,12 @@
     "titleLine1": "精度のために",
     "titleLine2": "設計された。",
     "items": [
-      {
-        "title": "パターン認識",
-        "desc": "独自の〇×戦略。シュー全体にわたる多層シーケンス解析。"
-      },
-      {
-        "title": "ゼロタッチ実行",
-        "desc": "テーブル選定・BET額・結果ログまで、入場から退場まで完全自動化。"
-      },
-      {
-        "title": "リスク設計",
-        "desc": "利確目標・損切上限・自動セッション終了。オーバーライド不可。"
-      },
-      {
-        "title": "ライブ解析",
-        "desc": "勝率・損益曲線・セット別内訳。全ハンドが記録されます。"
-      },
-      {
-        "title": "クラウド推論エンジン",
-        "desc": "予測計算はサーバー側で実行。端末は執行のみ担当。低遅延設計。"
-      },
-      {
-        "title": "バインド配布",
-        "desc": "各バイナリは暗号的にライセンスへ紐付け。再配布は構造的に不可能。"
-      }
+      { "title": "パターン認識", "desc": "独自の〇×戦略。シュー全体にわたる多層シーケンス解析。" },
+      { "title": "ゼロタッチ実行", "desc": "テーブル選定・BET額・結果ログまで、入場から退場まで完全自動化。" },
+      { "title": "リスク設計", "desc": "利確目標・損切上限・自動セッション終了。オーバーライド不可。" },
+      { "title": "ライブ解析", "desc": "勝率・損益曲線・セット別内訳。全ハンドが記録されます。" },
+      { "title": "クラウド推論エンジン", "desc": "予測計算はサーバー側で実行。端末は執行のみ担当。低遅延設計。" },
+      { "title": "バインド配布", "desc": "各バイナリは暗号的にライセンスへ紐付け。再配布は構造的に不可能。" }
     ]
   },
   "pricing": {
@@ -74,22 +56,10 @@
     "titleLine1": "4ステップ。",
     "titleLine2": "あとは全自動。",
     "steps": [
-      {
-        "title": "支払い",
-        "desc": "USDT でライセンスを購入。TRC-20 または ERC-20。30 分以内に確認完了。"
-      },
-      {
-        "title": "ダウンロード",
-        "desc": "お客様専用の LAPLACE.exe を受け取り。ライセンスキーに紐付き。"
-      },
-      {
-        "title": "接続",
-        "desc": "内蔵ブラウザで Stake に一度ログイン。認証情報は端末内に留まります。"
-      },
-      {
-        "title": "稼働",
-        "desc": "START ボタンを押すだけ。以降はシステムが自律稼働。追加操作不要。"
-      }
+      { "title": "支払い", "desc": "USDT でライセンスを購入。TRC-20 または ERC-20。30 分以内に確認完了。" },
+      { "title": "ダウンロード", "desc": "お客様専用の LAPLACE.exe を受け取り。ライセンスキーに紐付き。" },
+      { "title": "接続", "desc": "内蔵ブラウザで Stake に一度ログイン。認証情報は端末内に留まります。" },
+      { "title": "稼働", "desc": "START ボタンを押すだけ。以降はシステムが自律稼働。追加操作不要。" }
     ]
   },
   "faq": {
@@ -97,26 +67,11 @@
     "titleLine1": "よくある",
     "titleLine2": "質問。",
     "items": [
-      {
-        "q": "利益シェアの仕組みは?",
-        "a": "各セッション日の終了時に純利益を計算し、残高から一定割合が差引されます。損失日は繰越となり、過去の損失が回収されるまで手数料は発生しません。"
-      },
-      {
-        "q": "残高がゼロになったら?",
-        "a": "24 時間の猶予期間が発動し、ボットは一時停止。いつでもチャージで再開可能。ペナルティもアカウント削除もありません。"
-      },
-      {
-        "q": "ライセンス料の請求方法は?",
-        "a": "初回チャージから自動で差引されます。ライセンス $2,000 + チャージ $3,000 を支払うと、稼働残高は $3,000 となります。"
-      },
-      {
-        "q": "対応している支払い方法は?",
-        "a": "USDT のみ。TRC-20 (TRON) または ERC-20 (Ethereum)。手動確認で通常 30 分以内に完了します。"
-      },
-      {
-        "q": "クラウドマシンで動作しますか?",
-        "a": "はい。Windows 10/11 環境であれば、ローカル・クラウドどちらでも動作。AWS WorkSpaces、Paperspace、Shadow PC で動作確認済み。"
-      }
+      { "q": "利益シェアの仕組みは?", "a": "各セッション日の終了時に純利益を計算し、残高から一定割合が差引されます。損失日は繰越となり、過去の損失が回収されるまで手数料は発生しません。" },
+      { "q": "残高がゼロになったら?", "a": "24 時間の猶予期間が発動し、ボットは一時停止。いつでもチャージで再開可能。ペナルティもアカウント削除もありません。" },
+      { "q": "ライセンス料の請求方法は?", "a": "初回チャージから自動で差引されます。ライセンス $2,000 + チャージ $3,000 を支払うと、稼働残高は $3,000 となります。" },
+      { "q": "対応している支払い方法は?", "a": "USDT のみ。TRC-20 (TRON) または ERC-20 (Ethereum)。手動確認で通常 30 分以内に完了します。" },
+      { "q": "クラウドマシンで動作しますか?", "a": "はい。Windows 10/11 環境であれば、ローカル・クラウドどちらでも動作。AWS WorkSpaces、Paperspace、Shadow PC で動作確認済み。" }
     ]
   },
   "finalCta": {
@@ -132,5 +87,209 @@
     "ja": "日本語",
     "ko": "한국어",
     "zh": "中文"
+  },
+  "auth": {
+    "accessLabel": "LAPLACE ACCESS",
+    "loading": "読み込み中...",
+    "login": {
+      "title": "おかえりなさい",
+      "subtitle": "LAPLACE ダッシュボードにログイン",
+      "email": "メールアドレス",
+      "password": "パスワード",
+      "emailPlaceholder": "you@example.com",
+      "passwordPlaceholder": "パスワードを入力",
+      "submitting": "ログイン中...",
+      "submit": "ログイン",
+      "noAccount": "アカウントをお持ちでないですか?",
+      "signupLink": "新規登録"
+    },
+    "signup": {
+      "title": "アカウント作成",
+      "subtitle": "LAPLACE に参加して勝利を手に",
+      "confirmSent": "メールを確認し、確認リンクをクリックしてください。",
+      "email": "メールアドレス",
+      "password": "パスワード",
+      "emailPlaceholder": "you@example.com",
+      "passwordPlaceholder": "8 文字以上",
+      "referralCode": "紹介コード",
+      "optional": "(任意)",
+      "referralPlaceholder": "REF-XXXXXXXX",
+      "submitting": "作成中...",
+      "submit": "アカウント作成",
+      "hasAccount": "既にアカウントをお持ちですか?",
+      "loginLink": "ログイン"
+    }
+  },
+  "dashboard": {
+    "admin": "管理",
+    "logout": "ログアウト",
+    "hudLabel": "アカウント概要",
+    "title": "マイ ダッシュボード",
+    "status": {
+      "label": "アカウント状態",
+      "active": "稼働中 — ライブ BET 有効",
+      "dryRun": "ドライラン — チャージでライブ有効化",
+      "pending": "保留中 — 支払確認待ち",
+      "suspended": "一時停止 — サポートへご連絡ください",
+      "noPurchase": "ライセンス未購入 — 購入して開始",
+      "purchaseCta": "ライセンス購入",
+      "chargeCta": "残高チャージ"
+    },
+    "stats": {
+      "balance": "残高",
+      "profitShareRate": "利益シェア率",
+      "totalCharged": "累計チャージ",
+      "carryLoss": "繰越損失",
+      "free": "FREE"
+    },
+    "download": {
+      "title": "ソフトウェア ダウンロード",
+      "button": "LAPLACE v{version} をダウンロード",
+      "updated": "更新日:",
+      "directUrl": "直接 URL:",
+      "preparing": "ダウンロードを準備中です...",
+      "needLicense": "ダウンロードにはライセンス購入が必要です。"
+    },
+    "chargeHistory": {
+      "title": "チャージ履歴",
+      "add": "チャージを追加",
+      "date": "日付",
+      "amount": "金額",
+      "status": "状態",
+      "empty": "チャージ履歴はまだありません。"
+    },
+    "settlements": {
+      "title": "日次精算",
+      "date": "日付",
+      "profit": "損益",
+      "fee": "手数料",
+      "note": "備考",
+      "empty": "精算履歴はまだありません。"
+    },
+    "support": {
+      "title": "サポート",
+      "sent": "送信しました! 近日中にご連絡します。",
+      "placeholder": "お困りの内容を入力...",
+      "send": "送信",
+      "sending": "..."
+    }
+  },
+  "charge": {
+    "hudLabel": "残高アクセス",
+    "title": "残高チャージ",
+    "subtitle": "ライブ BET を有効化する資金を追加",
+    "amountLabel": "金額 (USD)",
+    "amountPlaceholder": "最小 $100",
+    "networkLabel": "USDT ネットワーク",
+    "promoLabel": "プロモコード",
+    "optional": "(任意)",
+    "promoPlaceholder": "コードを入力",
+    "apply": "適用",
+    "submit": "チャージ申請",
+    "submitting": "処理中...",
+    "promo": {
+      "invalid": "無効なプロモコード",
+      "expired": "コード期限切れ",
+      "chargeFree": "チャージ無料!",
+      "discount": "{percent}% 割引",
+      "applied": "コードが適用されました"
+    },
+    "done": {
+      "activated": "チャージ有効化!",
+      "submitted": "チャージ申請済み",
+      "activatedMsg": "アカウントが有効化されました。無制限残高でご利用いただけます。",
+      "sendPrefix": "以下宛へ",
+      "sendSuffix": "をお送りください:",
+      "confirmMsg": "入金確認後 30 分以内に反映します。",
+      "goDashboard": "ダッシュボードへ"
+    },
+    "walletMissing": {
+      "trc": "TRC20 ウォレット未設定",
+      "erc": "ERC20 ウォレット未設定"
+    }
+  },
+  "purchase": {
+    "hudLabel": "ライセンス アクセス",
+    "title": "ライセンス購入",
+    "subtitle": "LAPLACE AI エンジンの全機能を入手",
+    "licenseName": "LAPLACE ライセンス",
+    "features": [
+      "AI 予測エンジン フル アクセス",
+      "BET 自動執行",
+      "リアルタイム ダッシュボード",
+      "クラウド推論処理",
+      "生涯アップデート"
+    ],
+    "networkLabel": "USDT ネットワーク",
+    "promoLabel": "プロモコード",
+    "optional": "(任意)",
+    "promoPlaceholder": "コードを入力",
+    "apply": "適用",
+    "promo": {
+      "invalid": "無効なプロモコード",
+      "expired": "プロモコード期限切れ",
+      "licenseFree": "ライセンス無料!",
+      "discount": "{percent}% 割引",
+      "applied": "コードが適用されました"
+    },
+    "summary": {
+      "license": "ライセンス",
+      "network": "ネットワーク",
+      "total": "合計"
+    },
+    "submit": "注文を送信",
+    "submitting": "処理中...",
+    "done": {
+      "activated": "有効化されました!",
+      "submitted": "注文を受付けました",
+      "activatedMsg": "ライセンスが有効化されました。ダッシュボードへ移動して続行してください。",
+      "sendPrefix": "以下宛へ",
+      "sendSuffix": "をお送りください:",
+      "orderIdLabel": "注文 ID:",
+      "confirmMsg": "入金確認後 30 分以内に反映します。",
+      "goDashboard": "ダッシュボードへ"
+    }
+  },
+  "referral": {
+    "title": "紹介プログラム",
+    "urlLabel": "あなたの紹介 URL",
+    "copy": "コピー",
+    "copied": "コピー済み!",
+    "totalEarned": "累計獲得",
+    "withdrawn": "出金済み",
+    "available": "引出可能",
+    "referredLabel": "紹介ユーザー",
+    "tableEmail": "メール",
+    "tableJoined": "登録日",
+    "tableCharged": "累計チャージ",
+    "tableCommission": "報酬 (5%)",
+    "withdrawHistory": "出金履歴",
+    "requestWithdraw": "出金申請",
+    "withdrawForm": "出金申請",
+    "amountLabel": "金額 (USD) — 引出可能: ${amount}",
+    "amountPlaceholder": "10.00",
+    "networkLabel": "ネットワーク",
+    "walletLabel": "USDT ウォレット アドレス",
+    "walletPlaceholder": "T... または 0x...",
+    "submit": "送信",
+    "submitting": "送信中...",
+    "cancel": "キャンセル",
+    "err": {
+      "min": "最小出金額は $10 です",
+      "wallet": "ウォレットアドレスを入力してください",
+      "generic": "エラー"
+    },
+    "minHint": "最小出金額は $10 です。報酬を積み上げて閾値に到達してください。"
+  },
+  "report": {
+    "title": "LAPLACE レポート",
+    "accessLabel": "REPORT ACCESS",
+    "passwordPlaceholder": "パスワード",
+    "enter": "ENTER",
+    "back": "← 戻る",
+    "err": {
+      "invalidPassword": "パスワードが違います",
+      "loadFail": "ファイルの読み込みに失敗しました"
+    }
   }
 }

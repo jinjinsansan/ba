@@ -27,30 +27,12 @@
     "titleLine1": "정밀함을 위해",
     "titleLine2": "설계.",
     "items": [
-      {
-        "title": "패턴 인식",
-        "desc": "독자적인 마루바츠(〇×) 전략. 슈 전체 이력에 걸친 다층 시퀀스 분석."
-      },
-      {
-        "title": "무조작 실행",
-        "desc": "테이블 선택, 베팅 금액, 결과 로그. 진입부터 종료까지 완전 자동화."
-      },
-      {
-        "title": "리스크 설계",
-        "desc": "이익 목표, 손실 한계, 자동 세션 종료. 오버라이드 불가."
-      },
-      {
-        "title": "라이브 인텔리전스",
-        "desc": "승률, 손익 곡선, 세트별 내역. 모든 핸드가 기록됩니다."
-      },
-      {
-        "title": "클라우드 로직 엔진",
-        "desc": "예측 계산은 서버 측에서 수행. 단말기는 실행만 담당. 저지연 설계."
-      },
-      {
-        "title": "바인드 배포",
-        "desc": "각 바이너리는 암호학적으로 라이선스에 연결됨. 재배포 구조적으로 불가능."
-      }
+      { "title": "패턴 인식", "desc": "독자적인 마루바츠(〇×) 전략. 슈 전체 이력에 걸친 다층 시퀀스 분석." },
+      { "title": "무조작 실행", "desc": "테이블 선택, 베팅 금액, 결과 로그. 진입부터 종료까지 완전 자동화." },
+      { "title": "리스크 설계", "desc": "이익 목표, 손실 한계, 자동 세션 종료. 오버라이드 불가." },
+      { "title": "라이브 인텔리전스", "desc": "승률, 손익 곡선, 세트별 내역. 모든 핸드가 기록됩니다." },
+      { "title": "클라우드 로직 엔진", "desc": "예측 계산은 서버 측에서 수행. 단말기는 실행만 담당. 저지연 설계." },
+      { "title": "바인드 배포", "desc": "각 바이너리는 암호학적으로 라이선스에 연결됨. 재배포 구조적으로 불가능." }
     ]
   },
   "pricing": {
@@ -74,22 +56,10 @@
     "titleLine1": "4단계.",
     "titleLine2": "그 후는 완전 자동.",
     "steps": [
-      {
-        "title": "결제",
-        "desc": "USDT로 라이선스 구매. TRC-20 또는 ERC-20. 30분 이내 확인."
-      },
-      {
-        "title": "다운로드",
-        "desc": "전용 LAPLACE.exe 수령. 라이선스 키에 연결됨."
-      },
-      {
-        "title": "연결",
-        "desc": "내장 브라우저에서 Stake에 한 번 로그인. 인증 정보는 로컬에만 저장."
-      },
-      {
-        "title": "실행",
-        "desc": "START 누르기만 하면 시스템이 자율 작동. 추가 입력 불필요."
-      }
+      { "title": "결제", "desc": "USDT로 라이선스 구매. TRC-20 또는 ERC-20. 30분 이내 확인." },
+      { "title": "다운로드", "desc": "전용 LAPLACE.exe 수령. 라이선스 키에 연결됨." },
+      { "title": "연결", "desc": "내장 브라우저에서 Stake에 한 번 로그인. 인증 정보는 로컬에만 저장." },
+      { "title": "실행", "desc": "START 누르기만 하면 시스템이 자율 작동. 추가 입력 불필요." }
     ]
   },
   "faq": {
@@ -97,26 +67,11 @@
     "titleLine1": "자주 묻는",
     "titleLine2": "질문.",
     "items": [
-      {
-        "q": "수익 배분은 어떻게 작동하나요?",
-        "a": "각 세션 일 종료 시 순이익을 계산하고 잔액에서 일정 비율이 차감됩니다. 손실 일은 이월되어 이전 손실이 회수될 때까지 수수료는 발생하지 않습니다."
-      },
-      {
-        "q": "잔액이 0이 되면 어떻게 되나요?",
-        "a": "24시간 유예 기간이 활성화되고 봇은 일시 정지합니다. 언제든 충전하여 재개 가능. 페널티 없음, 계정 삭제 없음."
-      },
-      {
-        "q": "라이선스 비용은 어떻게 청구되나요?",
-        "a": "첫 충전에서 자동 차감됩니다. 라이선스 $2,000 + 충전 $3,000 = 운용 잔액 $3,000."
-      },
-      {
-        "q": "지원되는 결제 수단은?",
-        "a": "USDT만 가능. TRC-20 (TRON) 또는 ERC-20 (Ethereum). 수동 확인으로 보통 30분 이내 완료."
-      },
-      {
-        "q": "클라우드 머신에서 실행 가능한가요?",
-        "a": "예. Windows 10/11 환경이라면 로컬·클라우드 모두 가능. AWS WorkSpaces, Paperspace, Shadow PC에서 동작 확인 완료."
-      }
+      { "q": "수익 배분은 어떻게 작동하나요?", "a": "각 세션 일 종료 시 순이익을 계산하고 잔액에서 일정 비율이 차감됩니다. 손실 일은 이월되어 이전 손실이 회수될 때까지 수수료는 발생하지 않습니다." },
+      { "q": "잔액이 0이 되면 어떻게 되나요?", "a": "24시간 유예 기간이 활성화되고 봇은 일시 정지합니다. 언제든 충전하여 재개 가능. 페널티 없음, 계정 삭제 없음." },
+      { "q": "라이선스 비용은 어떻게 청구되나요?", "a": "첫 충전에서 자동 차감됩니다. 라이선스 $2,000 + 충전 $3,000 = 운용 잔액 $3,000." },
+      { "q": "지원되는 결제 수단은?", "a": "USDT만 가능. TRC-20 (TRON) 또는 ERC-20 (Ethereum). 수동 확인으로 보통 30분 이내 완료." },
+      { "q": "클라우드 머신에서 실행 가능한가요?", "a": "예. Windows 10/11 환경이라면 로컬·클라우드 모두 가능. AWS WorkSpaces, Paperspace, Shadow PC에서 동작 확인 완료." }
     ]
   },
   "finalCta": {
@@ -132,5 +87,209 @@
     "ja": "日本語",
     "ko": "한국어",
     "zh": "中文"
+  },
+  "auth": {
+    "accessLabel": "LAPLACE ACCESS",
+    "loading": "로드 중...",
+    "login": {
+      "title": "돌아오신 것을 환영합니다",
+      "subtitle": "LAPLACE 대시보드에 로그인",
+      "email": "이메일",
+      "password": "비밀번호",
+      "emailPlaceholder": "you@example.com",
+      "passwordPlaceholder": "비밀번호 입력",
+      "submitting": "로그인 중...",
+      "submit": "로그인",
+      "noAccount": "계정이 없으신가요?",
+      "signupLink": "회원가입"
+    },
+    "signup": {
+      "title": "계정 생성",
+      "subtitle": "LAPLACE에 가입하고 승리를 시작하세요",
+      "confirmSent": "이메일에서 확인 링크를 눌러주세요.",
+      "email": "이메일",
+      "password": "비밀번호",
+      "emailPlaceholder": "you@example.com",
+      "passwordPlaceholder": "최소 8자",
+      "referralCode": "추천 코드",
+      "optional": "(선택)",
+      "referralPlaceholder": "REF-XXXXXXXX",
+      "submitting": "생성 중...",
+      "submit": "계정 생성",
+      "hasAccount": "이미 계정이 있으신가요?",
+      "loginLink": "로그인"
+    }
+  },
+  "dashboard": {
+    "admin": "관리",
+    "logout": "로그아웃",
+    "hudLabel": "계정 개요",
+    "title": "내 대시보드",
+    "status": {
+      "label": "계정 상태",
+      "active": "가동 중 — 라이브 베팅 활성화",
+      "dryRun": "드라이 런 — 충전하여 라이브 활성화",
+      "pending": "대기 중 — 결제 확인 대기",
+      "suspended": "일시 정지 — 지원팀에 문의",
+      "noPurchase": "라이선스 없음 — 구매하여 시작",
+      "purchaseCta": "라이선스 구매",
+      "chargeCta": "잔액 충전"
+    },
+    "stats": {
+      "balance": "잔액",
+      "profitShareRate": "수익 배분율",
+      "totalCharged": "누적 충전",
+      "carryLoss": "이월 손실",
+      "free": "FREE"
+    },
+    "download": {
+      "title": "소프트웨어 다운로드",
+      "button": "LAPLACE v{version} 다운로드",
+      "updated": "업데이트:",
+      "directUrl": "직접 URL:",
+      "preparing": "다운로드 준비 중...",
+      "needLicense": "다운로드하려면 라이선스 구매가 필요합니다."
+    },
+    "chargeHistory": {
+      "title": "충전 이력",
+      "add": "충전 추가",
+      "date": "날짜",
+      "amount": "금액",
+      "status": "상태",
+      "empty": "충전 이력이 없습니다."
+    },
+    "settlements": {
+      "title": "일일 정산",
+      "date": "날짜",
+      "profit": "손익",
+      "fee": "수수료",
+      "note": "비고",
+      "empty": "정산 이력이 없습니다."
+    },
+    "support": {
+      "title": "지원",
+      "sent": "전송되었습니다! 곧 답변드리겠습니다.",
+      "placeholder": "문제를 입력...",
+      "send": "전송",
+      "sending": "..."
+    }
+  },
+  "charge": {
+    "hudLabel": "잔액 액세스",
+    "title": "잔액 충전",
+    "subtitle": "라이브 베팅을 활성화할 자금 추가",
+    "amountLabel": "금액 (USD)",
+    "amountPlaceholder": "최소 $100",
+    "networkLabel": "USDT 네트워크",
+    "promoLabel": "프로모 코드",
+    "optional": "(선택)",
+    "promoPlaceholder": "코드 입력",
+    "apply": "적용",
+    "submit": "충전 신청",
+    "submitting": "처리 중...",
+    "promo": {
+      "invalid": "유효하지 않은 프로모 코드",
+      "expired": "코드 만료",
+      "chargeFree": "충전 무료!",
+      "discount": "{percent}% 할인",
+      "applied": "코드가 적용되었습니다"
+    },
+    "done": {
+      "activated": "충전 활성화!",
+      "submitted": "충전 신청 완료",
+      "activatedMsg": "계정이 활성화되었습니다. 무제한 잔액으로 이용 가능합니다.",
+      "sendPrefix": "아래 주소로",
+      "sendSuffix": "를 보내주세요:",
+      "confirmMsg": "입금 확인 후 30분 이내에 반영됩니다.",
+      "goDashboard": "대시보드로"
+    },
+    "walletMissing": {
+      "trc": "TRC20 지갑 미설정",
+      "erc": "ERC20 지갑 미설정"
+    }
+  },
+  "purchase": {
+    "hudLabel": "라이선스 액세스",
+    "title": "라이선스 구매",
+    "subtitle": "LAPLACE AI 엔진의 모든 기능 이용",
+    "licenseName": "LAPLACE 라이선스",
+    "features": [
+      "AI 예측 엔진 풀 액세스",
+      "베팅 자동 실행",
+      "실시간 대시보드",
+      "클라우드 로직 처리",
+      "평생 업데이트"
+    ],
+    "networkLabel": "USDT 네트워크",
+    "promoLabel": "프로모 코드",
+    "optional": "(선택)",
+    "promoPlaceholder": "코드 입력",
+    "apply": "적용",
+    "promo": {
+      "invalid": "유효하지 않은 프로모 코드",
+      "expired": "프로모 코드 만료",
+      "licenseFree": "라이선스 무료!",
+      "discount": "{percent}% 할인",
+      "applied": "코드가 적용되었습니다"
+    },
+    "summary": {
+      "license": "라이선스",
+      "network": "네트워크",
+      "total": "합계"
+    },
+    "submit": "주문 전송",
+    "submitting": "처리 중...",
+    "done": {
+      "activated": "활성화되었습니다!",
+      "submitted": "주문이 접수되었습니다",
+      "activatedMsg": "라이선스가 활성화되었습니다. 대시보드로 이동하여 계속하세요.",
+      "sendPrefix": "아래 주소로",
+      "sendSuffix": "를 보내주세요:",
+      "orderIdLabel": "주문 ID:",
+      "confirmMsg": "입금 확인 후 30분 이내에 반영됩니다.",
+      "goDashboard": "대시보드로"
+    }
+  },
+  "referral": {
+    "title": "추천 프로그램",
+    "urlLabel": "나의 추천 URL",
+    "copy": "복사",
+    "copied": "복사 완료!",
+    "totalEarned": "누적 획득",
+    "withdrawn": "출금 완료",
+    "available": "출금 가능",
+    "referredLabel": "추천한 사용자",
+    "tableEmail": "이메일",
+    "tableJoined": "가입일",
+    "tableCharged": "누적 충전",
+    "tableCommission": "보상 (5%)",
+    "withdrawHistory": "출금 이력",
+    "requestWithdraw": "출금 요청",
+    "withdrawForm": "출금 요청",
+    "amountLabel": "금액 (USD) — 출금 가능: ${amount}",
+    "amountPlaceholder": "10.00",
+    "networkLabel": "네트워크",
+    "walletLabel": "USDT 지갑 주소",
+    "walletPlaceholder": "T... 또는 0x...",
+    "submit": "전송",
+    "submitting": "전송 중...",
+    "cancel": "취소",
+    "err": {
+      "min": "최소 출금 금액은 $10 입니다",
+      "wallet": "지갑 주소를 입력하세요",
+      "generic": "오류"
+    },
+    "minHint": "최소 출금 금액은 $10 입니다. 보상을 쌓아 임계값에 도달하세요."
+  },
+  "report": {
+    "title": "LAPLACE 리포트",
+    "accessLabel": "REPORT ACCESS",
+    "passwordPlaceholder": "비밀번호",
+    "enter": "ENTER",
+    "back": "← 뒤로",
+    "err": {
+      "invalidPassword": "비밀번호가 올바르지 않습니다",
+      "loadFail": "파일을 불러오지 못했습니다"
+    }
   }
 }

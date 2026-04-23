@@ -1,9 +1,11 @@
 'use client'
 
 import { useRouter } from 'next/navigation'
+import { useTranslations } from 'next-intl'
 import { createClient } from '@/lib/supabase-browser'
 
 export default function DashboardClient() {
+  const t = useTranslations('dashboard')
   const router = useRouter()
 
   async function handleLogout() {
@@ -15,7 +17,7 @@ export default function DashboardClient() {
 
   return (
     <button onClick={handleLogout} className="text-sm text-text-muted hover:text-text transition">
-      Logout
+      {t('logout')}
     </button>
   )
 }

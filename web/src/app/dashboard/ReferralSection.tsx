@@ -2,6 +2,7 @@
 
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
+import { useTranslations } from 'next-intl'
 
 type Referred = {
   id: string
@@ -24,6 +25,7 @@ export default function ReferralSection({
   totalWithdrawn: number
   withdrawals: any[]
 }) {
+  const t = useTranslations('referral')
   const available = totalEarned - totalWithdrawn
   const [copied, setCopied] = useState(false)
   const [showWithdraw, setShowWithdraw] = useState(false)
@@ -43,8 +45,8 @@ export default function ReferralSection({
   async function submitWithdraw() {
     setError('')
     const amt = parseFloat(amount)
-    if (!amt || amt < 10) return setError('Minimum withdrawal is $10')
-    if (!wallet) return setError('Enter wallet address')
+    if (!amt || amt < 10) return setError(t('err.min'))
+    if (!wallet) return setError(t('err.wallet'))
     setLoading(true)
     const res = await fetch('/api/referral/withdraw', {
       method: 'POST',
@@ -53,7 +55,7 @@ export default function ReferralSection({
     })
     const data = await res.json()
     setLoading(false)
-    if (!res.ok) return setError(data.error || 'Error')
+    if (!res.ok) return setError(data.error || t('err.generic'))
     setShowWithdraw(false)
     setAmount('')
     setWallet('')
@@ -62,11 +64,11 @@ export default function ReferralSection({
 
   return (
     <div className="p-6 rounded-2xl glass-card mb-8">
-      <h2 className="text-lg font-bold mb-6">Referral Program</h2>
+      <h2 className="text-lg font-bold mb-6">{t('title')}</h2>
 
       {/* Referral URL */}
       <div className="mb-6">
-        <div className="text-sm text-text-muted mb-2">Your Referral URL</div>
+        <div className="text-sm text-text-muted mb-2">{t('urlLabel')}</div>
         <div className="flex flex-col sm:flex-row gap-2 items-stretch sm:items-center">
           <code className="flex-1 px-4 py-2.5 rounded-lg glass-soft text-player font-mono text-xs sm:text-sm break-all">
             {referralUrl}
@@ -75,7 +77,7 @@ export default function ReferralSection({
             onClick={copyUrl}
             className="btn-outline px-4 py-2.5 text-sm w-full sm:w-auto flex-shrink-0"
           >
-            {copied ? 'Copied!' : 'Copy'}
+            {copied ? t('copied') : t('copy')}
           </button>
         </div>
       </div>
@@ -83,15 +85,15 @@ export default function ReferralSection({
       {/* Commission Balance */}
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-6">
         <div className="p-4 rounded-xl glass-soft">
-          <div className="text-xs text-text-dim mb-1">Total Earned</div>
+          <div className="text-xs text-text-dim mb-1">{t('totalEarned')}</div>
           <div className="text-lg sm:text-xl font-black text-green-400">${totalEarned.toFixed(2)}</div>
         </div>
         <div className="p-4 rounded-xl glass-soft">
-          <div className="text-xs text-text-dim mb-1">Withdrawn</div>
+          <div className="text-xs text-text-dim mb-1">{t('withdrawn')}</div>
           <div className="text-lg sm:text-xl font-black text-text-muted">${totalWithdrawn.toFixed(2)}</div>
         </div>
         <div className="p-4 rounded-xl glass-soft">
-          <div className="text-xs text-text-dim mb-1">Available</div>
+          <div className="text-xs text-text-dim mb-1">{t('available')}</div>
           <div className="text-lg sm:text-xl font-black text-player">${available.toFixed(2)}</div>
         </div>
       </div>
@@ -99,15 +101,15 @@ export default function ReferralSection({
       {/* Referred Users */}
       {referred.length > 0 && (
         <div className="mb-6">
-          <div className="text-sm text-text-muted mb-3">Referred Users ({referred.length})</div>
+          <div className="text-sm text-text-muted mb-3">{t('referredLabel')} ({referred.length})</div>
           <div className="overflow-x-auto">
             <table className="min-w-[640px] w-full text-sm">
               <thead>
                 <tr className="text-text-muted text-left border-b border-accent/10">
-                  <th className="pb-2">Email</th>
-                  <th className="pb-2">Joined</th>
-                  <th className="pb-2">Total Charged</th>
-                  <th className="pb-2">Your Commission (5%)</th>
+                  <th className="pb-2">{t('tableEmail')}</th>
+                  <th className="pb-2">{t('tableJoined')}</th>
+                  <th className="pb-2">{t('tableCharged')}</th>
+                  <th className="pb-2">{t('tableCommission')}</th>
                 </tr>
               </thead>
               <tbody>
@@ -128,7 +130,7 @@ export default function ReferralSection({
       {/* Withdrawal Requests */}
       {withdrawals.length > 0 && (
         <div className="mb-6">
-          <div className="text-sm text-text-muted mb-3">Withdrawal History</div>
+          <div className="text-sm text-text-muted mb-3">{t('withdrawHistory')}</div>
           <div className="space-y-2">
             {withdrawals.map((w: any) => (
               <div key={w.id} className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 p-3 rounded-lg glass-soft text-sm">
@@ -156,23 +158,23 @@ export default function ReferralSection({
           onClick={() => setShowWithdraw(true)}
           className="btn-primary px-6 py-3 text-sm"
         >
-          Request Withdrawal
+          {t('requestWithdraw')}
         </button>
       )}
 
       {showWithdraw && (
         <div className="p-5 rounded-xl glass-soft space-y-4">
-          <div className="text-sm font-bold mb-2">Withdrawal Request</div>
+          <div className="text-sm font-bold mb-2">{t('withdrawForm')}</div>
           <div>
-            <label className="text-xs text-text-dim mb-1 block">Amount (USD) — Available: ${available.toFixed(2)}</label>
+            <label className="text-xs text-text-dim mb-1 block">{t('amountLabel', { amount: available.toFixed(2) })}</label>
             <input
               type="number" value={amount} onChange={e => setAmount(e.target.value)}
-              placeholder="10.00" min="10" max={available}
+              placeholder={t('amountPlaceholder')} min="10" max={available}
               className="input-field text-sm"
             />
           </div>
           <div>
-            <label className="text-xs text-text-dim mb-1 block">Network</label>
+            <label className="text-xs text-text-dim mb-1 block">{t('networkLabel')}</label>
             <div className="flex flex-wrap gap-2">
               {['TRC-20', 'ERC-20'].map(n => (
                 <button key={n} onClick={() => setNetwork(n)}
@@ -183,10 +185,10 @@ export default function ReferralSection({
             </div>
           </div>
           <div>
-            <label className="text-xs text-text-dim mb-1 block">USDT Wallet Address</label>
+            <label className="text-xs text-text-dim mb-1 block">{t('walletLabel')}</label>
             <input
               type="text" value={wallet} onChange={e => setWallet(e.target.value)}
-              placeholder="T... or 0x..."
+              placeholder={t('walletPlaceholder')}
               className="input-field text-sm font-mono"
             />
           </div>
@@ -194,18 +196,18 @@ export default function ReferralSection({
           <div className="flex flex-col sm:flex-row gap-3">
             <button onClick={submitWithdraw} disabled={loading}
               className="btn-primary px-5 py-2.5 text-sm disabled:opacity-50 w-full sm:w-auto">
-              {loading ? 'Submitting...' : 'Submit'}
+              {loading ? t('submitting') : t('submit')}
             </button>
             <button onClick={() => { setShowWithdraw(false); setError('') }}
               className="btn-outline px-5 py-2.5 text-sm w-full sm:w-auto">
-              Cancel
+              {t('cancel')}
             </button>
           </div>
         </div>
       )}
 
       {available < 10 && available > 0 && (
-        <p className="text-xs text-text-dim mt-2">Minimum withdrawal is $10. Keep earning to reach the threshold.</p>
+        <p className="text-xs text-text-dim mt-2">{t('minHint')}</p>
       )}
     </div>
   )

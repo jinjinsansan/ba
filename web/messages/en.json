@@ -27,30 +27,12 @@
     "titleLine1": "Built for",
     "titleLine2": "precision.",
     "items": [
-      {
-        "title": "Pattern Recognition",
-        "desc": "Proprietary Maru-Batsu strategy. Multi-layer sequence analysis across full shoe history."
-      },
-      {
-        "title": "Zero Touch Execution",
-        "desc": "Table selection, bet sizing, result logging. Fully automated from entry to exit."
-      },
-      {
-        "title": "Risk Architecture",
-        "desc": "Hard profit targets. Hard loss limits. Automatic session termination. No overrides."
-      },
-      {
-        "title": "Live Intelligence",
-        "desc": "Win rate, P&L curve, set-by-set breakdown. Every hand accounted for."
-      },
-      {
-        "title": "Cloud Logic Engine",
-        "desc": "Prediction computed server-side. Your machine handles execution only. Low latency."
-      },
-      {
-        "title": "Bound Distribution",
-        "desc": "Each binary is cryptographically tied to your license. Redistribution is structurally impossible."
-      }
+      { "title": "Pattern Recognition", "desc": "Proprietary Maru-Batsu strategy. Multi-layer sequence analysis across full shoe history." },
+      { "title": "Zero Touch Execution", "desc": "Table selection, bet sizing, result logging. Fully automated from entry to exit." },
+      { "title": "Risk Architecture", "desc": "Hard profit targets. Hard loss limits. Automatic session termination. No overrides." },
+      { "title": "Live Intelligence", "desc": "Win rate, P&L curve, set-by-set breakdown. Every hand accounted for." },
+      { "title": "Cloud Logic Engine", "desc": "Prediction computed server-side. Your machine handles execution only. Low latency." },
+      { "title": "Bound Distribution", "desc": "Each binary is cryptographically tied to your license. Redistribution is structurally impossible." }
     ]
   },
   "pricing": {
@@ -74,22 +56,10 @@
     "titleLine1": "Four steps.",
     "titleLine2": "Then nothing.",
     "steps": [
-      {
-        "title": "Pay",
-        "desc": "Purchase license with USDT. TRC-20 or ERC-20. Confirmed within 30 minutes."
-      },
-      {
-        "title": "Download",
-        "desc": "Receive your personalized LAPLACE.exe. Bound to your license key."
-      },
-      {
-        "title": "Connect",
-        "desc": "Sign into Stake once inside the built-in browser. Credentials stay local."
-      },
-      {
-        "title": "Run",
-        "desc": "Press START. The system operates autonomously. No further input required."
-      }
+      { "title": "Pay", "desc": "Purchase license with USDT. TRC-20 or ERC-20. Confirmed within 30 minutes." },
+      { "title": "Download", "desc": "Receive your personalized LAPLACE.exe. Bound to your license key." },
+      { "title": "Connect", "desc": "Sign into Stake once inside the built-in browser. Credentials stay local." },
+      { "title": "Run", "desc": "Press START. The system operates autonomously. No further input required." }
     ]
   },
   "faq": {
@@ -97,26 +67,11 @@
     "titleLine1": "Questions",
     "titleLine2": "answered.",
     "items": [
-      {
-        "q": "How does the profit share work?",
-        "a": "At end of each session day, net profit is calculated. A percentage is deducted from your balance. Losing days carry forward — no fees until prior losses are recovered."
-      },
-      {
-        "q": "What happens when the balance hits zero?",
-        "a": "A 24-hour grace period activates. Bot pauses. Recharge at any time to resume. No penalties, no account loss."
-      },
-      {
-        "q": "How is the license fee charged?",
-        "a": "Deducted automatically from your first charge. Pay $2,000 license + $3,000 charge = $3,000 operational balance."
-      },
-      {
-        "q": "What payment methods are accepted?",
-        "a": "USDT only. TRC-20 (TRON) or ERC-20 (Ethereum). Manual confirmation, typically under 30 minutes."
-      },
-      {
-        "q": "Can this run on a cloud machine?",
-        "a": "Yes. Any Windows 10/11 environment — local or cloud. AWS WorkSpaces, Paperspace, Shadow PC all confirmed."
-      }
+      { "q": "How does the profit share work?", "a": "At end of each session day, net profit is calculated. A percentage is deducted from your balance. Losing days carry forward — no fees until prior losses are recovered." },
+      { "q": "What happens when the balance hits zero?", "a": "A 24-hour grace period activates. Bot pauses. Recharge at any time to resume. No penalties, no account loss." },
+      { "q": "How is the license fee charged?", "a": "Deducted automatically from your first charge. Pay $2,000 license + $3,000 charge = $3,000 operational balance." },
+      { "q": "What payment methods are accepted?", "a": "USDT only. TRC-20 (TRON) or ERC-20 (Ethereum). Manual confirmation, typically under 30 minutes." },
+      { "q": "Can this run on a cloud machine?", "a": "Yes. Any Windows 10/11 environment — local or cloud. AWS WorkSpaces, Paperspace, Shadow PC all confirmed." }
     ]
   },
   "finalCta": {
@@ -132,5 +87,209 @@
     "ja": "日本語",
     "ko": "한국어",
     "zh": "中文"
+  },
+  "auth": {
+    "accessLabel": "LAPLACE ACCESS",
+    "loading": "Loading...",
+    "login": {
+      "title": "Welcome Back",
+      "subtitle": "Login to your LAPLACE dashboard",
+      "email": "Email",
+      "password": "Password",
+      "emailPlaceholder": "you@example.com",
+      "passwordPlaceholder": "Your password",
+      "submitting": "Signing in...",
+      "submit": "Login",
+      "noAccount": "Don't have an account?",
+      "signupLink": "Sign Up"
+    },
+    "signup": {
+      "title": "Create Account",
+      "subtitle": "Join LAPLACE and start winning",
+      "confirmSent": "Check your email for a confirmation link.",
+      "email": "Email",
+      "password": "Password",
+      "emailPlaceholder": "you@example.com",
+      "passwordPlaceholder": "Min 8 characters",
+      "referralCode": "Referral Code",
+      "optional": "(optional)",
+      "referralPlaceholder": "REF-XXXXXXXX",
+      "submitting": "Creating...",
+      "submit": "Create Account",
+      "hasAccount": "Already have an account?",
+      "loginLink": "Login"
+    }
+  },
+  "dashboard": {
+    "admin": "Admin",
+    "logout": "Logout",
+    "hudLabel": "Account Overview",
+    "title": "My Dashboard",
+    "status": {
+      "label": "Account Status",
+      "active": "ACTIVE — Live Betting Enabled",
+      "dryRun": "DRY RUN — Charge to enable live bets",
+      "pending": "PENDING — Awaiting payment confirmation",
+      "suspended": "SUSPENDED — Contact support",
+      "noPurchase": "No License — Purchase to get started",
+      "purchaseCta": "Purchase License",
+      "chargeCta": "Charge Balance"
+    },
+    "stats": {
+      "balance": "Balance",
+      "profitShareRate": "Profit Share Rate",
+      "totalCharged": "Total Charged",
+      "carryLoss": "Carry Loss",
+      "free": "FREE"
+    },
+    "download": {
+      "title": "Software Download",
+      "button": "Download LAPLACE v{version}",
+      "updated": "Updated:",
+      "directUrl": "Direct URL:",
+      "preparing": "Your download is being prepared...",
+      "needLicense": "Purchase a license to download."
+    },
+    "chargeHistory": {
+      "title": "Charge History",
+      "add": "Add Charge",
+      "date": "Date",
+      "amount": "Amount",
+      "status": "Status",
+      "empty": "No charges yet."
+    },
+    "settlements": {
+      "title": "Daily Settlements",
+      "date": "Date",
+      "profit": "Profit",
+      "fee": "Fee",
+      "note": "Note",
+      "empty": "No settlements yet."
+    },
+    "support": {
+      "title": "Support",
+      "sent": "Message sent! We'll get back to you soon.",
+      "placeholder": "Describe your issue...",
+      "send": "Send",
+      "sending": "..."
+    }
+  },
+  "charge": {
+    "hudLabel": "Balance Access",
+    "title": "Charge Balance",
+    "subtitle": "Add funds to enable live betting",
+    "amountLabel": "Amount (USD)",
+    "amountPlaceholder": "Minimum $100",
+    "networkLabel": "USDT Network",
+    "promoLabel": "Promo Code",
+    "optional": "(optional)",
+    "promoPlaceholder": "Enter code",
+    "apply": "Apply",
+    "submit": "Submit Charge",
+    "submitting": "Processing...",
+    "promo": {
+      "invalid": "Invalid promo code",
+      "expired": "Code expired",
+      "chargeFree": "Charge FREE!",
+      "discount": "{percent}% off",
+      "applied": "Code applied"
+    },
+    "done": {
+      "activated": "Charge Activated!",
+      "submitted": "Charge Submitted",
+      "activatedMsg": "Your account is now active with unlimited balance.",
+      "sendPrefix": "Send",
+      "sendSuffix": "to:",
+      "confirmMsg": "We'll confirm within 30 minutes after receiving payment.",
+      "goDashboard": "Go to Dashboard"
+    },
+    "walletMissing": {
+      "trc": "TRC20 wallet not configured",
+      "erc": "ERC20 wallet not configured"
+    }
+  },
+  "purchase": {
+    "hudLabel": "License Access",
+    "title": "Purchase License",
+    "subtitle": "Get full access to LAPLACE AI Engine",
+    "licenseName": "LAPLACE License",
+    "features": [
+      "Full AI prediction engine",
+      "Automated bet execution",
+      "Real-time dashboard",
+      "Cloud logic processing",
+      "Lifetime updates"
+    ],
+    "networkLabel": "USDT Network",
+    "promoLabel": "Promo Code",
+    "optional": "(optional)",
+    "promoPlaceholder": "Enter code",
+    "apply": "Apply",
+    "promo": {
+      "invalid": "Invalid promo code",
+      "expired": "Promo code expired",
+      "licenseFree": "License FREE!",
+      "discount": "{percent}% off",
+      "applied": "Code applied"
+    },
+    "summary": {
+      "license": "License",
+      "network": "Network",
+      "total": "Total"
+    },
+    "submit": "Submit Order",
+    "submitting": "Processing...",
+    "done": {
+      "activated": "Activated!",
+      "submitted": "Order Submitted",
+      "activatedMsg": "Your license has been activated. Go to your dashboard to continue.",
+      "sendPrefix": "Send",
+      "sendSuffix": "to:",
+      "orderIdLabel": "Order ID:",
+      "confirmMsg": "We'll confirm within 30 minutes after receiving payment.",
+      "goDashboard": "Go to Dashboard"
+    }
+  },
+  "referral": {
+    "title": "Referral Program",
+    "urlLabel": "Your Referral URL",
+    "copy": "Copy",
+    "copied": "Copied!",
+    "totalEarned": "Total Earned",
+    "withdrawn": "Withdrawn",
+    "available": "Available",
+    "referredLabel": "Referred Users",
+    "tableEmail": "Email",
+    "tableJoined": "Joined",
+    "tableCharged": "Total Charged",
+    "tableCommission": "Your Commission (5%)",
+    "withdrawHistory": "Withdrawal History",
+    "requestWithdraw": "Request Withdrawal",
+    "withdrawForm": "Withdrawal Request",
+    "amountLabel": "Amount (USD) — Available: ${amount}",
+    "amountPlaceholder": "10.00",
+    "networkLabel": "Network",
+    "walletLabel": "USDT Wallet Address",
+    "walletPlaceholder": "T... or 0x...",
+    "submit": "Submit",
+    "submitting": "Submitting...",
+    "cancel": "Cancel",
+    "err": {
+      "min": "Minimum withdrawal is $10",
+      "wallet": "Enter wallet address",
+      "generic": "Error"
+    },
+    "minHint": "Minimum withdrawal is $10. Keep earning to reach the threshold."
+  },
+  "report": {
+    "title": "LAPLACE Report",
+    "accessLabel": "REPORT ACCESS",
+    "passwordPlaceholder": "Password",
+    "enter": "ENTER",
+    "back": "← BACK",
+    "err": {
+      "invalidPassword": "Invalid password",
+      "loadFail": "Failed to load file"
+    }
   }
 }
