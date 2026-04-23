@@ -1,7 +1,24 @@
 import Link from 'next/link'
 import Image from 'next/image'
+import { useMessages, useTranslations } from 'next-intl'
+import { LanguageSwitcher } from './_components/LanguageSwitcher'
 
 export default function Home() {
+  const t = useTranslations()
+  const messages = useMessages() as {
+    features: { items: Array<{ title: string; desc: string }> }
+    pricing: { features: string[] }
+    howItWorks: { steps: Array<{ title: string; desc: string }> }
+    faq: { items: Array<{ q: string; a: string }> }
+  }
+  const featureItems = messages.features.items
+  const pricingFeatures = messages.pricing.features
+  const steps = messages.howItWorks.steps
+  const faqItems = messages.faq.items
+
+  const featureColors = ['text-player', 'text-banker', 'text-player', 'text-banker', 'text-player', 'text-banker']
+  const stepColors = ['text-player', 'text-banker', 'text-player', 'text-banker']
+
   return (
     <main className="min-h-screen bg-bg-primary text-text">
 
@@ -10,17 +27,19 @@ export default function Home() {
         <div className="max-w-6xl mx-auto px-4 sm:px-6 h-16 flex items-center justify-between">
           <span className="text-xs font-hud tracking-[0.4em] text-accent uppercase">LAPLACE</span>
           <div className="hidden md:flex items-center gap-10 text-xs tracking-widest text-text-muted uppercase">
-            <a href="#features" className="hover:text-text transition-colors">System</a>
-            <a href="#pricing" className="hover:text-text transition-colors">Access</a>
-            <a href="#faq" className="hover:text-text transition-colors">FAQ</a>
-            <Link href="/login" className="hover:text-text transition-colors">Login</Link>
+            <a href="#features" className="hover:text-text transition-colors">{t('nav.system')}</a>
+            <a href="#pricing" className="hover:text-text transition-colors">{t('nav.access')}</a>
+            <a href="#faq" className="hover:text-text transition-colors">{t('nav.faq')}</a>
+            <Link href="/login" className="hover:text-text transition-colors">{t('nav.login')}</Link>
             <Link href="/signup" className="btn-outline px-5 py-2">
-              GET ACCESS
+              {t('nav.cta')}
             </Link>
+            <LanguageSwitcher />
           </div>
-          <div className="flex md:hidden items-center gap-4">
-            <Link href="/login" className="text-xs text-text-muted hover:text-text tracking-widest uppercase">Login</Link>
-            <Link href="/signup" className="btn-outline px-3 py-1.5 text-xs">Access</Link>
+          <div className="flex md:hidden items-center gap-3">
+            <LanguageSwitcher />
+            <Link href="/login" className="text-xs text-text-muted hover:text-text tracking-widest uppercase">{t('nav.login')}</Link>
+            <Link href="/signup" className="btn-outline px-3 py-1.5 text-xs">{t('nav.ctaShort')}</Link>
           </div>
         </div>
       </nav>
@@ -34,32 +53,31 @@ export default function Home() {
         <div className="max-w-6xl mx-auto w-full grid lg:grid-cols-2 gap-10 lg:gap-16 items-center py-16 sm:py-20">
           {/* Left — text */}
           <div className="text-center lg:text-left">
-            <p className="hud-label mb-8">Automated Baccarat Intelligence</p>
+            <p className="hud-label mb-8">{t('hero.hudLabel')}</p>
             <h1 className="text-4xl sm:text-5xl md:text-7xl lg:text-8xl font-black leading-[0.9] tracking-tight mb-8 font-hud">
-              <span className="block text-text">THE</span>
-              <span className="block text-text-dim">EDGE</span>
-              <span className="block text-text">IS</span>
-              <span className="block text-banker">REAL.</span>
+              <span className="block text-text">{t('hero.titleLine1')}</span>
+              <span className="block text-text-dim">{t('hero.titleLine2')}</span>
+              <span className="block text-text">{t('hero.titleLine3')}</span>
+              <span className="block text-banker">{t('hero.titleLine4')}</span>
             </h1>
             <p className="text-text-muted text-sm sm:text-base leading-relaxed max-w-md mx-auto lg:mx-0 mb-10 sm:mb-12">
-              Pattern recognition. Automated execution. Surgical risk control.
-              LAPLACE operates where discipline meets probability.
+              {t('hero.tagline')}
             </p>
             <div className="flex flex-col sm:flex-row items-center gap-4 sm:gap-6 justify-center lg:justify-start">
               <Link href="/signup" className="btn-primary px-8 py-3.5 w-full sm:w-auto">
-                GET ACCESS
+                {t('hero.cta')}
               </Link>
               <a href="#features" className="text-xs tracking-widest text-text-muted uppercase hover:text-text transition-colors border-b border-transparent hover:border-accent/40 pb-0.5">
-                How it works
+                {t('hero.how')}
               </a>
             </div>
 
             {/* Stats inline */}
             <div className="mt-12 sm:mt-16 grid grid-cols-1 sm:grid-cols-3 gap-6 border-t border-white/5 pt-8 sm:pt-10">
                 {[
-                { num: '52%+', label: 'Win Rate', color: 'text-player' },
-                { num: '<2s', label: 'Per Decision', color: 'text-banker' },
-                { num: '24/7', label: 'Operation', color: 'text-player' },
+                { num: '52%+', label: t('hero.stats.winRate'), color: 'text-player' },
+                { num: '<2s', label: t('hero.stats.perDecision'), color: 'text-banker' },
+                { num: '24/7', label: t('hero.stats.operation'), color: 'text-player' },
               ].map((s, i) => (
                 <div key={i} className="text-center sm:text-left">
                   <div className={`text-2xl font-black tabular-nums ${s.color}`}>{s.num}</div>
@@ -92,22 +110,15 @@ export default function Home() {
       <section id="features" className="py-20 sm:py-28 lg:py-32 px-4 sm:px-6 border-t border-accent/10">
         <div className="max-w-6xl mx-auto">
           <div className="grid lg:grid-cols-2 gap-4 mb-4">
-            <p className="hud-label">System Architecture</p>
+            <p className="hud-label">{t('features.hudLabel')}</p>
           </div>
           <h2 className="text-3xl sm:text-4xl lg:text-5xl font-black text-text mb-12 sm:mb-20 leading-tight font-hud">
-            Built for<br className="hidden sm:block" /><span className="text-text-dim">precision.</span>
+            {t('features.titleLine1')}<br className="hidden sm:block" /><span className="text-text-dim">{t('features.titleLine2')}</span>
           </h2>
           <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
-            {[
-              { num: '01', title: 'Pattern Recognition', desc: 'Proprietary Maru-Batsu strategy. Multi-layer sequence analysis across full shoe history.', c: 'text-player' },
-              { num: '02', title: 'Zero Touch Execution', desc: 'Table selection, bet sizing, result logging. Fully automated from entry to exit.', c: 'text-banker' },
-              { num: '03', title: 'Risk Architecture', desc: 'Hard profit targets. Hard loss limits. Automatic session termination. No overrides.', c: 'text-player' },
-              { num: '04', title: 'Live Intelligence', desc: 'Win rate, P&L curve, set-by-set breakdown. Every hand accounted for.', c: 'text-banker' },
-              { num: '05', title: 'Cloud Logic Engine', desc: 'Prediction computed server-side. Your machine handles execution only. Low latency.', c: 'text-player' },
-              { num: '06', title: 'Bound Distribution', desc: 'Each binary is cryptographically tied to your license. Redistribution is structurally impossible.', c: 'text-banker' },
-            ].map((f, i) => (
+            {featureItems.map((f, i) => (
               <div key={i} className="glass-card p-6 sm:p-8 group">
-                <div className={`text-[10px] tracking-widest mb-6 font-mono ${f.c}`}>{f.num}</div>
+                <div className={`text-[10px] tracking-widest mb-6 font-mono ${featureColors[i]}`}>{String(i + 1).padStart(2, '0')}</div>
                 <h3 className="text-sm font-bold text-text mb-3 tracking-wide">{f.title}</h3>
                 <p className="text-xs text-text-muted leading-relaxed">{f.desc}</p>
               </div>
@@ -119,8 +130,8 @@ export default function Home() {
       {/* Pricing */}
       <section id="pricing" className="py-20 sm:py-28 lg:py-32 px-4 sm:px-6 border-t border-accent/10">
         <div className="max-w-6xl mx-auto">
-          <p className="hud-label mb-4">Access</p>
-          <h2 className="text-3xl sm:text-4xl lg:text-5xl font-black text-text mb-12 sm:mb-20 font-hud">One license.<br className="hidden sm:block" /><span className="text-text-dim">No subscription.</span></h2>
+          <p className="hud-label mb-4">{t('pricing.hudLabel')}</p>
+          <h2 className="text-3xl sm:text-4xl lg:text-5xl font-black text-text mb-12 sm:mb-20 font-hud">{t('pricing.titleLine1')}<br className="hidden sm:block" /><span className="text-text-dim">{t('pricing.titleLine2')}</span></h2>
           <div className="max-w-lg">
             <div className="glass-card p-6 sm:p-10 relative">
               <div className="absolute top-0 left-0 w-8 h-px bg-player" />
@@ -128,18 +139,12 @@ export default function Home() {
               <div className="absolute bottom-0 right-0 w-8 h-px bg-banker" />
               <div className="absolute bottom-0 right-0 w-px h-8 bg-banker" />
 
-              <p className="text-[10px] tracking-widest text-text-dim uppercase mb-4">LAPLACE License</p>
+              <p className="text-[10px] tracking-widest text-text-dim uppercase mb-4">{t('pricing.licenseLabel')}</p>
               <div className="text-5xl font-black text-text mb-1">$2,000</div>
-              <p className="text-xs text-text-dim mb-10">USDT · One-time · Deducted from first charge</p>
+              <p className="text-xs text-text-dim mb-10">{t('pricing.priceNote')}</p>
 
               <div className="space-y-4 mb-10">
-                {[
-                  'Full prediction engine access',
-                  'Automated bet execution',
-                  'Live dashboard',
-                  'Cloud logic processing',
-                  'Lifetime updates',
-                ].map((item, i) => (
+                {pricingFeatures.map((item, i) => (
                   <div key={i} className="flex items-center gap-3 text-xs text-text-muted">
                     <div className="w-3 h-px bg-player flex-shrink-0" />
                     {item}
@@ -148,11 +153,11 @@ export default function Home() {
               </div>
 
               <Link href="/signup" className="btn-primary block text-center py-4">
-                GET ACCESS
+                {t('pricing.cta')}
               </Link>
             </div>
             <p className="text-xs text-text-dim mt-6 leading-relaxed">
-              Daily profit share applied at end of each session day. Losses carry forward and offset future fees before any deduction is made.
+              {t('pricing.footnote')}
             </p>
           </div>
         </div>
@@ -161,17 +166,12 @@ export default function Home() {
       {/* How It Works */}
       <section className="py-20 sm:py-28 lg:py-32 px-4 sm:px-6 border-t border-accent/10">
         <div className="max-w-6xl mx-auto">
-          <p className="hud-label mb-4">Deployment</p>
-          <h2 className="text-3xl sm:text-4xl lg:text-5xl font-black text-text mb-12 sm:mb-20 font-hud">Four steps.<br className="hidden sm:block" /><span className="text-text-dim">Then nothing.</span></h2>
+          <p className="hud-label mb-4">{t('howItWorks.hudLabel')}</p>
+          <h2 className="text-3xl sm:text-4xl lg:text-5xl font-black text-text mb-12 sm:mb-20 font-hud">{t('howItWorks.titleLine1')}<br className="hidden sm:block" /><span className="text-text-dim">{t('howItWorks.titleLine2')}</span></h2>
           <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-4">
-            {[
-              { step: '01', title: 'Pay', desc: 'Purchase license with USDT. TRC-20 or ERC-20. Confirmed within 30 minutes.', c: 'text-player' },
-              { step: '02', title: 'Download', desc: 'Receive your personalized LAPLACE.exe. Bound to your license key.', c: 'text-banker' },
-              { step: '03', title: 'Connect', desc: 'Sign into Stake once inside the built-in browser. Credentials stay local.', c: 'text-player' },
-              { step: '04', title: 'Run', desc: 'Press START. The system operates autonomously. No further input required.', c: 'text-banker' },
-            ].map((s, i) => (
+            {steps.map((s, i) => (
               <div key={i} className="glass-card p-6 sm:p-8">
-                <div className={`text-[10px] tracking-widest font-mono mb-6 ${s.c}`}>{s.step}</div>
+                <div className={`text-[10px] tracking-widest font-mono mb-6 ${stepColors[i]}`}>{String(i + 1).padStart(2, '0')}</div>
                 <h4 className="text-sm font-bold text-text mb-3">{s.title}</h4>
                 <p className="text-xs text-text-muted leading-relaxed">{s.desc}</p>
               </div>
@@ -184,17 +184,11 @@ export default function Home() {
       <section id="faq" className="py-20 sm:py-28 lg:py-32 px-4 sm:px-6 border-t border-accent/10">
         <div className="max-w-6xl mx-auto grid lg:grid-cols-2 gap-12 lg:gap-20">
           <div>
-            <p className="hud-label mb-4">FAQ</p>
-            <h2 className="text-3xl sm:text-4xl lg:text-5xl font-black text-text leading-tight font-hud">Questions<br className="hidden sm:block" /><span className="text-text-dim">answered.</span></h2>
+            <p className="hud-label mb-4">{t('faq.hudLabel')}</p>
+            <h2 className="text-3xl sm:text-4xl lg:text-5xl font-black text-text leading-tight font-hud">{t('faq.titleLine1')}<br className="hidden sm:block" /><span className="text-text-dim">{t('faq.titleLine2')}</span></h2>
           </div>
           <div className="space-y-0">
-            {[
-              { q: 'How does the profit share work?', a: 'At end of each session day, net profit is calculated. A percentage is deducted from your balance. Losing days carry forward — no fees until prior losses are recovered.' },
-              { q: 'What happens when the balance hits zero?', a: 'A 24-hour grace period activates. Bot pauses. Recharge at any time to resume. No penalties, no account loss.' },
-              { q: 'How is the license fee charged?', a: 'Deducted automatically from your first charge. Pay $2,000 license + $3,000 charge = $3,000 operational balance.' },
-              { q: 'What payment methods are accepted?', a: 'USDT only. TRC-20 (TRON) or ERC-20 (Ethereum). Manual confirmation, typically under 30 minutes.' },
-              { q: 'Can this run on a cloud machine?', a: 'Yes. Any Windows 10/11 environment — local or cloud. AWS WorkSpaces, Paperspace, Shadow PC all confirmed.' },
-            ].map((f, i) => (
+            {faqItems.map((f, i) => (
               <details key={i} className="group border-b border-accent/10 py-6">
                 <summary className="cursor-pointer text-sm font-semibold text-text flex justify-between items-center gap-4 list-none">
                   {f.q}
@@ -211,15 +205,15 @@ export default function Home() {
       <section className="py-20 sm:py-28 lg:py-32 px-4 sm:px-6 border-t border-accent/10">
         <div className="max-w-6xl mx-auto flex flex-col lg:flex-row items-start lg:items-end justify-between gap-10 lg:gap-12">
           <div>
-            <p className="hud-label mb-4 sm:mb-6">Start Operating</p>
+            <p className="hud-label mb-4 sm:mb-6">{t('finalCta.hudLabel')}</p>
             <h2 className="text-4xl sm:text-5xl lg:text-7xl font-black text-text leading-tight font-hud">
-              <span className="block sm:inline">Ready</span>{' '}
-              <span className="block sm:inline">when</span>{' '}
-              <span className="block sm:inline text-text-dim">you are.</span>
+              <span className="block sm:inline">{t('finalCta.titleWord1')}</span>{' '}
+              <span className="block sm:inline">{t('finalCta.titleWord2')}</span>{' '}
+              <span className="block sm:inline text-text-dim">{t('finalCta.titleWord3')}</span>
             </h2>
           </div>
           <Link href="/signup" className="btn-primary px-10 py-4 w-full sm:w-auto flex-shrink-0">
-            CREATE ACCOUNT
+            {t('finalCta.button')}
           </Link>
         </div>
       </section>

@@ -1,0 +1,136 @@
+{
+  "nav": {
+    "system": "System",
+    "access": "Access",
+    "faq": "FAQ",
+    "login": "Login",
+    "cta": "GET ACCESS",
+    "ctaShort": "Access"
+  },
+  "hero": {
+    "hudLabel": "Automated Baccarat Intelligence",
+    "titleLine1": "THE",
+    "titleLine2": "EDGE",
+    "titleLine3": "IS",
+    "titleLine4": "REAL.",
+    "tagline": "Pattern recognition. Automated execution. Surgical risk control. LAPLACE operates where discipline meets probability.",
+    "cta": "GET ACCESS",
+    "how": "How it works",
+    "stats": {
+      "winRate": "Win Rate",
+      "perDecision": "Per Decision",
+      "operation": "Operation"
+    }
+  },
+  "features": {
+    "hudLabel": "System Architecture",
+    "titleLine1": "Built for",
+    "titleLine2": "precision.",
+    "items": [
+      {
+        "title": "Pattern Recognition",
+        "desc": "Proprietary Maru-Batsu strategy. Multi-layer sequence analysis across full shoe history."
+      },
+      {
+        "title": "Zero Touch Execution",
+        "desc": "Table selection, bet sizing, result logging. Fully automated from entry to exit."
+      },
+      {
+        "title": "Risk Architecture",
+        "desc": "Hard profit targets. Hard loss limits. Automatic session termination. No overrides."
+      },
+      {
+        "title": "Live Intelligence",
+        "desc": "Win rate, P&L curve, set-by-set breakdown. Every hand accounted for."
+      },
+      {
+        "title": "Cloud Logic Engine",
+        "desc": "Prediction computed server-side. Your machine handles execution only. Low latency."
+      },
+      {
+        "title": "Bound Distribution",
+        "desc": "Each binary is cryptographically tied to your license. Redistribution is structurally impossible."
+      }
+    ]
+  },
+  "pricing": {
+    "hudLabel": "Access",
+    "titleLine1": "One license.",
+    "titleLine2": "No subscription.",
+    "licenseLabel": "LAPLACE License",
+    "priceNote": "USDT · One-time · Deducted from first charge",
+    "features": [
+      "Full prediction engine access",
+      "Automated bet execution",
+      "Live dashboard",
+      "Cloud logic processing",
+      "Lifetime updates"
+    ],
+    "cta": "GET ACCESS",
+    "footnote": "Daily profit share applied at end of each session day. Losses carry forward and offset future fees before any deduction is made."
+  },
+  "howItWorks": {
+    "hudLabel": "Deployment",
+    "titleLine1": "Four steps.",
+    "titleLine2": "Then nothing.",
+    "steps": [
+      {
+        "title": "Pay",
+        "desc": "Purchase license with USDT. TRC-20 or ERC-20. Confirmed within 30 minutes."
+      },
+      {
+        "title": "Download",
+        "desc": "Receive your personalized LAPLACE.exe. Bound to your license key."
+      },
+      {
+        "title": "Connect",
+        "desc": "Sign into Stake once inside the built-in browser. Credentials stay local."
+      },
+      {
+        "title": "Run",
+        "desc": "Press START. The system operates autonomously. No further input required."
+      }
+    ]
+  },
+  "faq": {
+    "hudLabel": "FAQ",
+    "titleLine1": "Questions",
+    "titleLine2": "answered.",
+    "items": [
+      {
+        "q": "How does the profit share work?",
+        "a": "At end of each session day, net profit is calculated. A percentage is deducted from your balance. Losing days carry forward — no fees until prior losses are recovered."
+      },
+      {
+        "q": "What happens when the balance hits zero?",
+        "a": "A 24-hour grace period activates. Bot pauses. Recharge at any time to resume. No penalties, no account loss."
+      },
+      {
+        "q": "How is the license fee charged?",
+        "a": "Deducted automatically from your first charge. Pay $2,000 license + $3,000 charge = $3,000 operational balance."
+      },
+      {
+        "q": "What payment methods are accepted?",
+        "a": "USDT only. TRC-20 (TRON) or ERC-20 (Ethereum). Manual confirmation, typically under 30 minutes."
+      },
+      {
+        "q": "Can this run on a cloud machine?",
+        "a": "Yes. Any Windows 10/11 environment — local or cloud. AWS WorkSpaces, Paperspace, Shadow PC all confirmed."
+      }
+    ]
+  },
+  "finalCta": {
+    "hudLabel": "Start Operating",
+    "titleWord1": "Ready",
+    "titleWord2": "when",
+    "titleWord3": "you are.",
+    "button": "CREATE ACCOUNT"
+  },
+  "language": {
+    "label": "Language",
+    "en": "English",
+    "ja": "日本語",
+    "ko": "한국어",
+    "zh": "中文"
+  }
+}
