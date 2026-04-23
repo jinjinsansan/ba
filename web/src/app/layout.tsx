@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { NextIntlClientProvider } from 'next-intl';
 import { getLocale, getMessages } from 'next-intl/server';
+import { FloatingLanguageSwitcher } from './_components/FloatingLanguageSwitcher';
 import "./globals.css";
 
 export const metadata: Metadata = {
@@ -16,6 +17,7 @@ export default async function RootLayout({ children }: { children: React.ReactNo
     <html lang={locale}>
       <body className="min-h-screen bg-bg-primary text-text antialiased font-body">
         <NextIntlClientProvider locale={locale} messages={messages}>
+          <FloatingLanguageSwitcher />
           {children}
         </NextIntlClientProvider>
       </body>
