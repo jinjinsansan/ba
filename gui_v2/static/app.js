@@ -20,7 +20,6 @@ $('btnStart').addEventListener('click', async () => {
 });
 
 $('btnStop').addEventListener('click', async () => {
-  if (!confirm('セッションを停止しますか? (ログは自動保存されます)')) return;
   await api('/api/session/stop', { method: 'POST' });
   refresh();
 });
@@ -51,7 +50,6 @@ $('btnScraperStart').addEventListener('click', async () => {
 });
 
 $('btnScraperStop').addEventListener('click', async () => {
-  if (!confirm('scraper を停止しますか? (Camoufox も閉じます)')) return;
   const r = await api('/api/scraper/stop', { method: 'POST' });
   refreshScraperStatus();
 });
