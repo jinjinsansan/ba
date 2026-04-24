@@ -28,6 +28,7 @@ from strategy_engine import (
     check_exit,
     decide_bet,
     forecast,
+    VALID_PATTERNS,
 )
 from pragmatic_bridge import get_pragmatic_bridge
 import learning
@@ -221,7 +222,7 @@ class Session:
         # 新状態で pattern 判定 → エントリー / 退出判定 → 次 BET 推奨
         info = classify_strict("".join(self.seq))
 
-        # 退出判定 (entered 中なら)
+        # 退出 / パターン切替判定 (entered 中なら)
         exit_reason = ""
         if self.entered:
             exit_flag, exit_reason = check_exit(info, self.entry_pattern, self.losing_streak)
@@ -231,6 +232,11 @@ class Session:
                 self.entry_hand_idx = None
                 self.losing_streak = 0
                 self._log("EXIT", exit_reason)
+            elif info["pattern"] != self.entry_pattern and info["pattern"] in VALID_PATTERNS:
+                # 有効パターン間の切替 → 退室せず戦略を更新
+                old_pat = self.entry_pattern
+                self.entry_pattern = info["pattern"]
+                self._log("SWITCH", f"パターン切替: {old_pat} → {self.entry_pattern} (継続)")
 
         # エントリー判定 (未入室の時)
         if not self.entered:

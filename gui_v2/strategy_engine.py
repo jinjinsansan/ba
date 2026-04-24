@@ -212,20 +212,18 @@ def decide_bet(seq: str, entry_pattern: str) -> dict:
     return {"action": action, "side": side, "reason": reason}
 
 
+VALID_PATTERNS = {"縦面5+密集", "縦面4以下密集", "ニコニコ・ニコイチ", "テレコ"}
+EXIT_PATTERNS  = {"不規則", "偏り", "ブリッジ"}
+
+
 def check_exit(info: dict, entry_pattern: str, losing_streak: int) -> tuple[bool, str]:
-    """エグジット判定"""
+    """エグジット判定。退室は不規則/偏り/ブリッジ or 2連敗のみ。
+    有効パターンへの変化はパターン切替で継続 (呼び出し元が entry_pattern を更新する)。
+    """
     if losing_streak >= 2:
         return True, "2連敗 → 退室"
-    if entry_pattern in ("縦面5+密集", "縦面4以下密集"):
-        if info["features"].get("trailing_ones", 0) >= 2:
-            return True, "横空き=2 発生 → 退室"
-    if entry_pattern == "テレコ":
-        # テレコが崩れたら退室 (長い列が出現)
-        if info["pattern"] not in ("テレコ", "ニコニコ・ニコイチ"):
-            return True, f"テレコ崩れ (→ {info['pattern']}) → 退室"
-    new_pat = info["pattern"]
-    if new_pat != entry_pattern and new_pat in ("ブリッジ", "不規則", "偏り"):
-        return True, f"pattern 悪化 (→ {new_pat}) → 退室"
+    if info["pattern"] in EXIT_PATTERNS:
+        return True, f"パターン崩れ ({info['pattern']}) → 退室"
     return False, ""
 
 
