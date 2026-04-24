@@ -644,10 +644,18 @@ async function refreshSlow() {
   if (bn) { bn.textContent = '▶ SESSION'; bn.classList.remove('active'); }
   if (bt) bt.style.display = 'none';
 
-  // ② 残留セッションをサーバー側で完全リセット (await で完了を待つ)
+  // ② 残留セッションをサーバー側で完全リセット
   try { await api('/api/session/reset', { method: 'POST' }); } catch(e) {}
 
-  // ③ リセット後に描画開始
+  // ③ DOM を直接クリア（サーバー応答を待たず即反映）
+  const clearIds = ['handHistory','bigRoad','actionLog','kpiWinRate','kpiWlCount',
+    'kpiPnl','kpiStake','kpiRoi','kpiUnit','kpiSetTurn','kpiOvershoot','kpiSets',
+    'currentTableName','seqDisplay'];
+  clearIds.forEach(id => { const el = $(id); if (el) el.innerHTML = ''; });
+  const tblName = $('currentTableName');
+  if (tblName) tblName.textContent = '—';
+
+  // ④ リセット後に描画開始
   refresh();
   refreshSlow();
   refreshScraperStatus();
