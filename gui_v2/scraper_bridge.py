@@ -73,13 +73,24 @@ class ScraperBridge:
         return {"ok": True}
 
     def stop(self) -> dict:
-        """bg thread に停止要求"""
+        """bg thread に停止要求 + プロファイル lock 解放 cooldown"""
         if not self._running:
             return {"ok": False, "error": "起動していません"}
         self._stop_requested = True
         # scraper.stop() は bg thread から呼ばせる (Playwright スレッド制約)
         if self._thread:
             self._thread.join(timeout=30)
+        # Firefox プロファイルロック解放待ち (Windows: parent.lock が消えるまで)
+        import time as _time
+        for _ in range(10):  # 最大 5 秒
+            try:
+                from pathlib import Path as _P
+                lock = _P(__file__).resolve().parent.parent / "auth_state" / "camoufox_profile" / "parent.lock"
+                if not lock.exists():
+                    break
+            except Exception:
+                break
+            _time.sleep(0.5)
         return {"ok": True}
 
     def get_status(self) -> dict:
@@ -172,6 +183,8 @@ class ScraperBridge:
 
             self._status = "running"
             self._last_heartbeat = time.time()
+            _loop_tick = 0
+            _SUBSCRIBE_RETRY_INTERVAL = 30  # 秒ごとに histories 不足チェック
 
             # メインループ: WS 接続確認と再接続
             while self._running and not self._stop_requested:
@@ -179,6 +192,7 @@ class ScraperBridge:
                     self._browser_alive = self.scraper.is_alive()
                     self._ws_connected = bool(getattr(self.scraper, "_evo_ws_connected", False))
                     self._last_heartbeat = time.time()
+                    _loop_tick += 1
 
                     # WS 沈黙監視
                     silence = 0
@@ -189,7 +203,6 @@ class ScraperBridge:
 
                     if not self._browser_alive:
                         self._status = "browser dead — scraper を停止してください"
-                        # 自動再起動は不安定なので、user が stop→start する方式
                         time.sleep(5)
                         continue
 
@@ -200,7 +213,19 @@ class ScraperBridge:
                         except Exception as e:
                             self._last_error = f"reload error: {e}"
                     else:
-                        self._status = f"running (WS={'OK' if self._ws_connected else 'reconnecting'})"
+                        # histories 不足チェック: 30秒ごとに subscribe 再送
+                        if _loop_tick % (_SUBSCRIBE_RETRY_INTERVAL // 5) == 0:
+                            try:
+                                self.scraper.retry_subscribe_if_needed(min_tables=40)
+                            except Exception as _sub_e:
+                                pass
+                        with self.scraper._lock:
+                            n_hist = sum(1 for h in self.scraper._evo_table_raw_histories.values() if h)
+                        n_target = len(getattr(self.scraper, '_target_table_ids', set()))
+                        self._status = (
+                            f"running (WS={'OK' if self._ws_connected else '...'}"
+                            f" hist={n_hist}/{n_target})"
+                        )
 
                 except Exception as e:
                     self._last_error = f"loop: {e}\n{traceback.format_exc()[:500]}"

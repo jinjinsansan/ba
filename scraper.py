@@ -763,9 +763,138 @@ class BaccaratScraper:
             title = f"<title-failed: {e}>"
         logger.info(f"バカラロビー到着 — タイトル: {title}")
 
+    # =====================================================================
+    # Evolution lobby WS 購読 — 全テーブル履歴取得
+    # =====================================================================
+
+    def _inject_ws_capture_patch(self) -> None:
+        """ナビゲーション前に実行: WebSocket コンストラクタを monkey-patch して
+        Evolution ロビー WS の参照を window.__evoLobbyWs に保存する。
+        これにより page.evaluate() 経由でメッセージ送信が可能になる。
+        """
+        try:
+            self.page.evaluate("""() => {
+                if (window.__wsCapturePatched) return;
+                window.__wsCapturePatched = true;
+                const _OrigWS = window.WebSocket;
+                function PatchedWS(url, protocols) {
+                    const ws = protocols !== undefined
+                        ? new _OrigWS(url, protocols)
+                        : new _OrigWS(url);
+                    if (typeof url === 'string' && url.includes('lobby/socket')) {
+                        window.__evoLobbyWs = ws;
+                    }
+                    return ws;
+                }
+                PatchedWS.prototype = _OrigWS.prototype;
+                PatchedWS.CONNECTING = 0; PatchedWS.OPEN = 1;
+                PatchedWS.CLOSING = 2;   PatchedWS.CLOSED = 3;
+                window.WebSocket = PatchedWS;
+            }""")
+            logger.debug("[ws-patch] WebSocket monkey-patch 注入済")
+        except Exception as e:
+            logger.debug(f"[ws-patch] 注入失敗 (ナビ後は無効): {e}")
+
+    def _send_lobby_subscribe(self, table_ids: list) -> bool:
+        """Evolution ロビー WS に subscribe リクエストを送って全テーブルの
+        lobby.histories + lobby.historyUpdated を要求する。
+
+        Evolution lobby WS プロトコルは plain JSON:
+          {"type": "lobby.subscribe", "args": {"tables": [...]}}
+        """
+        if not table_ids or not self.page:
+            return False
+        try:
+            payload = json.dumps({"type": "lobby.subscribe",
+                                  "args": {"tables": list(table_ids)}},
+                                 ensure_ascii=False)
+            result = self.page.evaluate("""(msg) => {
+                const ws = window.__evoLobbyWs;
+                if (!ws || ws.readyState !== 1) return 'ws_unavailable';
+                ws.send(msg);
+                return 'sent';
+            }""", payload)
+            if result == 'sent':
+                logger.info(f"[subscribe] lobby.subscribe 送信 ({len(table_ids)} テーブル) ✅")
+                return True
+            else:
+                logger.warning(f"[subscribe] WS 送信失敗: {result}")
+                return False
+        except Exception as e:
+            logger.warning(f"[subscribe] 例外: {e}")
+            return False
+
+    def _request_all_histories(self) -> None:
+        """configs 受信後に全バカラテーブルの history を要求する。
+        subscribe 失敗時は DOM スクロールで historyUpdated を誘発するフォールバックも実行。
+        """
+        if not self._target_table_ids:
+            return
+        ids = list(self._target_table_ids)
+        ok = self._send_lobby_subscribe(ids)
+        if not ok:
+            # フォールバック: Evolution lobby iframe を下までスクロール
+            # → 全タイルが viewport に入り historyUpdated が誘発される
+            self._scroll_lobby_to_load_all()
+
+    def _scroll_lobby_to_load_all(self) -> None:
+        """Evolution lobby iframe をスクロールして全テーブルタイルを viewport に入れ
+        historyUpdated を誘発する (subscribe 失敗時のフォールバック)。
+        """
+        try:
+            evo_frame = None
+            for fr in self.page.frames:
+                if 'evo-games.com' in fr.url or 'evolution' in fr.url.lower():
+                    evo_frame = fr
+                    break
+            target = evo_frame or self.page
+            target.evaluate("""() => {
+                const scrollableSelectors = [
+                    '[class*="lobby"]', '[class*="Lobby"]',
+                    '[class*="scroll"]', '[class*="Scroll"]',
+                    'main', '#root', 'body'
+                ];
+                let el = null;
+                for (const sel of scrollableSelectors) {
+                    const found = document.querySelector(sel);
+                    if (found && found.scrollHeight > found.clientHeight + 50) {
+                        el = found; break;
+                    }
+                }
+                if (!el) el = document.documentElement;
+                const step = Math.max(el.clientHeight, 600);
+                let pos = 0;
+                const iv = setInterval(() => {
+                    pos += step;
+                    el.scrollTop = pos;
+                    if (pos >= el.scrollHeight) { clearInterval(iv); el.scrollTop = 0; }
+                }, 400);
+            }""")
+            logger.info("[scroll] Evolution lobby スクロール開始 (historyUpdated 誘発)")
+        except Exception as e:
+            logger.debug(f"[scroll] エラー: {e}")
+
+    def retry_subscribe_if_needed(self, min_tables: int = 20) -> None:
+        """histories が不足していれば subscribe を再試行する。
+
+        scraper_bridge の監視ループから定期的に呼ぶ。
+        """
+        with self._lock:
+            have = sum(1 for h in self._evo_table_raw_histories.values() if h)
+        if have >= min_tables:
+            return
+        if not self._target_table_ids:
+            return
+        logger.info(f"[subscribe-retry] histories={have} < {min_tables} → 再 subscribe")
+        ids = list(self._target_table_ids)
+        if not self._send_lobby_subscribe(ids):
+            self._scroll_lobby_to_load_all()
+
     def _register_ws_listener(self):
         """WebSocketリスナーを登録（ナビゲーション前に呼ぶこと）"""
         logger.info("WebSocket傍受を設定中...")
+        # Evolution WS を後から参照できるよう monkey-patch を注入
+        self._inject_ws_capture_patch()
 
         def _payload_to_str(data) -> str:
             try:
@@ -1003,6 +1132,11 @@ class BaccaratScraper:
             first_id = next(iter(self._target_table_ids))
             self._target_table_id = first_id
             logger.info(f"監視テーブル: {len(self._target_table_ids)}件 (全バカラ, Salon Prive除外)")
+            # 全テーブルの history を Evolution WS に要求
+            try:
+                self._request_all_histories()
+            except Exception as _rh_e:
+                logger.debug(f"[subscribe] _request_all_histories error: {_rh_e}")
         else:
             logger.warning(f"テーブルが見つかりません (フィルタ: '{self.table_name}')")
 
