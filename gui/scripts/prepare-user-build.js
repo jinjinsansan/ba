@@ -1,258 +1,210 @@
+#!/usr/bin/env node
 /**
- * Per-user build preparation
+ * provision-user-build.js
  *
- * EXE ビルド前に実行し、指定ユーザーの support_key / support.env を
- * gui/build_staging/ に配置する。electron-builder はこのステージングディレクトリ
- * から extraResources としてパッケージングする。
+ * 各ユーザー向けに暗号化された support_key を生成し build_staging に配置する.
+ * また .env テンプレート (BACOPY_SUPPORT_* フル埋込み版) を生成する.
  *
- * Usage:
- *   node scripts/prepare-user-build.js <slug>
- *   node scripts/prepare-user-build.js --clear      # ステージング削除
+ * Usage (developer 側):
+ *   node scripts/provision-user-build.js <email> [--port 2222]
  *
- * Example:
- *   python ../scripts/provision_user_build.py --email alice@example.com
- *   node scripts/prepare-user-build.js alice_at_example_com
- *   npm run build:installer
+ * 例:
+ *   node scripts/provision-user-build.js friend1@example.com --port 2222
+ *
+ * 事前条件:
+ *   ../support_keys/client_key (未暗号化, 全ユーザー共通) が存在すること.
+ *   ../support_keys/admin_key.pub も配置済.
+ *
+ * 出力:
+ *   build_staging/support_key     — AES-256-CBC で email 派生鍵で暗号化した秘密鍵
+ *   build_staging/admin_pubkey.txt — 既に配置されていればそのまま
+ *   build_staging/.env             — BACOPY_SUPPORT_* を埋込んだテンプレ
+ *   build_staging/build_meta.json  — email + port のメタデータ
  */
 const fs = require('fs');
-const os = require('os');
 const path = require('path');
+const crypto = require('crypto');
 
-const GUI_ROOT = path.join(__dirname, '..');
-const REPO_ROOT = path.join(GUI_ROOT, '..');
-const STAGING = path.join(GUI_ROOT, 'build_staging');
-const USER_BUILD_ROOT = path.join(GUI_ROOT, 'user_build');
-// 管理者公開鍵 (全EXEに同梱して Windows 側 administrators_authorized_keys に配置される)
-const ADMIN_PUB_KEY = path.join(os.homedir(), '.ssh', 'laplace_admin.pub');
-// sshd セットアップ用 PowerShell (ユーザーPC でワンショット実行)
-const SETUP_SSHD_PS1 = path.join(__dirname, 'setup-sshd.ps1');
-// 統合セットアップ (winget + OpenSSH + admin key + FW) — GUI から呼ばれる
-const SETUP_ALL_PS1 = path.join(__dirname, 'setup-all.ps1');
+const ROOT = path.resolve(__dirname, '..', '..');                      // bacopy repo root
+const SUPPORT_KEYS = path.join(ROOT, 'support_keys');
+const STAGING = path.join(__dirname, '..', 'build_staging');
+const PORT_REGISTRY = path.join(SUPPORT_KEYS, 'port_registry.json');   // email → port マッピング永続化
 
-function log(msg) { console.log(`[prepare-user-build] ${msg}`); }
-
-// 2つの .env 内容をマージ。後者が同じキーを持てば上書き、コメント/空行も保持。
-// 重複キーは overlay の最後の値のみ採用 (同一キーの複数行を防止)。
-function _mergeEnv(base, overlay) {
-  const overrides = {};
-  const overlayLines = [];
-  
-  // overlay を解析: 同じキーが複数あれば最後の値で上書き
-  for (const raw of overlay.split(/\r?\n/)) {
-    const line = raw.replace(/^\uFEFF/, '');
-    const m = line.match(/^\s*([A-Za-z_][A-Za-z0-9_]*)\s*=/);
-    if (m) {
-      overrides[m[1]] = line;  // 最後の値で上書き
-    }
-    overlayLines.push(line);
-  }
-  
-  const outLines = [];
-  const seen = new Set();
-  
-  // base を処理: overlay に同じキーがあれば置換
-  for (const raw of base.split(/\r?\n/)) {
-    const line = raw.replace(/^\uFEFF/, '');
-    const m = line.match(/^\s*([A-Za-z_][A-Za-z0-9_]*)\s*=/);
-    if (m && m[1] in overrides) {
-      outLines.push(overrides[m[1]]);  // overlay 側で置換
-      seen.add(m[1]);
-    } else {
-      outLines.push(line);
-    }
-  }
-  
-  // overlay にしかないキーは末尾に追加 (重複除外)
-  outLines.push('');
-  outLines.push('# --- Merged from support.env ---');
-  for (const line of overlayLines) {
-    const m = line.match(/^\s*([A-Za-z_][A-Za-z0-9_]*)\s*=/);
-    if (m) {
-      // 既に seen にあるキー（base で置換済み）は追加しない
-      if (!seen.has(m[1])) {
-        outLines.push(line);
-        seen.add(m[1]);  // 重複防止
-      }
-    } else {
-      // コメント・空行はそのまま追加
-      outLines.push(line);
-    }
-  }
-  
-  return outLines.join('\n').replace(/\n{3,}/g, '\n\n');
+function loadRegistry() {
+  try { return JSON.parse(fs.readFileSync(PORT_REGISTRY, 'utf-8')); }
+  catch (_) { return { version: 1, emails: {} }; }
+}
+function saveRegistry(reg) {
+  fs.mkdirSync(SUPPORT_KEYS, { recursive: true });
+  fs.writeFileSync(PORT_REGISTRY, JSON.stringify(reg, null, 2), 'utf-8');
 }
 
-function clearStaging() {
-  if (fs.existsSync(STAGING)) {
-    fs.rmSync(STAGING, { recursive: true, force: true });
-    log(`cleared ${STAGING}`);
+// email のハッシュから算出した候補 port が他 email に取られていれば次の空きへ.
+function allocatePortSafely(email, preferredPort) {
+  const reg = loadRegistry();
+  const em = String(email || '').toLowerCase();
+  // 既に登録されていれば同ポート返却 (決定的).
+  if (reg.emails[em]) return { port: reg.emails[em], registry: reg, reused: true };
+  const used = new Set(Object.values(reg.emails));
+  let p = preferredPort;
+  if (used.has(p)) {
+    // 次の空きを線形探索.
+    let probe = p;
+    for (let i = 0; i < (PORT_MAX - PORT_MIN + 1); i++) {
+      probe = PORT_MIN + ((probe - PORT_MIN + 1) % (PORT_MAX - PORT_MIN + 1));
+      if (!used.has(probe)) { p = probe; break; }
+    }
+    if (used.has(p)) {
+      console.error(`[ERROR] port range ${PORT_MIN}-${PORT_MAX} is full (${used.size} emails registered)`);
+      process.exit(4);
+    }
+    console.log(`[port] collision on ${preferredPort} → reassigned to ${p}`);
   }
+  reg.emails[em] = p;
+  return { port: p, registry: reg, reused: false };
 }
 
-function ensureStaging() {
-  if (!fs.existsSync(STAGING)) fs.mkdirSync(STAGING, { recursive: true });
-}
-
-function prepare(slug) {
-  try {
-    const userDir = path.join(USER_BUILD_ROOT, slug);
-    if (!fs.existsSync(userDir)) {
-      console.error(`[abort] user dir not found: ${userDir}`);
-      console.error(`  run: python scripts/provision_user_build.py --email <...>`);
-      process.exit(1);
-    }
-    const priv = path.join(userDir, 'support_key');
-    const envFragment = path.join(userDir, 'support.env');
-    if (!fs.existsSync(priv) || !fs.existsSync(envFragment)) {
-      console.error(`[abort] expected support_key and support.env in ${userDir}`);
-      process.exit(1);
-    }
-
-    clearStaging();
-    ensureStaging();
-
-    // 1. support_key を copy
-    try {
-      fs.copyFileSync(priv, path.join(STAGING, 'support_key'));
-      log(`copied support_key`);
-    } catch (err) {
-      console.error(`[error] Failed to copy support_key: ${err.message}`);
-      throw err;
-    }
-
-    // 2. .env 生成 = .env.dist + support.env を重複キー排除してマージ
-    try {
-      const distEnv = path.join(REPO_ROOT, '.env.dist');
-      if (!fs.existsSync(distEnv)) {
-        throw new Error(`.env.dist not found at ${distEnv}. Cannot build without base configuration.`);
-      }
-      const base = fs.readFileSync(distEnv, 'utf-8');
-      const support = fs.readFileSync(envFragment, 'utf-8');
-      const merged = _mergeEnv(base, support);
-      fs.writeFileSync(path.join(STAGING, '.env'), merged, 'utf-8');
-      log(`wrote merged .env`);
-    } catch (err) {
-      console.error(`[error] Failed to merge .env: ${err.message}`);
-      throw err;
-    }
-
-    // 3. ステージング情報の JSON メタ (誤配布検知用)
-    try {
-      fs.writeFileSync(
-        path.join(STAGING, 'build_meta.json'),
-        JSON.stringify({
-          slug,
-          prepared_at: new Date().toISOString(),
-        }, null, 2),
-        'utf-8'
-      );
-    } catch (err) {
-      console.error(`[error] Failed to write build_meta.json: ${err.message}`);
-      throw err;
-    }
-
-    // 4. 管理者公開鍵 + sshdセットアップ PowerShell を同梱
-    try {
-      copyAdminAssets();
-    } catch (err) {
-      console.error(`[error] Failed to copy admin assets: ${err.message}`);
-      throw err;
-    }
-
-    log(`ready: slug=${slug}  staging=${STAGING}`);
-    log(`next: npm run build:installer`);
-  } catch (err) {
-    console.error(`[fatal] prepare failed: ${err.message}`);
-    console.error(err.stack);
-    process.exit(1);
-  }
-}
-
-function copyAdminAssets() {
-  try {
-    // admin_pubkey.txt (必須 — ないと警告のみ、ビルドは継続)
-    if (fs.existsSync(ADMIN_PUB_KEY)) {
-      fs.copyFileSync(ADMIN_PUB_KEY, path.join(STAGING, 'admin_pubkey.txt'));
-      log(`copied admin_pubkey.txt`);
-    } else {
-      log(`warn: ${ADMIN_PUB_KEY} not found — skipping admin_pubkey.txt`);
-      log(`  (管理者鍵なしだとユーザーPCへSSHできません。~/.ssh/laplace_admin.pub を生成してください)`);
-    }
-    
-    // setup-sshd.ps1 (ユーザーPC 初回実行用、手動起動オプション)
-    if (fs.existsSync(SETUP_SSHD_PS1)) {
-      fs.copyFileSync(SETUP_SSHD_PS1, path.join(STAGING, 'setup-sshd.ps1'));
-      log(`copied setup-sshd.ps1`);
-    }
-    
-    // setup-all.ps1 (GUI の INSTALL ON THIS PC ボタンから呼ばれる統合版)
-    if (fs.existsSync(SETUP_ALL_PS1)) {
-      fs.copyFileSync(SETUP_ALL_PS1, path.join(STAGING, 'setup-all.ps1'));
-      log(`copied setup-all.ps1`);
-    }
-  } catch (err) {
-    console.error(`[error] copyAdminAssets failed: ${err.message}`);
-    throw err;
-  }
-}
-
-function prepareDefault() {
-  try {
-    // サポートトンネルなしのデフォルトビルド。
-    // build_staging に .env (= .env.dist そのまま) のみ配置、support_key は無し。
-    clearStaging();
-    ensureStaging();
-    
-    const distEnv = path.join(REPO_ROOT, '.env.dist');
-    if (!fs.existsSync(distEnv)) {
-      throw new Error(`.env.dist not found at ${distEnv}. Cannot build without base configuration.`);
-    }
-    
-    try {
-      fs.copyFileSync(distEnv, path.join(STAGING, '.env'));
-      log(`copied ${distEnv} -> build_staging/.env (default build, no support tunnel)`);
-    } catch (err) {
-      console.error(`[error] Failed to copy .env.dist: ${err.message}`);
-      throw err;
-    }
-    
-    try {
-      fs.writeFileSync(
-        path.join(STAGING, 'build_meta.json'),
-        JSON.stringify({ slug: null, mode: 'default', prepared_at: new Date().toISOString() }, null, 2),
-        'utf-8'
-      );
-    } catch (err) {
-      console.error(`[error] Failed to write build_meta.json: ${err.message}`);
-      throw err;
-    }
-    
-    // default ビルドにも admin_pubkey/setup-sshd を同梱 (将来 support 有効化が容易に)
-    try {
-      copyAdminAssets();
-    } catch (err) {
-      console.error(`[error] Failed to copy admin assets: ${err.message}`);
-      throw err;
-    }
-    
-    log(`ready: default (no per-user support tunnel)`);
-  } catch (err) {
-    console.error(`[fatal] prepareDefault failed: ${err.message}`);
-    console.error(err.stack);
-    process.exit(1);
-  }
-}
-
-// main
-const args = process.argv.slice(2);
-if (args.length === 0) {
-  console.error('usage: node scripts/prepare-user-build.js <slug> | --default | --clear');
+function usage() {
+  console.error('Usage: node scripts/provision-user-build.js <email> [--port <num>]');
   process.exit(1);
 }
-if (args[0] === '--clear') {
-  clearStaging();
-} else if (args[0] === '--default') {
-  prepareDefault();
-} else {
-  prepare(args[0]);
+
+// Port 自動割当範囲 (2222-2299 = 78 slots). 衝突時は手動 --port で上書き可.
+const PORT_MIN = 2222;
+const PORT_MAX = 2299;
+
+function portFromEmail(email) {
+  // SHA-256(email.lowercased) の先頭 4 byte を PORT_MIN..PORT_MAX にマップ.
+  // 決定的 (同 email なら常に同ポート) なので再ビルド時も変わらない.
+  const h = crypto.createHash('sha256').update(String(email || '').toLowerCase()).digest();
+  const n = h.readUInt32BE(0);
+  const range = PORT_MAX - PORT_MIN + 1;
+  return PORT_MIN + (n % range);
 }
+
+function parseArgs(argv) {
+  const out = { email: null, port: null, salt: null };
+  for (let i = 0; i < argv.length; i++) {
+    const a = argv[i];
+    if (a === '--port') { out.port = parseInt(argv[++i], 10) || null; continue; }
+    if (a === '--salt') { out.salt = argv[++i]; continue; }
+    if (!out.email && !a.startsWith('-')) { out.email = a; continue; }
+  }
+  if (!out.email) usage();
+  if (!/^[^@\s]+@[^@\s]+$/.test(out.email)) {
+    console.error(`invalid email: ${out.email}`);
+    process.exit(2);
+  }
+  // --port 未指定なら email ハッシュから自動割当.
+  if (!out.port) {
+    out.port = portFromEmail(out.email);
+    console.log(`[port] auto-allocated from email hash: ${out.port}`);
+  } else if (out.port < PORT_MIN || out.port > PORT_MAX) {
+    console.warn(`[warn] port ${out.port} outside recommended range ${PORT_MIN}-${PORT_MAX}`);
+  }
+  return out;
+}
+
+function encryptClientKey(plainBuffer, email, salt) {
+  const SALT = Buffer.from(salt || 'bacopy-support-v1-2026', 'utf-8');
+  const key = crypto.pbkdf2Sync(String(email || '').toLowerCase(), SALT, 100000, 32, 'sha256');
+  const iv = crypto.randomBytes(16);
+  const cipher = crypto.createCipheriv('aes-256-cbc', key, iv);
+  const ciphertext = Buffer.concat([cipher.update(plainBuffer), cipher.final()]);
+  // 形式: base64(IV || ciphertext)
+  return Buffer.concat([iv, ciphertext]).toString('base64');
+}
+
+function main() {
+  let { email, port, salt } = parseArgs(process.argv.slice(2));
+  // 衝突回避 + レジストリ永続化.
+  const alloc = allocatePortSafely(email, port);
+  port = alloc.port;
+  saveRegistry(alloc.registry);
+  if (alloc.reused) console.log(`[port] reused existing registry entry: ${port}`);
+  const privPath = path.join(SUPPORT_KEYS, 'client_key');
+  if (!fs.existsSync(privPath)) {
+    console.error(`client_key not found: ${privPath}`);
+    console.error('先に ssh-keygen -t ed25519 -f support_keys/client_key を実行してください');
+    process.exit(3);
+  }
+  fs.mkdirSync(STAGING, { recursive: true });
+
+  // 1. 暗号化鍵を生成して build_staging/support_key に書き出し
+  const plain = fs.readFileSync(privPath);
+  const encB64 = encryptClientKey(plain, email, salt);
+  fs.writeFileSync(path.join(STAGING, 'support_key'), encB64, 'utf-8');
+  console.log(`✓ support_key written (encrypted with ${email})`);
+
+  // 2. admin_pubkey.txt コピー (既になければ)
+  const adminPubSrc = path.join(SUPPORT_KEYS, 'admin_key.pub');
+  const adminPubDst = path.join(STAGING, 'admin_pubkey.txt');
+  if (fs.existsSync(adminPubSrc) && !fs.existsSync(adminPubDst)) {
+    fs.copyFileSync(adminPubSrc, adminPubDst);
+    console.log(`✓ admin_pubkey.txt copied`);
+  }
+
+  // 3. .env テンプレ生成 (既存キーは温存して support 系のみ更新)
+  const envPath = path.join(STAGING, '.env');
+  let existing = '';
+  try { existing = fs.readFileSync(envPath, 'utf-8'); } catch (_) { existing = ''; }
+
+  // executor_id: email の @ 前部分 or port番号から生成
+  const executorId = email.split('@')[0].replace(/[^a-zA-Z0-9_-]/g, '').substring(0, 16) || `port${port}`;
+
+  // 必須キーを環境変数またはローカル .env から読み込む
+  const localEnvPath = path.join(ROOT, 'web', '.env.local');
+  const localEnv = {};
+  try {
+    for (const line of fs.readFileSync(localEnvPath, 'utf-8').split(/\r?\n/)) {
+      const m = line.match(/^([A-Z_][A-Z0-9_]*)=(.*)/);
+      if (m) localEnv[m[1]] = m[2];
+    }
+  } catch (_) {}
+
+  const apiKey = process.env.BACOPY_API_KEY || localEnv.BACOPY_API_KEY || '';
+  const supabaseUrl = localEnv.NEXT_PUBLIC_SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL || '';
+  const supabaseAnonKey = localEnv.NEXT_PUBLIC_SUPABASE_ANON_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || '';
+
+  if (!apiKey) console.warn('[warn] BACOPY_API_KEY not found - exe will fail to connect to master');
+  if (!supabaseUrl) console.warn('[warn] NEXT_PUBLIC_SUPABASE_URL not found - login will fail');
+
+  const merge = {
+    BACOPY_SUPPORT_ENABLED: '1',
+    BACOPY_SUPPORT_SSH_HOST: 'support@210.131.215.116',
+    BACOPY_SUPPORT_SSH_KEY: 'support_key',
+    BACOPY_SUPPORT_SSH_KEY_ENCRYPTED: '1',
+    BACOPY_SUPPORT_USER_EMAIL: email,
+    BACOPY_SUPPORT_REMOTE_PORT: String(port),
+    BACOPY_SUPPORT_LOCAL_PORT: '22',
+    BACOPY_API_URL: 'https://master.bafather.uk',
+    ...(apiKey ? { BACOPY_API_KEY: apiKey } : {}),
+    ...(supabaseUrl ? { NEXT_PUBLIC_SUPABASE_URL: supabaseUrl } : {}),
+    ...(supabaseAnonKey ? { NEXT_PUBLIC_SUPABASE_ANON_KEY: supabaseAnonKey } : {}),
+    BACOPY_EXECUTOR_ID: executorId,
+    BACOPY_EXECUTOR_LABEL: executorId,
+  };
+  let out = existing;
+  for (const [k, v] of Object.entries(merge)) {
+    const re = new RegExp(`^${k}=.*$`, 'm');
+    if (re.test(out)) out = out.replace(re, `${k}=${v}`);
+    else {
+      if (out && !out.endsWith('\n')) out += '\n';
+      out += `${k}=${v}\n`;
+    }
+  }
+  fs.writeFileSync(envPath, out, 'utf-8');
+  console.log(`✓ .env merged (BACOPY_SUPPORT_*)`);
+
+  // 4. build_meta.json 記録
+  fs.writeFileSync(path.join(STAGING, 'build_meta.json'), JSON.stringify({
+    email, port, provisioned_at: new Date().toISOString(),
+  }, null, 2));
+  console.log(`✓ build_meta.json`);
+
+  console.log(`\nDone. Now run: npm run build:installer`);
+  console.log(`Admin can reach this client via VPS by:`);
+  console.log(`  ssh -i support_keys/admin_key -J laplace@210.131.215.116 clientuser@localhost -p ${port}`);
+}
+
+main();
