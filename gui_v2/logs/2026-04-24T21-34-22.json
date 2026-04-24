@@ -1,0 +1,244 @@
+{
+  "started_at": "2026-04-24T21:34:22",
+  "stopped_at": "2026-04-24T21:34:35",
+  "current_table": "Japanese Speed Baccarat E",
+  "seq": "BBPPBBPPBPBPPBBPBBPPBBP",
+  "bet_history": [
+    {
+      "side": "P",
+      "result": "P",
+      "won": true,
+      "unit": 1,
+      "pnl": 1,
+      "pattern": "ニコニコ・ニコイチ",
+      "time": "21:34:23",
+      "reason": "2落後 1落狙い (直前列2落, 新列1段目 B)"
+    },
+    {
+      "side": "P",
+      "result": "B",
+      "won": false,
+      "unit": 1,
+      "pnl": -1,
+      "pattern": "ニコニコ・ニコイチ",
+      "time": "21:34:23",
+      "reason": "2落後 1落狙い (直前列2落, 新列1段目 B)"
+    },
+    {
+      "side": "P",
+      "result": "B",
+      "won": false,
+      "unit": 1,
+      "pnl": -1,
+      "pattern": "ニコニコ・ニコイチ",
+      "time": "21:34:24",
+      "reason": "2落後 1落狙い (直前列2落, 新列1段目 B)"
+    }
+  ],
+  "hand_history": [
+    {
+      "result": "B",
+      "time": "21:34:22",
+      "bet_resolved": null
+    },
+    {
+      "result": "B",
+      "time": "21:34:22",
+      "bet_resolved": null
+    },
+    {
+      "result": "P",
+      "time": "21:34:22",
+      "bet_resolved": null
+    },
+    {
+      "result": "P",
+      "time": "21:34:22",
+      "bet_resolved": null
+    },
+    {
+      "result": "B",
+      "time": "21:34:22",
+      "bet_resolved": null
+    },
+    {
+      "result": "B",
+      "time": "21:34:22",
+      "bet_resolved": null
+    },
+    {
+      "result": "P",
+      "time": "21:34:22",
+      "bet_resolved": null
+    },
+    {
+      "result": "P",
+      "time": "21:34:23",
+      "bet_resolved": null
+    },
+    {
+      "result": "B",
+      "time": "21:34:23",
+      "bet_resolved": null
+    },
+    {
+      "result": "P",
+      "time": "21:34:23",
+      "bet_resolved": {
+        "side": "P",
+        "result": "P",
+        "won": true,
+        "unit": 1,
+        "pnl": 1,
+        "pattern": "ニコニコ・ニコイチ",
+        "time": "21:34:23",
+        "reason": "2落後 1落狙い (直前列2落, 新列1段目 B)"
+      }
+    },
+    {
+      "result": "B",
+      "time": "21:34:23",
+      "bet_resolved": null
+    },
+    {
+      "result": "P",
+      "time": "21:34:23",
+      "bet_resolved": null
+    },
+    {
+      "result": "P",
+      "time": "21:34:23",
+      "bet_resolved": null
+    },
+    {
+      "result": "B",
+      "time": "21:34:23",
+      "bet_resolved": null
+    },
+    {
+      "result": "B",
+      "time": "21:34:23",
+      "bet_resolved": {
+        "side": "P",
+        "result": "B",
+        "won": false,
+        "unit": 1,
+        "pnl": -1,
+        "pattern": "ニコニコ・ニコイチ",
+        "time": "21:34:23",
+        "reason": "2落後 1落狙い (直前列2落, 新列1段目 B)"
+      }
+    },
+    {
+      "result": "P",
+      "time": "21:34:23",
+      "bet_resolved": null
+    },
+    {
+      "result": "B",
+      "time": "21:34:23",
+      "bet_resolved": null
+    },
+    {
+      "result": "B",
+      "time": "21:34:23",
+      "bet_resolved": null
+    },
+    {
+      "result": "P",
+      "time": "21:34:23",
+      "bet_resolved": null
+    },
+    {
+      "result": "P",
+      "time": "21:34:23",
+      "bet_resolved": null
+    },
+    {
+      "result": "B",
+      "time": "21:34:24",
+      "bet_resolved": null
+    },
+    {
+      "result": "B",
+      "time": "21:34:24",
+      "bet_resolved": {
+        "side": "P",
+        "result": "B",
+        "won": false,
+        "unit": 1,
+        "pnl": -1,
+        "pattern": "ニコニコ・ニコイチ",
+        "time": "21:34:24",
+        "reason": "2落後 1落狙い (直前列2落, 新列1段目 B)"
+      }
+    },
+    {
+      "result": "P",
+      "time": "21:34:24",
+      "bet_resolved": null
+    }
+  ],
+  "action_log": [
+    {
+      "time": "21:34:22",
+      "kind": "START",
+      "msg": "セッション開始 (table=Japanese Speed Baccarat E)"
+    },
+    {
+      "time": "21:34:23",
+      "kind": "ENTER",
+      "msg": "ニコニコ・ニコイチ — 5列目までに 4段なし + 2落連続あり"
+    },
+    {
+      "time": "21:34:23",
+      "kind": "BET_RESULT",
+      "msg": "WIN / $1 P (結果 P)"
+    },
+    {
+      "time": "21:34:23",
+      "kind": "BET_RESULT",
+      "msg": "LOSE / $1 P (結果 B)"
+    },
+    {
+      "time": "21:34:24",
+      "kind": "BET_RESULT",
+      "msg": "LOSE / $1 P (結果 B)"
+    },
+    {
+      "time": "21:34:24",
+      "kind": "EXIT",
+      "msg": "2連敗 → 退室"
+    },
+    {
+      "time": "21:34:24",
+      "kind": "ENTER",
+      "msg": "ニコニコ・ニコイチ — 5列目までに 4段なし + 2落連続あり"
+    },
+    {
+      "time": "21:34:35",
+      "kind": "STOP",
+      "msg": "セッション終了"
+    }
+  ],
+  "bet_summary": {
+    "started_at": "2026-04-24T21:34:22",
+    "stopped_at": "2026-04-24T21:34:35",
+    "active": false,
+    "table": "Japanese Speed Baccarat E",
+    "hands": 23,
+    "bets": 3,
+    "wins": 1,
+    "losses": 2,
+    "win_rate": 33.33333333333333,
+    "pnl": -1,
+    "stake": 3,
+    "roi": -33.33333333333333,
+    "current_unit_idx": 0,
+    "current_unit": 1,
+    "overshoot": 0,
+    "cumulative_tracker_profit": 0,
+    "sets_completed": 0,
+    "current_turn": 3
+  }
+}

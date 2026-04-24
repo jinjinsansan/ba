@@ -1,0 +1,40 @@
+{
+  "started_at": "2026-04-24T21:37:47",
+  "stopped_at": "2026-04-24T21:37:52",
+  "current_table": "未指定",
+  "seq": "",
+  "bet_history": [],
+  "hand_history": [],
+  "action_log": [
+    {
+      "time": "21:37:47",
+      "kind": "START",
+      "msg": "セッション開始 (table=未指定)"
+    },
+    {
+      "time": "21:37:52",
+      "kind": "STOP",
+      "msg": "セッション終了"
+    }
+  ],
+  "bet_summary": {
+    "started_at": "2026-04-24T21:37:47",
+    "stopped_at": "2026-04-24T21:37:52",
+    "active": false,
+    "table": "未指定",
+    "hands": 0,
+    "bets": 0,
+    "wins": 0,
+    "losses": 0,
+    "win_rate": 0,
+    "pnl": 0,
+    "stake": 0,
+    "roi": 0,
+    "current_unit_idx": 0,
+    "current_unit": 1,
+    "overshoot": 0,
+    "cumulative_tracker_profit": 0,
+    "sets_completed": 0,
+    "current_turn": 0
+  }
+}

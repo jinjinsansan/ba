@@ -1,0 +1,235 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>◆ LAPLACE COPILOT — ba v2</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@700;800;900&family=Share+Tech+Mono&family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+<div class="app">
+
+<header class="header">
+  <div class="title-block">
+    <span class="brand-icon">◆</span>
+    <span class="brand-name">LAPLACE</span>
+    <span class="brand-tag">COPILOT</span>
+    <span class="brand-sub">v2 · Player Only</span>
+  </div>
+  <div class="scraper-controls">
+    <span class="scraper-label">LIVE FEED</span>
+    <span id="scraperStatus" class="scraper-state stopped">● OFFLINE</span>
+    <button id="btnScraperStart" class="btn btn-ghost">▶ 起動</button>
+    <button id="btnScraperStop" class="btn btn-ghost small">■</button>
+    <button id="btnManualLogin" class="btn btn-ghost small" title="手動ログインヘルパー">🔑</button>
+  </div>
+  <div class="session-controls">
+    <button id="btnStart" class="btn btn-primary" title="セッション開始 (カード選ぶなら自動でこれも実行される)">▶ SESSION</button>
+    <button id="btnStop" class="btn btn-danger" title="セッション停止 (ログ保存)">■ STOP</button>
+  </div>
+  <input id="tableName" type="hidden" />
+</header>
+
+<main class="grid">
+
+  <!-- 左: Watchlist + Live Lobby -->
+  <section class="panel watchlist">
+    <h2>🌍 Lobby</h2>
+    <div class="help">
+      候補テーブルを手動で Camoufox で探してください。
+      <span id="lobbySource" class="src-tag">-</span>
+    </div>
+
+    <div class="lobby-tabs">
+      <button class="tab-btn active" data-tab="live">🔴 Live</button>
+      <button class="tab-btn" data-tab="wl">⭐ Watchlist</button>
+    </div>
+    <div class="lobby-controls" id="lobbyControls">
+      <label>DB lookback:
+        <select id="lobbyHours">
+          <option value="1">1h</option>
+          <option value="4" selected>4h</option>
+          <option value="24">24h</option>
+          <option value="72">3d</option>
+          <option value="168">7d</option>
+        </select>
+      </label>
+    </div>
+    <div class="lobby-meter" id="lobbyMeter">
+      <div class="meter-bar"><div class="meter-fill" style="width:0%"></div></div>
+      <div class="meter-text"><span>📡 待機中...</span></div>
+    </div>
+
+    <div id="lobbyLive" class="tab-pane active">
+      <div id="lobbyCards" class="lobby-cards"></div>
+    </div>
+
+    <div id="lobbyWl" class="tab-pane">
+      <h3>🟢 持続確定 (OOS +edge)</h3>
+      <ul id="wlConfirmed" class="wl-list"></ul>
+      <h3>🟡 持続期待</h3>
+      <ul id="wlExpected" class="wl-list"></ul>
+      <h3>🔴 回収確定 (避ける)</h3>
+      <ul id="wlBlack" class="wl-list"></ul>
+    </div>
+  </section>
+
+  <!-- 中央: 現在のシュー -->
+  <section class="panel shoe">
+    <div class="shoe-header">
+      <h2>🎴 <span id="tableDisplay">未フォーカス</span></h2>
+      <div class="shoe-actions">
+        <button id="btnExitTable" class="btn btn-exit" title="このテーブルから退室 (次テーブルを選ぶ状態へ)">🚪 退室</button>
+        <details class="manual-mode">
+          <summary title="Fallback: 手動入力モード">⚙ 手動</summary>
+          <div class="hand-input">
+            <button class="hand-btn hand-p" data-result="P">P</button>
+            <button class="hand-btn hand-b" data-result="B">B</button>
+            <button class="hand-btn hand-t" data-result="T">T</button>
+            <button class="hand-btn hand-undo" id="btnUndo">← UNDO</button>
+          </div>
+        </details>
+      </div>
+    </div>
+
+    <div class="shoe-meta">
+      <span>ハンド: <b id="metaHands">0</b></span>
+      <span>列数: <b id="metaCols">0</b></span>
+      <span>P: <b id="metaP">0</b> / B: <b id="metaB">0</b> / T: <b id="metaT">0</b></span>
+      <span>P-B差: <b id="metaBLead">0</b></span>
+    </div>
+
+    <div class="big-road-wrap">
+      <canvas id="bigRoad" width="680" height="110"></canvas>
+    </div>
+
+    <div class="hand-history">
+      <h3>直近のハンド</h3>
+      <div id="handHistory" class="hand-history-list"></div>
+    </div>
+  </section>
+
+  <!-- 右: AI 判定 -->
+  <section class="panel ai">
+    <h2>🔮 AI 判定</h2>
+
+    <div class="ai-block pattern">
+      <div class="lbl">Pattern</div>
+      <div class="val-big" id="aiPattern">-</div>
+      <div class="sub" id="aiPatternReason">-</div>
+    </div>
+
+    <div class="ai-block forecast" id="aiForecast">
+      <div class="lbl">今のテーブル状況 / 予告</div>
+      <div class="fc-level" id="fcLevel">-</div>
+      <div class="fc-situation" id="fcSituation">-</div>
+      <div class="fc-next" id="fcNext">-</div>
+      <div class="fc-confidence-row" id="fcConfRow" style="display:none">
+        <span class="fc-conf-label">確信度</span>
+        <div class="fc-conf-bar"><div class="fc-conf-fill" id="fcConfFill" style="width:0%"></div></div>
+        <span class="fc-conf-pct" id="fcConfPct">-</span>
+      </div>
+      <div class="fc-learn" id="fcLearnInfo" style="display:none"></div>
+    </div>
+
+    <div class="ai-block pending" id="aiPendingBlock" style="display:none">
+      <div class="lbl">⏳ BET 実行待ち (Camoufox で実行してから結果を確定)</div>
+      <div class="pending-details" id="aiPendingDetails">-</div>
+      <div class="pending-actions">
+        <button id="btnPendingWin"  class="btn btn-win"  title="Camoufox で BET した結果、勝った">✅ 勝ち</button>
+        <button id="btnPendingLose" class="btn btn-lose" title="Camoufox で BET した結果、負けた">❌ 負け</button>
+        <button id="btnPendingTie"  class="btn btn-plain" title="タイで引き分け (BET 継続)">🟢 タイ</button>
+      </div>
+    </div>
+
+    <div class="ai-block entry">
+      <div class="lbl">エントリー判定</div>
+      <div class="val-big" id="aiEntry">-</div>
+      <div class="sub" id="aiEntryReason">-</div>
+    </div>
+
+    <div class="ai-block bet" id="aiBetBlock">
+      <div class="lbl">次 BET 推奨</div>
+      <div class="val-big" id="aiBetAction">-</div>
+      <div class="sub" id="aiBetReason">-</div>
+      <div class="bet-amount">
+        <span>BET 額</span>
+        <b id="aiBetAmount">$1</b>
+        <span class="unit-idx">SEQ[<span id="aiUnitIdx">0</span>]</span>
+      </div>
+    </div>
+
+    <div class="ai-block features">
+      <div class="lbl">特徴量</div>
+      <div class="features-grid">
+        <div><span>5+連</span><b id="feat5plus">0</b></div>
+        <div><span>4+連</span><b id="feat4plus">0</b></div>
+        <div><span>≤2段率</span><b id="featLe2">0%</b></div>
+        <div><span>1落連続</span><b id="featSingleRun">0</b></div>
+        <div><span>末尾1落</span><b id="featTrailing">0</b></div>
+        <div><span>overshoot</span><b id="featOvershoot">0</b></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- 下: セッション KPI + ログ -->
+  <section class="panel kpi-panel">
+    <h2>📊 セッション KPI</h2>
+    <div class="kpis">
+      <div class="kpi-card"><div class="lbl">勝率</div><div class="val" id="kpiWinRate">-</div><div class="sub" id="kpiWlCount">-</div></div>
+      <div class="kpi-card"><div class="lbl">PNL</div><div class="val" id="kpiPnl">$0</div><div class="sub" id="kpiStake">stake $0</div></div>
+      <div class="kpi-card"><div class="lbl">ROI</div><div class="val" id="kpiRoi">0%</div></div>
+      <div class="kpi-card"><div class="lbl">旧 SEQ unit</div><div class="val" id="kpiUnit">$1</div><div class="sub" id="kpiSetTurn">set 1 / turn 0</div></div>
+      <div class="kpi-card"><div class="lbl">overshoot</div><div class="val" id="kpiOvershoot">0</div></div>
+      <div class="kpi-card"><div class="lbl">累計セット</div><div class="val" id="kpiSets">0</div></div>
+    </div>
+  </section>
+
+  <section class="panel chart-panel">
+    <h2>📈 セッション推移</h2>
+    <div class="charts">
+      <div class="chart-block">
+        <div class="chart-title">Equity (累計 PNL)</div>
+        <div id="chartEquity" class="chart-svg"></div>
+      </div>
+      <div class="chart-block">
+        <div class="chart-title">勝率 (累積)</div>
+        <div id="chartWinRate" class="chart-svg"></div>
+      </div>
+    </div>
+  </section>
+
+  <section class="panel learning-panel">
+    <h2>🧠 AI 学習システム</h2>
+    <div class="learning-kpi">
+      <div class="learn-card"><div class="lbl">蓄積BET</div><div class="val" id="learnBets">0</div></div>
+      <div class="learn-card"><div class="lbl">履歴勝率</div><div class="val" id="learnWinRate">-</div></div>
+      <div class="learn-card"><div class="lbl">学習状態</div><div class="val" id="learnStatus">待機</div></div>
+    </div>
+    <div class="learn-splits">
+      <div class="learn-col">
+        <h3>Pattern 別</h3>
+        <div id="learnPatterns" class="learn-list"></div>
+      </div>
+      <div class="learn-col">
+        <h3>テーブル別 (Top 10)</h3>
+        <div id="learnTables" class="learn-list"></div>
+      </div>
+    </div>
+  </section>
+
+  <section class="panel log-panel">
+    <h2>📜 判定ログ</h2>
+    <div id="actionLog" class="action-log"></div>
+  </section>
+
+</main>
+
+</div>
+
+<script src="/static/app.js"></script>
+</body>
+</html>
