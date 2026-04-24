@@ -446,6 +446,13 @@ def api_session_stop():
     return jsonify({"ok": True})
 
 
+@app.route("/api/session/reset", methods=["POST"])
+def api_session_reset():
+    """セッションデータを完全リセット (手歴・KPI含む)"""
+    SESSION.reset()
+    return jsonify({"ok": True})
+
+
 @app.route("/api/session/change_table", methods=["POST"])
 def api_session_change_table():
     tname = (request.json or {}).get("table_name", "").strip()

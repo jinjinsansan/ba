@@ -643,8 +643,8 @@ async function refreshSlow() {
   if (bx) bx.style.display = 'none';
   if (bn) { bn.textContent = '▶ SESSION'; bn.classList.remove('active'); }
   if (bt) bt.style.display = 'none';
-  // 残留セッションを自動クリア
-  try { await api('/api/session/stop', { method: 'POST' }); } catch(e) {}
+  // 残留セッションを完全リセット (手歴・KPIも含む)
+  try { await api('/api/session/reset', { method: 'POST' }); } catch(e) {}
 })();
 
 refresh();
