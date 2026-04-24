@@ -71,6 +71,8 @@ def classify_strict(seq: str) -> dict:
     n_long4 = sum(1 for L in col_lens if L >= 4)
     pct_le2 = sum(1 for L in col_lens if L <= 2) / n
     pct_le3 = sum(1 for L in col_lens if L <= 3) / n
+    pct_1   = sum(1 for L in col_lens if L == 1) / n
+    pct_2   = sum(1 for L in col_lens if L == 2) / n
     single_run = max_consecutive(col_lens, 1)
     is_dense_strict = single_run == 0
     is_dense_loose = single_run <= 1
@@ -80,6 +82,8 @@ def classify_strict(seq: str) -> dict:
         "n_long4": n_long4,
         "pct_le2": round(pct_le2 * 100, 1),
         "pct_le3": round(pct_le3 * 100, 1),
+        "pct_1":   round(pct_1 * 100, 1),
+        "pct_2":   round(pct_2 * 100, 1),
         "single_run": single_run,
         "is_dense_strict": is_dense_strict,
         "is_dense_loose": is_dense_loose,
@@ -93,16 +97,23 @@ def classify_strict(seq: str) -> dict:
         info["pattern"] = "縦面4以下密集"
         info["reason"] = f"5+連なし + 4段 {n_long4}個 + 横空き 0"
     elif n_long4 == 0 and pct_le2 >= 0.85:
-        has_consec_2 = any(
-            i + 1 < len(col_lens) and col_lens[i] == 2 and col_lens[i + 1] == 2
-            for i in range(len(col_lens))
-        )
-        if has_consec_2:
-            info["pattern"] = "ニコニコ・ニコイチ"
-            info["reason"] = f"4+連なし + ≤2段 {pct_le2*100:.0f}% + 2落連続あり"
+        # テレコ: 1落が支配的 (≥65%)
+        if pct_1 >= 0.65:
+            info["pattern"] = "テレコ"
+            info["reason"] = f"1落 {pct_1*100:.0f}% — 交互パターン (逆張り)"
         else:
-            info["pattern"] = "不規則"
-            info["reason"] = "短列中心だが 2落連続なし"
+            has_consec_2 = any(
+                i + 1 < len(col_lens) and col_lens[i] == 2 and col_lens[i + 1] == 2
+                for i in range(len(col_lens))
+            )
+            has_mix = pct_2 >= 0.20 and pct_1 >= 0.20  # ニコイチ: 2落と1落が混在
+            if has_consec_2 or has_mix:
+                info["pattern"] = "ニコニコ・ニコイチ"
+                sub = "ニコニコ" if has_consec_2 else "ニコイチ"
+                info["reason"] = f"4+連なし + ≤2段 {pct_le2*100:.0f}% ({sub})"
+            else:
+                info["pattern"] = "不規則"
+                info["reason"] = "短列中心だが規則性なし"
     elif n_long5 >= 1 and pct_le2 >= 0.40:
         info["pattern"] = "ブリッジ"
         info["reason"] = f"5+連 {n_long5}個 + ≤2段 {pct_le2*100:.0f}%"
@@ -121,6 +132,9 @@ def check_entry(seq: str, info: dict) -> tuple[bool, str]:
 
     if pattern in ("縦面5+密集", "縦面4以下密集") and n_cols >= 3:
         return True, f"{pattern} 確認 (3列目以降で即エントリー)"
+
+    if pattern == "テレコ" and n_cols >= 5:
+        return True, f"テレコ確認 (5列以上、逆張り戦略)"
 
     if pattern == "ニコニコ・ニコイチ" and n_cols >= 5:
         first5 = col_lens[:5]
@@ -169,7 +183,12 @@ def decide_bet(seq: str, entry_pattern: str) -> dict:
     reason = ""
     amount_hint = 0  # $ hint (placeholder, SEQ tracker が正式)
 
-    if entry_pattern == "縦面5+密集":
+    if entry_pattern == "テレコ":
+        if prev == 'B':
+            action, side, reason = "BET", "P", "テレコ逆張り (B出現 → P BET)"
+        else:
+            reason = f"LOOK (P出現 → B期待だが P only のため見送り)"
+    elif entry_pattern == "縦面5+密集":
         if prev == 'P':
             action, side, reason = "BET", "P", "MF (縦面5+, 前手 P)"
         else:
@@ -200,6 +219,10 @@ def check_exit(info: dict, entry_pattern: str, losing_streak: int) -> tuple[bool
     if entry_pattern in ("縦面5+密集", "縦面4以下密集"):
         if info["features"].get("trailing_ones", 0) >= 2:
             return True, "横空き=2 発生 → 退室"
+    if entry_pattern == "テレコ":
+        # テレコが崩れたら退室 (長い列が出現)
+        if info["pattern"] not in ("テレコ", "ニコニコ・ニコイチ"):
+            return True, f"テレコ崩れ (→ {info['pattern']}) → 退室"
     new_pat = info["pattern"]
     if new_pat != entry_pattern and new_pat in ("ブリッジ", "不規則", "偏り"):
         return True, f"pattern 悪化 (→ {new_pat}) → 退室"
@@ -278,6 +301,13 @@ def forecast(seq: str, info: dict, entry_pattern: str | None, pending_bet: dict 
                 "confidence": 65,
             }
         # エントリー対象パターンだけど条件未達
+        if pat == "テレコ":
+            return {
+                "situation": f"⭐ テレコ候補 ({n_cols}/5 列)",
+                "next": "5 列以上でエントリー可能 (B出現時に P BET)",
+                "level": "watching",
+                "confidence": 40,
+            }
         if pat == "ニコニコ・ニコイチ":
             if n_cols < 5:
                 return {
@@ -300,6 +330,22 @@ def forecast(seq: str, info: dict, entry_pattern: str | None, pending_bet: dict 
         }
 
     # ③ 入室中 — pattern 別の予告
+    if entry_pattern == "テレコ":
+        if prev == 'B':
+            return {
+                "situation": "🎯 B 出現 — テレコ逆張りチャンス",
+                "next": "🟢 次ハンドに P BET (逆張り)",
+                "level": "imminent",
+                "confidence": 55,
+            }
+        else:
+            return {
+                "situation": "⏳ P 出現 — B 出現待ち",
+                "next": "B が出たら次ハンド P BET",
+                "level": "reach",
+                "confidence": 40,
+            }
+
     if entry_pattern == "縦面5+密集":
         if prev == 'P':
             streak = _count_trailing(seq, 'P')
