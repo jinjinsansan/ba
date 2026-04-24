@@ -634,24 +634,26 @@ async function refreshSlow() {
   }
 }
 
-// ページ読み込み時: ボタン初期化 + セッション自動停止
+// ページ読み込み時: ボタン初期化 → リセット → 描画開始 (順番を保証)
 (async function initPage() {
-  // 先にボタンを初期状態に
+  // ① ボタンを初期状態に
   const bs = $('btnScraperStart'); const bx = $('btnScraperStop');
   const bn = $('btnStart');        const bt = $('btnStop');
   if (bs) { bs.textContent = '▶ 起動'; bs.classList.remove('active'); }
   if (bx) bx.style.display = 'none';
   if (bn) { bn.textContent = '▶ SESSION'; bn.classList.remove('active'); }
   if (bt) bt.style.display = 'none';
-  // 残留セッションを完全リセット (手歴・KPIも含む)
-  try { await api('/api/session/reset', { method: 'POST' }); } catch(e) {}
-})();
 
-refresh();
-refreshSlow();
-refreshScraperStatus();
-refreshLearning();
-setInterval(refresh, 1500);
-setInterval(refreshSlow, 2000);
-setInterval(refreshScraperStatus, 3000);
-setInterval(refreshLearning, 8000);
+  // ② 残留セッションをサーバー側で完全リセット (await で完了を待つ)
+  try { await api('/api/session/reset', { method: 'POST' }); } catch(e) {}
+
+  // ③ リセット後に描画開始
+  refresh();
+  refreshSlow();
+  refreshScraperStatus();
+  refreshLearning();
+  setInterval(refresh, 1500);
+  setInterval(refreshSlow, 2000);
+  setInterval(refreshScraperStatus, 3000);
+  setInterval(refreshLearning, 8000);
+})();
