@@ -198,8 +198,9 @@ let currentTable = '';
 const _lobbyPrevState = {};  // table → {n_hands, pattern, entry_ok}
 
 const patCls = (p) => {
-  if (['縦面5+密集','縦面4以下密集','ニコニコ・ニコイチ'].includes(p)) return 'good';
-  if (['ブリッジ','不規則','偏り'].includes(p)) return 'bad';
+  if (p === '縦流れ') return 'good';
+  if (p === '横流れ') return 'good';
+  if (p === '不規則') return 'bad';
   return 'warn';
 };
 
@@ -286,6 +287,7 @@ function renderLobbyLive(lobby, focusedTableName) {
         </div>
         <div class="tc-middle">
           <span class="pat-tag ${patCls(t.pattern)}">${t.pattern === '不明' ? '📡 収集中' : t.pattern}</span>
+          ${t.sub ? `<span class="pat-tag warn">${t.sub}</span>` : ''}
           <span class="hand-chip">${t.n_hands}h</span>
           <span class="col-chip">${t.n_cols}列</span>
           <span class="col-chip">P${t.p_cnt}:${t.b_cnt}B${blead}</span>

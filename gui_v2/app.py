@@ -525,10 +525,10 @@ def api_lobby():
                     score = 0
                     if in_wl: score += 100
                     if in_bl: score -= 100
-                    if info["pattern"] in ("縦面5+密集", "縦面4以下密集"): score += 50
-                    if info["pattern"] == "ニコニコ・ニコイチ": score += 40
-                    if info["pattern"] in ("ブリッジ", "不規則"): score -= 20
-                    if info["pattern"] == "偏り": score -= 40
+                    if info["pattern"] == "縦流れ" and info.get("entry_ok_tate"): score += 60
+                    if info["pattern"] == "横流れ" and info.get("entry_ok_yoko"): score += 50
+                    if info["pattern"] in ("縦流れ", "横流れ") and not enter_flag: score += 20
+                    if info["pattern"] == "不規則": score -= 30
                     if enter_flag: score += 30
                     score += min(info["n_cols"], 20)
 
@@ -537,6 +537,7 @@ def api_lobby():
                         "in_whitelist": in_wl,
                         "in_blacklist": in_bl,
                         "pattern": info["pattern"],
+                        "sub": info.get("sub", ""),
                         "pattern_reason": info["reason"],
                         "n_cols": info["n_cols"],
                         "n_hands": info["n_hands_nont"],
