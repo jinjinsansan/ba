@@ -159,7 +159,6 @@ function renderWatchlist(wl) {
   const mkItem = (t, cls) => `
     <li class="${cls}">
       <div class="name">${t.name}</div>
-      <div class="meta">OOS 勝率 ${t.oos_win}% / ROI ${t.oos_roi >= 0 ? '+' : ''}${t.oos_roi}%</div>
     </li>`;
   const mkBlack = (n) => `<li class="red"><div class="name">${n}</div></li>`;
   $('wlConfirmed').innerHTML = wl.confirmed.map(t => mkItem(t, 'green')).join('');
@@ -272,13 +271,13 @@ function renderLobbyLive(lobby, focusedTableName) {
           ${entryBadge}
         </div>
         <div class="tc-middle">
-          <span class="pat-tag ${patCls(t.pattern)}">${t.pattern}</span>
+          <span class="pat-tag ${patCls(t.pattern)}">${t.pattern === '不明' ? '📡 収集中' : t.pattern}</span>
           <span class="hand-chip">${t.n_hands}h</span>
           <span class="col-chip">${t.n_cols}列</span>
           <span class="col-chip">P${t.p_cnt}:${t.b_cnt}B${blead}</span>
         </div>
         <div class="tc-bottom">
-          <span>${t.pattern_reason || ''}</span>
+          <span>${t.pattern === '不明' ? `手数蓄積中 (${t.n_cols}/5列)` : (t.pattern_reason || '')}</span>
           <span class="click-hint">${hintText}</span>
         </div>
       </div>`;
@@ -392,7 +391,6 @@ function renderAI(data) {
   }
 
   const actEl = $('aiBetAction');
-  const exitBtn = $('btnExitTable');
   if (bet.action === 'BET') {
     actEl.textContent = `🟢 BET ${bet.side}`;
     actEl.className = 'val-big bet';

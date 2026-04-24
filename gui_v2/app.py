@@ -54,24 +54,33 @@ def add_no_cache_headers(resp):
 LOG_DIR = Path(__file__).parent / "logs"
 LOG_DIR.mkdir(exist_ok=True)
 
-# ホワイトリスト (OOS 検証 2026-04-24 結果)
+# ホワイトリスト (Pragmatic Play — 標準テーブル優先)
 WATCHLIST_CONFIRMED = [
-    {"name": "Japanese Speed Baccarat E", "oos_win": 56.9, "oos_roi": 13.85},
-    {"name": "Korean Speaking Speed Baccarat 2", "oos_win": 51.3, "oos_roi": 2.63},
-    {"name": "Baccarat Squeeze", "oos_win": 53.2, "oos_roi": 6.49},
-    {"name": "Japanese Speed Baccarat A", "oos_win": 51.2, "oos_roi": 2.33},
-    {"name": "Korean Speed Baccarat H", "oos_win": 51.9, "oos_roi": 3.77},
+    {"name": "Baccarat 5",                   "oos_win": 0, "oos_roi": 0},
+    {"name": "Baccarat 9",                   "oos_win": 0, "oos_roi": 0},
+    {"name": "Speed Baccarat 9",             "oos_win": 0, "oos_roi": 0},
+    {"name": "Speed Baccarat 11",            "oos_win": 0, "oos_roi": 0},
+    {"name": "Speed Baccarat 18",            "oos_win": 0, "oos_roi": 0},
+    {"name": "Korean Speed Baccarat 1",      "oos_win": 0, "oos_roi": 0},
+    {"name": "Korean Speed Baccarat 3",      "oos_win": 0, "oos_roi": 0},
+    {"name": "Vietnamese Speed Baccarat 1",  "oos_win": 0, "oos_roi": 0},
+    {"name": "Vietnamese Speed Baccarat 3",  "oos_win": 0, "oos_roi": 0},
+    {"name": "Chinese Speed Baccarat 1",     "oos_win": 0, "oos_roi": 0},
 ]
 WATCHLIST_EXPECTED = [
-    {"name": "Speed Baccarat D", "oos_win": 50.8, "oos_roi": 1.59},
-    {"name": "Speed Baccarat T", "oos_win": 50.0, "oos_roi": 0.00},
-    {"name": "Lotus Speed Baccarat A", "oos_win": 50.7, "oos_roi": 1.49},
+    {"name": "Speed Baccarat 3",             "oos_win": 0, "oos_roi": 0},
+    {"name": "Speed Baccarat 10",            "oos_win": 0, "oos_roi": 0},
+    {"name": "Speed Baccarat 16",            "oos_win": 0, "oos_roi": 0},
+    {"name": "Korean Turbo Baccarat 1",      "oos_win": 0, "oos_roi": 0},
+    {"name": "Thai Speed Baccarat 1",        "oos_win": 0, "oos_roi": 0},
 ]
 WATCHLIST_BLACKLIST = [
-    "Speed Baccarat B", "Thai Speed Baccarat B", "Emperor Speed Baccarat C",
-    "Korean Speed Baccarat A", "Baccarat A", "Dynasty Speed Baccarat 2",
-    "Dynasty Speed Baccarat 3", "Dynasty Speed Baccarat 10",
-    "Super Speed Baccarat",
+    "Privé Lounge Baccarat 1", "Privé Lounge Baccarat 2", "Privé Lounge Baccarat 3",
+    "Privé Lounge Baccarat 5", "Privé Lounge Baccarat 6", "Privé Lounge Baccarat 7",
+    "Privé Lounge Baccarat 8", "Korean Privé Lounge Baccarat 1",
+    "Privé Lounge Baccarat Squeeze 1", "Privé Lounge Baccarat Squeeze 2",
+    "Fortune 6 Baccarat", "Super 8 Baccarat", "MEGA BACCARAT",
+    "BACCARAT_MULTIPLAY", "Mega Sic Bac",
 ]
 
 
