@@ -816,8 +816,10 @@ if __name__ == "__main__":
         _sys.stdout.reconfigure(encoding='utf-8')
     except Exception:
         pass
+    # 起動時に前回のセッション・bridge 状態をクリア
+    SESSION.reset()
     print("=" * 60)
-    print("Laplace Copilot GUI v2 — ba ディレクトリ新規版")
+    print("Laplace Copilot GUI v2 — ba (Pragmatic Play)")
     print("=" * 60)
     print("起動: http://127.0.0.1:5050")
     print("停止: Ctrl+C")

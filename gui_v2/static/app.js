@@ -634,6 +634,16 @@ async function refreshSlow() {
   }
 }
 
+// ページ読み込み直後: ボタンを初期状態にリセット (API応答前の一瞬の誤表示を防ぐ)
+(function initButtonState() {
+  const bs = $('btnScraperStart'); const bx = $('btnScraperStop');
+  const bn = $('btnStart');        const bt = $('btnStop');
+  if (bs) { bs.textContent = '▶ 起動'; bs.classList.remove('active'); }
+  if (bx) bx.style.display = 'none';
+  if (bn) { bn.textContent = '▶ SESSION'; bn.classList.remove('active'); }
+  if (bt) bt.style.display = 'none';
+})();
+
 refresh();
 refreshSlow();
 refreshScraperStatus();
