@@ -79,6 +79,9 @@ class BaccaratScraper:
         self._new_shoe_signals: dict[str, bool] = {}  # table_id → signal
         self._last_result_per_table: dict[str, float] = {}  # table_id → last result time
 
+        # ログイン確認タイムスタンプ (lobby遷移後の false-negative 防止用)
+        self._login_confirmed_at: float = 0.0
+
         # 後方互換用
         self._target_table_id: str = ""
         self._profile_state_path = config.AUTH_STATE_DIR / "camoufox_profile_state.json"
@@ -357,6 +360,7 @@ class BaccaratScraper:
 
         if _logged_in_early or self._is_logged_in():
             logger.info("すでにログイン済み")
+            self._login_confirmed_at = time.time()
             self._save_cookies()
             return
 
@@ -474,6 +478,7 @@ class BaccaratScraper:
 
         if self._is_logged_in():
             logger.info("ログイン成功")
+            self._login_confirmed_at = time.time()
             self._save_cookies()
         else:
             logger.warning("ログイン状態が不明（続行を試みます）")
@@ -497,6 +502,7 @@ class BaccaratScraper:
                     send_action("Login detected -- continuing")
                 except Exception:
                     pass
+                self._login_confirmed_at = time.time()
                 self._save_cookies()
                 return
             time.sleep(interval)
@@ -585,11 +591,19 @@ class BaccaratScraper:
             logger.warning(f"Cookie保存エラー: {e}")
 
     def _is_logged_in(self) -> bool:
-        """ログイン状態を確認"""
+        """ログイン状態を確認
+
+        ロビーページではウォレット残高が body に表示されないため、
+        直近 15 分以内に login を確認済みなら DOM チェックをスキップする。
+        """
+        if self._login_confirmed_at and (time.time() - self._login_confirmed_at) < 900:
+            return True
         try:
             return self.page.evaluate("""() => {
                 const body = document.body.innerText;
                 if (/wallet/i.test(body) && /\\d+\\.\\d{2,}/.test(body)) return true;
+                // Evolution lobby iframe の存在 = ログイン済みでないとアクセス不可
+                if (document.querySelector('iframe[src*="evo-games"], iframe[src*="evolution"], iframe[src*="ezugi"]')) return true;
                 return !!document.querySelector('[data-test="balance"], [class*="wallet"], [data-testid="user-menu"], [data-testid="balance"]');
             }""")
         except Exception:
