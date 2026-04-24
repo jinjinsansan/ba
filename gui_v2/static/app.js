@@ -634,7 +634,7 @@ async function refreshSlow() {
   }
 }
 
-// ページ読み込み時: ボタン初期化 → リセット → 描画開始 (順番を保証)
+// ページ読み込み時: 完全リセット → 描画開始
 (async function initPage() {
   // ① ボタンを初期状態に
   const bs = $('btnScraperStart'); const bx = $('btnScraperStop');
@@ -644,18 +644,37 @@ async function refreshSlow() {
   if (bn) { bn.textContent = '▶ SESSION'; bn.classList.remove('active'); }
   if (bt) bt.style.display = 'none';
 
-  // ② 残留セッションをサーバー側で完全リセット
+  // ② DOM を即時クリア (サーバー応答前に表示をリセット)
+  const setText = (id, v) => { const e=$(id); if(e) e.textContent=v; };
+  const setHTML = (id, v) => { const e=$(id); if(e) e.innerHTML=v; };
+  setHTML('handHistory', '');
+  setHTML('actionLog', '');
+  setHTML('chartEquity', '');
+  setHTML('chartWinRate', '');
+  const canvas = $('bigRoad');
+  if (canvas) { const ctx=canvas.getContext('2d'); ctx.clearRect(0,0,canvas.width,canvas.height); }
+  setText('tableDisplay', '未フォーカス');
+  setText('aiPattern', '-');
+  setText('aiPatternReason', '-');
+  setText('fcLevel', '-'); setText('fcSituation', '-'); setText('fcNext', '-');
+  setText('aiEntry', '-'); setText('aiEntryReason', '-');
+  setText('aiBetAction', '-'); setText('aiBetReason', '-');
+  setText('kpiWinRate', '-'); setText('kpiWlCount', '-');
+  setText('kpiPnl', '$0'); setText('kpiStake', 'stake $0');
+  setText('kpiRoi', '0%'); setText('kpiUnit', '$1');
+  setText('kpiSetTurn', 'set 1 / turn 0/7');
+  setText('kpiOvershoot', '0'); setText('kpiSets', '0');
+  setText('metaHands', '0'); setText('metaCols', '0');
+  setText('metaP', '0'); setText('metaB', '0'); setText('metaT', '0');
+  setText('metaBLead', '+0');
+  setText('feat5plus','0'); setText('feat4plus','0'); setText('featLe2','0%');
+  setText('featSingleRun','0'); setText('featTrailing','0'); setText('featOvershoot','0');
+
+  // ③ サーバー側も両方のエンドポイントでリセット試行
+  try { await api('/api/session/stop',  { method: 'POST' }); } catch(e) {}
   try { await api('/api/session/reset', { method: 'POST' }); } catch(e) {}
 
-  // ③ DOM を直接クリア（サーバー応答を待たず即反映）
-  const clearIds = ['handHistory','bigRoad','actionLog','kpiWinRate','kpiWlCount',
-    'kpiPnl','kpiStake','kpiRoi','kpiUnit','kpiSetTurn','kpiOvershoot','kpiSets',
-    'currentTableName','seqDisplay'];
-  clearIds.forEach(id => { const el = $(id); if (el) el.innerHTML = ''; });
-  const tblName = $('currentTableName');
-  if (tblName) tblName.textContent = '—';
-
-  // ④ リセット後に描画開始
+  // ④ 描画開始
   refresh();
   refreshSlow();
   refreshScraperStatus();

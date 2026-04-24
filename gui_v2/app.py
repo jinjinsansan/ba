@@ -344,9 +344,12 @@ SESSION = Session()
 # Routes
 # =================================================================
 
+import time as _time
+_BOOT_VER = str(int(_time.time()))  # 起動ごとに変わるバージョン文字列
+
 @app.route("/")
 def index():
-    return render_template("index.html")
+    return render_template("index.html", version=_BOOT_VER)
 
 
 def _auto_follow_sync():
