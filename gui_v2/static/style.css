@@ -102,6 +102,12 @@ body {
 .btn-ghost { background: transparent; border-color: var(--border); color: var(--text-muted); }
 .btn-ghost:hover { background: var(--bg-glass); color: var(--accent); border-color: var(--border-h); }
 .btn-ghost.small { padding: 5px 8px; font-size: 11px; }
+.btn-primary.active, .btn-ghost.active {
+  background: rgba(0, 255, 136, 0.15);
+  border-color: var(--win);
+  color: var(--win);
+  box-shadow: 0 0 8px rgba(0, 255, 136, 0.3);
+}
 .btn-win  { background: rgba(0, 255, 136, 0.15); color: var(--win); border: 1px solid rgba(0, 255, 136, 0.4); padding: 11px; border-radius: 5px; font-family: var(--font-hud); font-weight: 900; letter-spacing: 0.12em; font-size: 13px; cursor: pointer; }
 .btn-win:hover { background: var(--win); color: var(--bg); }
 .btn-lose { background: rgba(255, 51, 102, 0.15); color: var(--lose); border: 1px solid rgba(255, 51, 102, 0.4); padding: 11px; border-radius: 5px; font-family: var(--font-hud); font-weight: 900; letter-spacing: 0.12em; font-size: 13px; cursor: pointer; }

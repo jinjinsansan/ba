@@ -23,12 +23,12 @@
     <span class="scraper-label">LIVE FEED</span>
     <span id="scraperStatus" class="scraper-state stopped">● OFFLINE</span>
     <button id="btnScraperStart" class="btn btn-ghost">▶ 起動</button>
-    <button id="btnScraperStop" class="btn btn-ghost small">■</button>
+    <button id="btnScraperStop" class="btn btn-ghost small" style="display:none">■ 停止</button>
     <button id="btnManualLogin" class="btn btn-ghost small" title="手動ログインヘルパー">🔑</button>
   </div>
   <div class="session-controls">
     <button id="btnStart" class="btn btn-primary" title="セッション開始 (カード選ぶなら自動でこれも実行される)">▶ SESSION</button>
-    <button id="btnStop" class="btn btn-danger" title="セッション停止 (ログ保存)">■ STOP</button>
+    <button id="btnStop" class="btn btn-danger" style="display:none" title="セッション停止 (ログ保存)">■ STOP</button>
   </div>
   <input id="tableName" type="hidden" />
 </header>

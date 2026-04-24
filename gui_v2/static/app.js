@@ -78,22 +78,36 @@ async function refreshScraperStatus() {
   try {
     const s = await api('/api/scraper/status');
     const el = $('scraperStatus');
+    const btnStart = $('btnScraperStart');
+    const btnStop  = $('btnScraperStop');
     el.className = 'scraper-state';
     if (!s.running) {
       el.classList.add('stopped');
       el.textContent = '● OFFLINE';
+      btnStart.textContent = '▶ 起動';
+      btnStart.classList.remove('active');
+      btnStop.style.display = 'none';
     } else if (s.status && s.status.startsWith('failed')) {
       el.classList.add('error');
       el.textContent = '● ERROR';
       el.title = s.last_error || s.status;
+      btnStart.textContent = '▶ 再起動';
+      btnStart.classList.remove('active');
+      btnStop.style.display = '';
     } else if (s.status === 'running' || (s.status && s.status.startsWith('running'))) {
       el.classList.add('running');
-      el.textContent = `● ONLINE ${s.ws_connected ? 'WS' : 'wait'}`;
+      el.textContent = `● ONLINE`;
+      btnStart.textContent = '⬤ 起動中';
+      btnStart.classList.add('active');
+      btnStop.style.display = '';
     } else {
       el.classList.add('booting');
-      el.textContent = `● BOOT ${(s.status || '').slice(0, 20)}`;
+      el.textContent = `● 起動中...`;
+      btnStart.textContent = '⬤ 起動中...';
+      btnStart.classList.add('active');
+      btnStop.style.display = '';
     }
-    el.title = `status: ${s.status || '?'}\nbrowser: ${s.browser_alive}\nws: ${s.ws_connected}\nlast_error: ${s.last_error || 'none'}`;
+    el.title = `status: ${s.status || '?'}\nlast_error: ${s.last_error || 'none'}`;
   } catch (e) {
     console.error(e);
   }
@@ -463,6 +477,19 @@ function renderAI(data) {
 }
 
 function renderKPI(s) {
+  // SESSION ボタン状態
+  const btnStart = $('btnStart');
+  const btnStop  = $('btnStop');
+  if (s.active) {
+    btnStart.textContent = '⬤ セッション中';
+    btnStart.classList.add('active');
+    btnStop.style.display = '';
+  } else {
+    btnStart.textContent = '▶ SESSION';
+    btnStart.classList.remove('active');
+    btnStop.style.display = 'none';
+  }
+
   $('kpiWinRate').textContent = s.bets > 0 ? s.win_rate.toFixed(1) + '%' : '-';
   $('kpiWlCount').textContent = `${s.wins}勝 ${s.losses}負 / ${s.bets} bets`;
   $('kpiPnl').textContent = `$${s.pnl >= 0 ? '+' : ''}${s.pnl}`;
