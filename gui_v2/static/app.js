@@ -634,14 +634,17 @@ async function refreshSlow() {
   }
 }
 
-// ページ読み込み直後: ボタンを初期状態にリセット (API応答前の一瞬の誤表示を防ぐ)
-(function initButtonState() {
+// ページ読み込み時: ボタン初期化 + セッション自動停止
+(async function initPage() {
+  // 先にボタンを初期状態に
   const bs = $('btnScraperStart'); const bx = $('btnScraperStop');
   const bn = $('btnStart');        const bt = $('btnStop');
   if (bs) { bs.textContent = '▶ 起動'; bs.classList.remove('active'); }
   if (bx) bx.style.display = 'none';
   if (bn) { bn.textContent = '▶ SESSION'; bn.classList.remove('active'); }
   if (bt) bt.style.display = 'none';
+  // 残留セッションを自動クリア
+  try { await api('/api/session/stop', { method: 'POST' }); } catch(e) {}
 })();
 
 refresh();
