@@ -347,6 +347,10 @@ SESSION = Session()
 import time as _time
 _BOOT_VER = str(int(_time.time()))  # 起動ごとに変わるバージョン文字列
 
+@app.route("/api/version")
+def api_version():
+    return jsonify({"engine": "PRAGMATIC", "version": "2.0", "boot": _BOOT_VER})
+
 @app.route("/")
 def index():
     return render_template("index.html", version=_BOOT_VER)
