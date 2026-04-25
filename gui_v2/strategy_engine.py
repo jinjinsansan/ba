@@ -1,9 +1,19 @@
-"""ba GUI v2 — ストラテジーエンジン
+"""ba GUI v2 — ストラテジーエンジン v3 (友人記事準拠 6 分類)
 
-3分類 (直近10列ウィンドウで判定):
-  縦流れ : 長い列が支配的 → MF 順張り (P 連続中なら P BET)
-  横流れ : 短い列が支配的 → RF 逆張り (B 出現後に P BET)
-  不規則 : どちらとも言えない → BET しない
+分類:
+  ① 強い横流れ (テレコ)              → RF (前手 B → P BET)
+  ② 横流れ (ニコニコ・ニコイチ)       → RF
+  ③ 縦流れ (5+連 ≥ 3 / 5+連 2+密集)   → MF (前手 P → P BET)
+  ④ 縦横流れ (4落止まり / サンイチ)    → 退室 (判断不可)
+  ⑤ ブリッジ (テレコ → 縦面 5+ 遷移)  → 退室
+  ⑥ 不規則 (シュー全体で切替 ≥ 3 回)  → 退室
+
+閾値 (2026-04-25 user 確認済):
+  - ① テレコ:    1段比率 ≥ 70%
+  - ② 横流れ:    ≤2段比率 ≥ 70%
+  - ③ 縦流れ:    5+連 ≥ 3  OR  (5+連 ≥ 2 AND 横空き ≤1)
+  - ⑤ ブリッジ:  シュー列数の前半 50% / 後半 50%
+  - ⑥ 不規則:    pattern 切替 ≥ 3 回 (5列窓 sliding)
 """
 from __future__ import annotations
 import sys
@@ -12,178 +22,246 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 from pattern_classifier import compute_big_road_columns
 
-# ========== 定数 ==========
-BIAS_THRESHOLD  = 10    # P-B 差がこれ以上 = 偏り (縦流れ扱い)
-WINDOW_COLS     = 10    # 直近 N 列だけで判定
-# 縦流れ閾値 (ウィンドウ内)
-TATE_AVG_ENTRY  = 4.0   # エントリー基準: 平均列長 ≥ 4.0 (強い縦流れ)
-TATE_AVG_SHOW   = 2.5   # 表示基準: 平均列長 ≥ 2.5 (縦流れと分類)
-TATE_N5_ENTRY   = 2     # 5段以上の列 ≥ 2 でもエントリー (密集)
-# 横流れ閾値 (ウィンドウ内)
-YOKO_PCT_ENTRY  = 0.80  # エントリー基準: ≤2段の割合 ≥ 80% (強い横流れ)
-YOKO_PCT_SHOW   = 0.65  # 表示基準: ≤2段の割合 ≥ 65% (横流れと分類)
-YOKO_NLONG5_MAX = 0     # 5段以上なし
+# ========== 閾値 ==========
+TEREKO_PCT_1     = 0.70   # ① 強い横流れ (テレコ)
+YOKO_PCT_LE2     = 0.70   # ② 横流れ
+TATE_N5_STRICT   = 3      # ③ 縦流れ (絶対条件)
+TATE_N5_DENSE    = 2      # ③ 縦流れ密集
+DENSE_MAX_GAP    = 1      # 密集: 1段の連続 ≤ 1
+BRIDGE_HALF_PCT  = 0.50   # ⑤ ブリッジ前後分割比
+IRREGULAR_TRANS  = 3      # ⑥ 不規則
+WINDOW_TRANS     = 5      # 切替検出窓
+BIAS_THRESHOLD   = 10     # 偏り (display only)
 
-VALID_PATTERNS = {"縦流れ", "横流れ"}
-EXIT_PATTERNS  = {"不規則"}
+VALID_PATTERNS = {"縦流れ", "横流れ", "強い横流れ"}
+EXIT_PATTERNS  = {"縦横流れ", "ブリッジ", "不規則"}
 
 
-def _compute_features(col_lens: list[int]) -> dict:
-    n = len(col_lens)
-    if n == 0:
-        return {"n": 0, "avg": 0, "n3": 0, "n4": 0, "n5": 0,
-                "pct_le2": 0, "pct_1": 0, "pct_2": 0, "has_consec_2": False,
-                "trailing_ones": 0}
-    avg  = sum(col_lens) / n
-    n3   = sum(1 for L in col_lens if L >= 3)
-    n4   = sum(1 for L in col_lens if L >= 4)
-    n5   = sum(1 for L in col_lens if L >= 5)
-    p2   = sum(1 for L in col_lens if L <= 2) / n
-    p1   = sum(1 for L in col_lens if L == 1) / n
-    p22  = sum(1 for L in col_lens if L == 2) / n
-    has_consec_2 = any(
-        col_lens[i] == 2 and col_lens[i+1] == 2
-        for i in range(n-1)
-    )
-    trailing_ones = 0
+# ========== 補助関数 ==========
+
+def max_consecutive(col_lens: list[int], target: int = 1) -> int:
+    """連続する target 長の列の最大連続数"""
+    mx = run = 0
+    for L in col_lens:
+        if L == target:
+            run += 1; mx = max(mx, run)
+        else:
+            run = 0
+    return mx
+
+
+def trailing_ones(col_lens: list[int]) -> int:
+    n = 0
     for L in reversed(col_lens):
-        if L == 1: trailing_ones += 1
+        if L == 1: n += 1
         else: break
-    return {
-        "n": n, "avg": avg, "n3": n3, "n4": n4, "n5": n5,
-        "pct_le2": round(p2 * 100, 1),
-        "pct_1":   round(p1 * 100, 1),
-        "pct_2":   round(p22 * 100, 1),
-        "has_consec_2": has_consec_2,
-        "trailing_ones": trailing_ones,
-    }
+    return n
 
 
-def _sub_pattern(f: dict) -> str:
-    if f["n5"] >= 2:         return "密集"
-    if f["n5"] >= 1:         return "ドラゴン"
-    if f["n4"] >= 2:         return "縦面4密集"
-    if f["n4"] >= 1:         return "縦流れ"
-    if f["pct_1"] >= 60:     return "テレコ"
-    if f["has_consec_2"]:    return "ニコニコ"
-    if f["pct_2"] >= 30:     return "ニコイチ"
-    return "横流れ"
+def _has_nikoniko(col_lens: list[int]) -> bool:
+    """ニコニコ: 2段が 2 列以上連続 (BB,PP,BB のような)"""
+    return max_consecutive(col_lens, 2) >= 2
 
+
+def _has_nikoichi(col_lens: list[int]) -> bool:
+    """ニコイチ: (2,1) or (1,2) のペアが 3 ペア以上連続"""
+    if len(col_lens) < 4:
+        return False
+    pairs = 0
+    for i in range(len(col_lens) - 1):
+        a, b = col_lens[i], col_lens[i + 1]
+        if (a == 2 and b == 1) or (a == 1 and b == 2):
+            pairs += 1
+            if pairs >= 3:
+                return True
+        else:
+            pairs = 0
+    return False
+
+
+def _has_sanichi(col_lens: list[int]) -> bool:
+    """サンイチ: (3,1) or (1,3) のペアが 3 ペア以上連続"""
+    if len(col_lens) < 6:
+        return False
+    pairs = 0
+    for i in range(len(col_lens) - 1):
+        a, b = col_lens[i], col_lens[i + 1]
+        if (a == 3 and b == 1) or (a == 1 and b == 3):
+            pairs += 1
+            if pairs >= 3:
+                return True
+        else:
+            pairs = 0
+    return False
+
+
+def _classify_segment(col_lens: list[int]) -> str:
+    """セグメント (5列窓) 簡易分類 — 切替検出用"""
+    n = len(col_lens)
+    if n < 3:
+        return "?"
+    n5 = sum(1 for L in col_lens if L >= 5)
+    n4 = sum(1 for L in col_lens if L >= 4)
+    p_le2 = sum(1 for L in col_lens if L <= 2) / n
+    p_1 = sum(1 for L in col_lens if L == 1) / n
+    if n5 >= 2:
+        return "縦"
+    if n5 == 0 and n4 == 0 and p_1 >= 0.70:
+        return "強横"
+    if n5 == 0 and n4 == 0 and p_le2 >= 0.70:
+        return "横"
+    if n5 == 0 and n4 >= 1:
+        return "縦横"
+    return "不"
+
+
+def _count_pattern_changes(col_lens: list[int]) -> int:
+    """シュー全体を 5 列窓で sliding して pattern 切替回数を数える"""
+    if len(col_lens) < 10:
+        return 0
+    changes = 0
+    prev = None
+    step = 5
+    for i in range(0, len(col_lens) - WINDOW_TRANS + 1, step):
+        win = col_lens[i:i + WINDOW_TRANS]
+        cat = _classify_segment(win)
+        if cat == "?":
+            continue
+        if prev and cat != prev:
+            changes += 1
+        prev = cat
+    return changes
+
+
+# ========== メイン分類 ==========
 
 def classify_strict(seq: str) -> dict:
-    """直近 WINDOW_COLS 列のみで 3 分類"""
-    all_cols   = compute_big_road_columns(seq)
-    all_lens   = [len(c) for c in all_cols]
-    n_cols_all = len(all_cols)
-    p_cnt      = seq.count('P')
-    b_cnt      = seq.count('B')
-    t_cnt      = seq.count('T')
+    """6 分類 (友人記事準拠)"""
+    cols = compute_big_road_columns(seq)
+    col_lens = [len(c) for c in cols]
+    n_cols = len(col_lens)
+    p_cnt = seq.count('P')
+    b_cnt = seq.count('B')
+    t_cnt = seq.count('T')
 
-    # 直近ウィンドウ
-    win_lens = all_lens[-WINDOW_COLS:] if n_cols_all >= WINDOW_COLS else all_lens
-    fw = _compute_features(win_lens)
+    # 特徴量計算
+    n3 = sum(1 for L in col_lens if L >= 3)
+    n4 = sum(1 for L in col_lens if L >= 4)
+    n5 = sum(1 for L in col_lens if L >= 5)
+    pct_1 = (sum(1 for L in col_lens if L == 1) / n_cols) if n_cols else 0
+    pct_le2 = (sum(1 for L in col_lens if L <= 2) / n_cols) if n_cols else 0
+    single_run = max_consecutive(col_lens, 1)
+    has_nikoniko = _has_nikoniko(col_lens)
+    has_nikoichi = _has_nikoichi(col_lens)
+    has_sanichi = _has_sanichi(col_lens)
+    n_changes = _count_pattern_changes(col_lens)
 
     info = {
-        "pattern":      "不明",
-        "sub":          "",
-        "reason":       "",
-        "entry_ok_tate": False,
-        "entry_ok_yoko": False,
-        "n_cols":       n_cols_all,
+        "pattern": "不明",
+        "sub": "",
+        "reason": "",
+        "n_cols": n_cols,
         "n_hands_nont": p_cnt + b_cnt,
         "n_hands_total": len(seq),
         "p_cnt": p_cnt, "b_cnt": b_cnt, "t_cnt": t_cnt,
         "b_lead": b_cnt - p_cnt,
-        "col_lens": all_lens,
-        "win_lens": win_lens,
+        "col_lens": col_lens,
         "features": {
-            "avg_col":       round(fw["avg"], 2),
-            "n_long3":       fw["n3"],
-            "n_long4":       fw["n4"],
-            "n_long5":       fw["n5"],
-            "pct_le2":       fw["pct_le2"],
-            "pct_1":         fw["pct_1"],
-            "pct_2":         fw["pct_2"],
-            "has_consec_2":  fw["has_consec_2"],
-            "trailing_ones": fw["trailing_ones"],
-            "win_size":      fw["n"],
+            "n3": n3, "n4": n4, "n5": n5,
+            "pct_1":   round(pct_1 * 100, 1),
+            "pct_le2": round(pct_le2 * 100, 1),
+            "single_run": single_run,
+            "has_nikoniko": has_nikoniko,
+            "has_nikoichi": has_nikoichi,
+            "has_sanichi":  has_sanichi,
+            "trailing_ones": trailing_ones(col_lens),
+            "n_changes": n_changes,
+            "is_dense":  single_run <= DENSE_MAX_GAP,
         },
     }
 
-    if n_cols_all < 5:
-        info["reason"] = f"列数不足 ({n_cols_all}<5)"
+    if n_cols < 5:
+        info["reason"] = f"列数不足 ({n_cols}/5)"
         return info
 
-    # 偏り (シュー全体) → 縦流れ
-    if abs(p_cnt - b_cnt) >= BIAS_THRESHOLD:
-        info["pattern"]       = "縦流れ"
-        info["sub"]           = "偏り"
-        info["entry_ok_tate"] = True
-        info["reason"] = f"P-B差={abs(p_cnt-b_cnt)} — {'P' if p_cnt>b_cnt else 'B'}側優勢"
+    # ⑥ 不規則: シュー全体で 3 回以上切替 (最優先)
+    if n_changes >= IRREGULAR_TRANS:
+        info["pattern"] = "不規則"
+        info["reason"] = f"パターン切替 {n_changes} 回 (高速回収シュー疑い)"
         return info
 
-    avg = fw["avg"]
-    n4  = fw["n4"]
-    n5  = fw["n5"]
-    pct2 = fw["pct_le2"] / 100  # 0-1
-
-    # 縦流れ判定 (ウィンドウ内)
-    is_tate_show  = avg >= TATE_AVG_SHOW or n4 >= 1
-    is_tate_entry = avg >= TATE_AVG_ENTRY or n5 >= TATE_N5_ENTRY or (n5 >= 1 and avg >= 3.5) or n4 >= 4
-
-    # 横流れ判定 (ウィンドウ内)
-    is_yoko_show  = pct2 >= YOKO_PCT_SHOW and n5 == 0 and n4 <= 1
-    is_yoko_entry = pct2 >= YOKO_PCT_ENTRY and n5 == 0 and n4 == 0
-
-    if is_tate_show and not is_yoko_show:
-        info["pattern"]       = "縦流れ"
-        info["sub"]           = _sub_pattern(fw)
-        info["entry_ok_tate"] = is_tate_entry
-        info["reason"]        = f"直近{fw['n']}列 平均{avg:.1f} / 4+連{n4}"
+    # ⑤ ブリッジ: 前半テレコ系 → 後半 5+連 出現
+    half = max(int(n_cols * BRIDGE_HALF_PCT), 3)
+    front = col_lens[:half]
+    back = col_lens[half:]
+    front_short = bool(front) and all(L <= 2 for L in front) and len(front) >= 3
+    back_has_5 = bool(back) and any(L >= 5 for L in back)
+    if front_short and back_has_5:
+        info["pattern"] = "ブリッジ"
+        info["reason"] = f"前半 {half}列テレコ → 後半 5+連 出現 ({sum(1 for L in back if L>=5)}個)"
         return info
 
-    if is_yoko_show and not is_tate_show:
-        info["pattern"]       = "横流れ"
-        info["sub"]           = _sub_pattern(fw)
-        info["entry_ok_yoko"] = is_yoko_entry
-        info["reason"]        = f"直近{fw['n']}列 ≤2段{fw['pct_le2']}%"
+    # ③ 縦流れ
+    if n5 >= TATE_N5_STRICT:
+        info["pattern"] = "縦流れ"
+        info["sub"] = "5+連3回以上"
+        info["reason"] = f"5+連 {n5} 回 (記事原文の縦流れ確定)"
+        return info
+    if n5 >= TATE_N5_DENSE and single_run <= DENSE_MAX_GAP:
+        info["pattern"] = "縦流れ"
+        info["sub"] = "5+連2回 + 密集"
+        info["reason"] = f"5+連 {n5} 回 + 横空き ≤{DENSE_MAX_GAP} (密集型)"
         return info
 
-    if is_tate_show and is_yoko_show:
-        # 両方 → 強い方を採用
-        if avg >= 3.5 or n4 >= 2:
-            info["pattern"]       = "縦流れ"
-            info["sub"]           = _sub_pattern(fw)
-            info["entry_ok_tate"] = is_tate_entry
-            info["reason"]        = f"縦優位 (平均{avg:.1f}/≤2段{fw['pct_le2']}%)"
+    # ① 強い横流れ (テレコ)
+    if n4 == 0 and n5 == 0 and pct_1 >= TEREKO_PCT_1:
+        info["pattern"] = "強い横流れ"
+        info["sub"] = "テレコ"
+        info["reason"] = f"1段比率 {pct_1*100:.0f}% (≥{TEREKO_PCT_1*100:.0f}%) + 4+連なし"
+        return info
+
+    # ② 横流れ (ニコニコ・ニコイチ)
+    if n4 == 0 and n5 == 0 and pct_le2 >= YOKO_PCT_LE2:
+        info["pattern"] = "横流れ"
+        if has_nikoniko:
+            info["sub"] = "ニコニコ"
+        elif has_nikoichi:
+            info["sub"] = "ニコイチ"
         else:
-            info["pattern"]       = "横流れ"
-            info["sub"]           = _sub_pattern(fw)
-            info["entry_ok_yoko"] = is_yoko_entry
-            info["reason"]        = f"横優位 (≤2段{fw['pct_le2']}%/平均{avg:.1f})"
+            info["sub"] = "短列混在"
+        info["reason"] = f"≤2段比率 {pct_le2*100:.0f}% ({info['sub']})"
         return info
 
+    # ④ 縦横流れ (4落止まり / サンイチ)
+    if n5 == 0 and n4 >= 1:
+        info["pattern"] = "縦横流れ"
+        info["sub"] = "4落止まり"
+        info["reason"] = f"4+連 {n4} 個あるが 5+連=0 (4落で止まる)"
+        return info
+    if has_sanichi:
+        info["pattern"] = "縦横流れ"
+        info["sub"] = "サンイチ"
+        info["reason"] = "3段と1段の交互パターン (3 ペア+) 検出"
+        return info
+
+    # ⑥ 不規則 (どれにも該当しない混在)
     info["pattern"] = "不規則"
-    info["reason"]  = f"直近{fw['n']}列 平均{avg:.1f} / ≤2段{fw['pct_le2']}%"
+    info["reason"] = (f"分類条件外 — 5+連{n5}, 4+連{n4}, "
+                     f"≤2段{pct_le2*100:.0f}%, 1段{pct_1*100:.0f}%")
     return info
 
 
+# ========== エントリー / BET / 退室 ==========
+
 def check_entry(seq: str, info: dict) -> tuple[bool, str]:
     pat = info["pattern"]
-    n   = info["n_cols"]
-    if pat == "縦流れ":
-        if n < 3:
-            return False, f"列数不足 ({n}/3)"
-        if info["entry_ok_tate"]:
-            return True, f"縦流れ ({info['sub']}) 規則性確認"
-        return False, f"縦流れだが規則性弱め (平均{info['features']['avg_col']})"
-    if pat == "横流れ":
-        if n < 5:
-            return False, f"列数不足 ({n}/5)"
-        if info["entry_ok_yoko"]:
-            return True, f"横流れ ({info['sub']}) 規則性確認"
-        return False, f"横流れだが規則性弱め (≤2段{info['features']['pct_le2']}%)"
-    return False, f"判定不可 ({pat})"
+    n = info["n_cols"]
+    sub = info.get("sub", "")
+    if pat in VALID_PATTERNS:
+        return True, f"{pat}{f' ({sub})' if sub else ''} 確定"
+    if pat == "不明":
+        return False, f"判定中 ({n}/5列)"
+    return False, f"{pat} は退室対象"
 
 
 def _last_pb(seq: str) -> str | None:
@@ -202,44 +280,47 @@ def _trailing_streak(seq: str, ch: str) -> int:
 
 
 def decide_bet(seq: str, entry_pattern: str) -> dict:
-    cols  = compute_big_road_columns(seq)
-    depth = len(cols[-1]) if cols else 0
-    prev  = _last_pb(seq)
+    """BET 判断: 縦=MF, 横/強い横=RF, それ以外=LOOK"""
+    prev = _last_pb(seq)
 
     if entry_pattern == "縦流れ":
         if prev == 'P':
-            return {"action": "BET", "side": "P",
-                    "reason": f"MF 順張り (P 連続, depth={depth})"}
+            return {"action": "BET", "side": "P", "reason": "MF (前手 P → P 連続狙い)"}
         return {"action": "LOOK", "side": None,
-                "reason": f"LOOK (前手 {prev or '?'} — P 待ち)"}
+                "reason": f"LOOK (前手 {prev or '?'} → P 出現待ち)"}
 
-    if entry_pattern == "横流れ":
+    if entry_pattern in ("横流れ", "強い横流れ"):
         if prev == 'B':
-            return {"action": "BET", "side": "P",
-                    "reason": "RF 逆張り (B出現 → P BET)"}
+            return {"action": "BET", "side": "P", "reason": "RF (前手 B → P 逆張り)"}
         return {"action": "LOOK", "side": None,
-                "reason": "LOOK (P出現 — B 待ち)"}
+                "reason": f"LOOK (前手 {prev or '?'} → B 出現待ち)"}
 
-    return {"action": "LOOK", "side": None, "reason": f"pattern={entry_pattern}"}
+    return {"action": "LOOK", "side": None, "reason": f"pattern={entry_pattern} は対象外"}
 
 
 def check_exit(info: dict, entry_pattern: str, losing_streak: int) -> tuple[bool, str]:
-    if losing_streak >= 2:
-        return True, "2連敗 → 退室"
-    if info["pattern"] == "不規則":
-        return True, "不規則化 → 退室"
+    """退室判定 — pattern が ④⑤⑥ (縦横流れ/ブリッジ/不規則) に変化した時のみ自動退室
+
+    user の指示 (2026-04-25):
+      - 連敗による自動退室は不要 (user 自身で判断)
+      - 横空き等による自動退室も不要 (user 自身で判断)
+      - 「エントリーの光が消えた = 不規則・ブリッジ・縦横流れに変化」の時だけ退室ボタンを光らせる
+    """
+    pat = info["pattern"]
+    if pat in EXIT_PATTERNS:
+        return True, f"{pat} 化 → 退室推奨"
     return False, ""
 
+
+# ========== 予告 (リーチ前リーチ) ==========
 
 def forecast(seq: str, info: dict, entry_pattern: str | None,
              pending_bet: dict | None = None,
              enter_flag: bool = False, enter_reason: str = "") -> dict:
-    pat   = info["pattern"]
-    sub   = info.get("sub", "")
-    n     = info["n_cols"]
-    prev  = _last_pb(seq)
-    cols  = compute_big_road_columns(seq)
-    depth = len(cols[-1]) if cols else 0
+    pat = info["pattern"]
+    sub = info.get("sub", "")
+    n = info["n_cols"]
+    prev = _last_pb(seq)
 
     if pending_bet:
         return {
@@ -248,58 +329,66 @@ def forecast(seq: str, info: dict, entry_pattern: str | None,
             "level": "pending", "confidence": None,
         }
 
+    # 未入室時の表示
     if not entry_pattern:
         if pat == "不明":
             return {
-                "situation": f"判定待ち ({n}/5列)",
-                "next": "手数が増えれば自動判定",
+                "situation": f"⏳ 判定待ち ({n}/5列)",
+                "next": "手数が増えれば判定開始",
                 "level": "waiting", "confidence": None,
             }
-        if pat == "不規則":
+        if pat == "縦流れ":
             return {
-                "situation": "❌ 不規則 — 見送り",
-                "next": info["reason"],
-                "level": "exit", "confidence": 10,
-            }
-        if enter_flag:
-            return {
-                "situation": f"✅ {pat} ({sub}) 規則性確認",
-                "next": f"🎯 {enter_reason}",
+                "situation": f"✅ 縦流れ ({sub})",
+                "next": f"🎯 MF 入室 OK — {info['reason']}",
                 "level": "reach", "confidence": 65,
             }
-        req = 3 if pat == "縦流れ" else 5
+        if pat == "横流れ":
+            return {
+                "situation": f"✅ 横流れ ({sub})",
+                "next": f"🎯 RF 入室 OK — {info['reason']}",
+                "level": "reach", "confidence": 60,
+            }
+        if pat == "強い横流れ":
+            return {
+                "situation": f"✅ 強い横流れ ({sub})",
+                "next": f"🎯 RF 入室 OK — {info['reason']}",
+                "level": "reach", "confidence": 65,
+            }
+        # 退室カテゴリ ④⑤⑥
         return {
-            "situation": f"⭐ {pat} ({sub}) 候補 ({n}列)",
-            "next": info["reason"],
-            "level": "watching", "confidence": 40,
+            "situation": f"❌ {pat}{f' ({sub})' if sub else ''}",
+            "next": f"🚪 退室推奨 — {info['reason']}",
+            "level": "exit", "confidence": 15,
         }
 
+    # 入室中の予告
     if entry_pattern == "縦流れ":
         if prev == 'P':
             streak = _trailing_streak(seq, 'P')
-            conf   = min(52 + streak * 2, 72)
             return {
                 "situation": f"🔥 P {streak}連続中 — 縦流れ ({sub})",
-                "next": "🟢 次ハンド P BET (MF 順張り)",
-                "level": "imminent", "confidence": conf,
+                "next": "🟢 次ハンド P → P BET (MF)",
+                "level": "imminent", "confidence": min(55 + streak * 2, 75),
             }
         b_streak = _trailing_streak(seq, 'B')
         return {
-            "situation": f"B {b_streak}連続中 — P 待機",
-            "next": "⏳ P 出現したら次ハンドから BET",
-            "level": "watching", "confidence": 30,
+            "situation": f"B {b_streak}連続中 — 縦流れだが見送り中",
+            "next": "⏳ P 出現したら次ハンドから MF BET",
+            "level": "watching", "confidence": 35,
         }
 
-    if entry_pattern == "横流れ":
+    if entry_pattern in ("横流れ", "強い横流れ"):
         if prev == 'B':
             return {
-                "situation": f"🎯 B 出現 — 横流れ ({sub}) 逆張りチャンス",
-                "next": "🟢 次ハンド P BET (RF 逆張り)",
-                "level": "imminent", "confidence": 55,
+                "situation": f"🎯 B 出現 — {entry_pattern} ({sub}) RF チャンス",
+                "next": "🟢 次ハンド P → P BET (RF 逆張り)",
+                "level": "imminent",
+                "confidence": 60 if entry_pattern == "強い横流れ" else 55,
             }
         return {
-            "situation": f"P 出現 — B 待機 (横流れ {sub})",
-            "next": "⏳ B が出たら次ハンド P BET",
+            "situation": f"P 出現 — B 待ち ({sub})",
+            "next": "⏳ B が出たら RF BET",
             "level": "reach", "confidence": 40,
         }
 

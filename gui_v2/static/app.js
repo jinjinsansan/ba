@@ -2,6 +2,49 @@
 
 const $ = (id) => document.getElementById(id);
 
+// ============== 起動ダイアログ (新規 / 続きから) ==============
+
+function showStartupDialog() {
+  return new Promise(async (resolve) => {
+    const overlay = $('startupOverlay');
+    if (!overlay) { resolve(); return; }
+    overlay.style.display = 'flex';
+
+    // 直近セッション検索
+    try {
+      const r = await fetch('/api/session/recent').then(r => r.json());
+      if (r.found) {
+        $('startupRecent').style.display = 'block';
+        $('btnStartResume').disabled = false;
+        $('recentStarted').textContent = (r.started_at || '-').replace('T', ' ').substr(0, 16);
+        $('recentStopped').textContent = (r.stopped_at || '-').replace('T', ' ').substr(0, 16);
+        $('recentBets').textContent = r.bets;
+        $('recentWinRate').textContent = r.bets > 0 ? r.win_rate.toFixed(1) + '%' : '-';
+        $('recentPnl').textContent = (r.pnl >= 0 ? '+' : '') + '$' + r.pnl;
+        $('recentUnit').textContent = '$' + (r.current_unit || 1);
+      }
+    } catch (e) {
+      console.error('recent fetch failed', e);
+    }
+
+    const finish = () => { overlay.style.display = 'none'; resolve(); };
+
+    $('btnStartNew').addEventListener('click', async () => {
+      try { await fetch('/api/session/stop',  { method: 'POST' }); } catch(e) {}
+      try { await fetch('/api/session/reset', { method: 'POST' }); } catch(e) {}
+      finish();
+    }, { once: true });
+
+    $('btnStartResume').addEventListener('click', async () => {
+      try {
+        const r = await fetch('/api/session/restore', { method: 'POST' }).then(r => r.json());
+        if (!r.ok) { alert(r.error || '復元失敗'); return; }
+      } catch(e) { alert('復元エラー: ' + e); return; }
+      finish();
+    }, { once: true });
+  });
+}
+
 async function api(path, opts = {}) {
   const res = await fetch(path, {
     method: opts.method || 'GET',
@@ -31,10 +74,10 @@ $('btnExitTable').addEventListener('click', async () => {
   refreshSlow();
 });
 
-// pending BET 手動解決
+// BET 結果手動記録 (user が Camoufox で実 BET 後にクリック)
 async function resolvePending(outcome) {
-  const r = await api('/api/bet/manual_resolve', { method: 'POST', body: { outcome } });
-  if (!r.ok) alert(r.error || '解決失敗');
+  const r = await api('/api/bet/record', { method: 'POST', body: { outcome } });
+  if (!r.ok) alert(r.error || '記録失敗');
   refresh();
 }
 $('btnPendingWin')  && $('btnPendingWin').addEventListener('click',  () => resolvePending('win'));
@@ -196,10 +239,9 @@ let currentTable = '';
 const _lobbyPrevState = {};  // table → {n_hands, pattern, entry_ok}
 
 const patCls = (p) => {
-  if (p === '縦流れ') return 'good';
-  if (p === '横流れ') return 'good';
-  if (p === '不規則') return 'bad';
-  return 'warn';
+  if (p === '縦流れ' || p === '横流れ' || p === '強い横流れ') return 'good';
+  if (p === '縦横流れ' || p === 'ブリッジ' || p === '不規則') return 'bad';
+  return 'warn';  // 不明 / その他
 };
 
 function renderLobbyLive(lobby, focusedTableName) {
@@ -457,12 +499,11 @@ function renderAI(data) {
     $('fcConfRow').style.display = 'none';
   }
 
-  // === Pending BET resolver ===
-  const pb = data.pending_bet;
+  // === BET 結果記録パネル (entered + BET 推奨中なら常に表示) ===
   const pendingBlock = $('aiPendingBlock');
-  if (pb && pb.side) {
+  if (data.entered && bet.action === 'BET' && bet.side) {
     pendingBlock.style.display = 'block';
-    $('aiPendingDetails').innerHTML = `BET: <b>${pb.side}</b> $${pb.unit.toFixed(0)} <span style="color:#8a96a8;font-weight:400;font-size:11px">(${pb.pattern})</span>`;
+    $('aiPendingDetails').innerHTML = `推奨: <b>${bet.side}</b> $${(data.next_unit||1).toFixed(0)} <span style="color:#8a96a8;font-weight:400;font-size:11px">(${data.entry_pattern || ''})</span><br><span style="font-size:10px;color:#8a96a8">Camoufox で BET したら下のボタンで結果記録</span>`;
   } else {
     pendingBlock.style.display = 'none';
   }
@@ -670,11 +711,10 @@ async function refreshSlow() {
   setText('feat5plus','0'); setText('feat4plus','0'); setText('featLe2','0%');
   setText('featSingleRun','0'); setText('featTrailing','0'); setText('featOvershoot','0');
 
-  // ③ サーバー側も両方のエンドポイントでリセット試行
-  try { await api('/api/session/stop',  { method: 'POST' }); } catch(e) {}
-  try { await api('/api/session/reset', { method: 'POST' }); } catch(e) {}
+  // ③ 起動ダイアログ表示 (新規 / 続きから) — user 選択で reset or restore
+  await showStartupDialog();
 
-  // ④ 描画開始
+  // ④ 描画開始 (ダイアログ閉じた後)
   refresh();
   refreshSlow();
   refreshScraperStatus();

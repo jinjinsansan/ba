@@ -10,6 +10,41 @@
 <link rel="stylesheet" href="/static/style.css?v={{ version }}">
 </head>
 <body>
+
+<!-- 起動ダイアログ (新規 / 続きから) -->
+<div id="startupOverlay" class="startup-overlay" style="display:none">
+  <div class="startup-modal">
+    <div class="startup-brand">
+      <span class="brand-icon">◆</span>
+      <span class="brand-name">LAPLACE COPILOT</span>
+      <span class="brand-tag">v2</span>
+    </div>
+    <div class="startup-title">セッション選択</div>
+
+    <div id="startupRecent" class="startup-recent" style="display:none">
+      <div class="recent-title">📁 前回セッションを検出</div>
+      <div class="recent-grid">
+        <div><span>started</span><b id="recentStarted">-</b></div>
+        <div><span>stopped</span><b id="recentStopped">-</b></div>
+        <div><span>BET</span><b id="recentBets">-</b></div>
+        <div><span>勝率</span><b id="recentWinRate">-</b></div>
+        <div><span>PNL</span><b id="recentPnl">-</b></div>
+        <div><span>SEQ unit</span><b id="recentUnit">-</b></div>
+      </div>
+    </div>
+
+    <div class="startup-actions">
+      <button id="btnStartNew"      class="btn-startup btn-startup-new">🆕 新規スタート</button>
+      <button id="btnStartResume"   class="btn-startup btn-startup-resume" disabled>▶ 続きから再開</button>
+    </div>
+
+    <div class="startup-note">
+      新規 = すべてのデータをリセット (学習データは保持)<br>
+      続き = 前回 SEQ + bet_history + 勝率を引継ぎ
+    </div>
+  </div>
+</div>
+
 <div class="app">
 
 <header class="header">

@@ -1,0 +1,20 @@
+# ========== runtime / generated ==========
+logs/
+training_data.jsonl
+
+# Lobby scraper (任意モジュール) の生成物
+lobby_state.json
+lobby_scraper_config.json
+.browser_profile/
+
+# 一時 snapshot ファイル
+snap_*.json
+
+# Python キャッシュ
+__pycache__/
+*.pyc
+*.pyo
+
+# OS
+.DS_Store
+Thumbs.db

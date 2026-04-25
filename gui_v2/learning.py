@@ -31,7 +31,7 @@ def _key(pattern: str | None, table: str, side: str) -> str:
 
 
 def load_stats() -> None:
-    """jsonl から統計を再計算 (起動時 or 定期)"""
+    """jsonl から統計を再計算 (起動時 or 定期)。undone=true の行は skip"""
     _CACHE["stats"].clear()
     if not LOG_FILE.exists():
         _CACHE["loaded"] = True
@@ -42,6 +42,8 @@ def load_stats() -> None:
                 try:
                     r = json.loads(line.strip())
                 except Exception:
+                    continue
+                if r.get("undone"):
                     continue
                 k = _key(r.get("entry_pattern"), r.get("table", ""), r.get("bet_side", ""))
                 _CACHE["stats"][k]["bets"] += 1
@@ -56,6 +58,7 @@ def log_bet(record: dict) -> None:
     """BET 結果を 1 行追加 + cache 更新"""
     row = {
         "ts": datetime.now().isoformat(timespec="seconds"),
+        "undone": False,
         **record,
     }
     with _LOCK:
@@ -70,6 +73,51 @@ def log_bet(record: dict) -> None:
         _CACHE["stats"][k]["bets"] += 1
         if row.get("won"):
             _CACHE["stats"][k]["wins"] += 1
+
+
+def undo_last_bet() -> dict | None:
+    """直前の log_bet() を統計から取り消す (undo hand と連動)
+
+    jsonl は append-only のため、該当行に undone マーカーを追記し、
+    cache の bets / wins を減算する。
+    """
+    with _LOCK:
+        if not LOG_FILE.exists():
+            return None
+        try:
+            lines = LOG_FILE.read_text(encoding="utf-8").splitlines()
+        except Exception:
+            return None
+        # 末尾から undone=false の行を探す
+        target_idx = -1
+        target = None
+        for i in range(len(lines) - 1, -1, -1):
+            try:
+                r = json.loads(lines[i])
+            except Exception:
+                continue
+            if not r.get("undone"):
+                target_idx = i
+                target = r
+                break
+        if target is None:
+            return None
+        # undone=true に書き換え
+        target["undone"] = True
+        target["undone_ts"] = datetime.now().isoformat(timespec="seconds")
+        lines[target_idx] = json.dumps(target, ensure_ascii=False)
+        try:
+            LOG_FILE.write_text("\n".join(lines) + "\n", encoding="utf-8")
+        except Exception:
+            return None
+        # cache 減算
+        k = _key(target.get("entry_pattern"), target.get("table", ""), target.get("bet_side", ""))
+        s = _CACHE["stats"].get(k)
+        if s:
+            s["bets"] = max(0, s["bets"] - 1)
+            if target.get("won"):
+                s["wins"] = max(0, s["wins"] - 1)
+        return target
 
 
 def pattern_win_rate(pattern: str, table: str | None = None, side: str = "P") -> tuple[float | None, int]:

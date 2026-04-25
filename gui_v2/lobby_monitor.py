@@ -20,7 +20,17 @@ from strategy_engine import classify_strict, check_entry
 EVO_DB = Path(__file__).resolve().parent.parent / "analytics_vps_latest.sqlite3"
 LOBBY_JSON = Path(__file__).parent / "lobby_state.json"
 
-EXCLUDE_KEYWORDS = ["Always 9", "Lightning"]
+# scraper.py の _TABLE_EXCLUDE と完全同期 (除外対象が lobby に漏れないように)
+EXCLUDE_KEYWORDS = [
+    "Salon", "Prive", "First Person", "RNG",
+    "Lightning", "Prosperity", "Golden Wealth",
+    "Peek", "Control Squeeze", "No Commission",
+    "Elite VIP", "Super Speed", "Always 9",
+    "ao vivo", "rápido", "rapido",
+    "en vivo", "en directo",
+    "en direct", "in diretta",
+    "直播", "ライブカジノ",
+]
 BLACKLIST = {
     "Speed Baccarat B", "Thai Speed Baccarat B", "Emperor Speed Baccarat C",
     "Korean Speed Baccarat A", "Baccarat A", "Dynasty Speed Baccarat 2",

@@ -177,40 +177,13 @@ class Session:
         }, ensure_ascii=False, indent=2), encoding="utf-8")
 
     def add_hand(self, result: str):
-        """hand 結果 (P/B/T) を追加。pending_bet があれば判定"""
+        """hand 結果 (P/B/T) を追加 — 罫線進行のみ。BET 結果は user 手動クリックで record"""
         result = result.upper()
         if result not in ("P", "B", "T"):
             return {"ok": False, "error": "invalid result"}
 
         timestamp = datetime.now().strftime("%H:%M:%S")
-        # pending_bet の判定
-        bet_resolved = None
-        if self.pending_bet is not None and result in ("P", "B"):
-            pb = self.pending_bet
-            won = (result == pb["side"])
-            bet_resolved = {
-                "side": pb["side"], "result": result, "won": won,
-                "unit": pb["unit"], "pnl": pb["unit"] if won else -pb["unit"],
-                "pattern": pb["pattern"], "time": timestamp,
-                "reason": pb["reason"],
-            }
-            self.bet_history.append(bet_resolved)
-            self.losing_streak = 0 if won else self.losing_streak + 1
-            # tracker 進行
-            self.tracker.add_result("player" if won else "banker")
-            self._log("BET_RESULT", f"{'WIN' if won else 'LOSE'} / ${pb['unit']:.0f} {pb['side']} (結果 {result})")
-            # AI 学習データ蓄積
-            learning.log_bet({
-                "table": self.current_table,
-                "entry_pattern": pb["pattern"],
-                "bet_side": pb["side"],
-                "result": result,
-                "won": won,
-                "unit": pb["unit"],
-                "seq_len_at_bet": len(self.seq),  # BET 決定時点
-                "reason": pb["reason"],
-            })
-            self.pending_bet = None
+        bet_resolved = None  # 自動判定は廃止 (user 手動 record_bet で記録)
 
         # hand を seq に追加
         self.seq.append(result)
@@ -247,19 +220,11 @@ class Session:
                 self.entry_hand_idx = len(self.seq)
                 self._log("ENTER", f"{info['pattern']} — {enter_reason}")
 
-        # 次 BET 推奨
+        # 次 BET 推奨 (real-time 表示のみ。pending_bet 自動セットはしない)
         bet_recommend = {"action": "LOOK", "side": None, "reason": "未入室"}
         next_unit = OLD_SEQ[min(self.tracker.current_unit_idx, len(OLD_SEQ) - 1)]
         if self.entered:
             bet_recommend = decide_bet("".join(self.seq), self.entry_pattern)
-            if bet_recommend["action"] == "BET":
-                # pending_bet を設定 (次 hand で判定される)
-                self.pending_bet = {
-                    "side": bet_recommend["side"],
-                    "unit": next_unit,
-                    "pattern": self.entry_pattern,
-                    "reason": bet_recommend["reason"],
-                }
 
         return {
             "ok": True,
@@ -269,7 +234,6 @@ class Session:
             "entry_pattern": self.entry_pattern,
             "exit_reason": exit_reason,
             "bet_recommend": bet_recommend,
-            "pending_bet": self.pending_bet,
             "next_unit": next_unit,
             "summary": self.summary(),
         }
@@ -445,6 +409,80 @@ def api_status():
     })
 
 
+@app.route("/api/session/recent")
+def api_session_recent():
+    """直近セッション (24時間以内) のサマリを返す。起動ダイアログで「続きから」表示用"""
+    if not LOG_DIR.exists():
+        return jsonify({"found": False})
+    files = sorted(LOG_DIR.glob("*.json"), key=lambda p: p.stat().st_mtime, reverse=True)
+    if not files:
+        return jsonify({"found": False})
+    latest = files[0]
+    age_sec = time.time() - latest.stat().st_mtime
+    if age_sec > 86400:  # 24h 以上経過
+        return jsonify({"found": False, "reason": "24h以上前"})
+    try:
+        d = json.loads(latest.read_text(encoding="utf-8"))
+    except Exception as e:
+        return jsonify({"found": False, "error": str(e)})
+    summary = d.get("bet_summary", {})
+    return jsonify({
+        "found": True,
+        "file": latest.name,
+        "age_sec": int(age_sec),
+        "started_at": d.get("started_at"),
+        "stopped_at": d.get("stopped_at"),
+        "current_table": d.get("current_table", ""),
+        "bets":     summary.get("bets", 0),
+        "win_rate": summary.get("win_rate", 0),
+        "pnl":      summary.get("pnl", 0),
+        "stake":    summary.get("stake", 0),
+        "current_unit": summary.get("current_unit", 1),
+        "overshoot": summary.get("overshoot", 0),
+        "sets_completed": summary.get("sets_completed", 0),
+    })
+
+
+@app.route("/api/session/restore", methods=["POST"])
+def api_session_restore():
+    """直近セッションを復元 (旧 SEQ tracker / bet_history / action_log)"""
+    if not LOG_DIR.exists():
+        return jsonify({"ok": False, "error": "logs ディレクトリなし"}), 404
+    files = sorted(LOG_DIR.glob("*.json"), key=lambda p: p.stat().st_mtime, reverse=True)
+    if not files:
+        return jsonify({"ok": False, "error": "復元対象なし"}), 404
+    latest = files[0]
+    try:
+        d = json.loads(latest.read_text(encoding="utf-8"))
+    except Exception as e:
+        return jsonify({"ok": False, "error": f"読込失敗: {e}"}), 500
+
+    # SESSION を新規 init してから復元
+    SESSION.reset()
+    SESSION.started_at = d.get("started_at") or datetime.now().isoformat(timespec="seconds")
+    SESSION.active = True
+    SESSION.current_table = ""  # テーブル focus は user 任せ
+    SESSION.bet_history = list(d.get("bet_history") or [])
+    SESSION.hand_history = list(d.get("hand_history") or [])
+    SESSION.action_log = list(d.get("action_log") or [])
+
+    # tracker 復元: bet_history を順番に再生
+    for b in SESSION.bet_history:
+        SESSION.tracker.add_result("player" if b.get("won") else "banker")
+    SESSION.losing_streak = 0
+    for b in reversed(SESSION.bet_history):
+        if b.get("won"): break
+        SESSION.losing_streak += 1
+
+    SESSION._log("RESTORE", f"前回セッション復元 ({latest.name}): bets={len(SESSION.bet_history)}")
+    return jsonify({
+        "ok": True,
+        "restored_from": latest.name,
+        "bets": len(SESSION.bet_history),
+        "summary": SESSION.summary(),
+    })
+
+
 @app.route("/api/session/start", methods=["POST"])
 def api_session_start():
     tname = (request.json or {}).get("table_name", "").strip()
@@ -493,30 +531,86 @@ def api_hand_undo():
     return jsonify(ret)
 
 
-@app.route("/api/bet/manual_resolve", methods=["POST"])
-def api_bet_manual_resolve():
-    """pending_bet を勝ち/負けで手動解決 (scraper 停滞時のフォールバック)
+@app.route("/api/bet/record", methods=["POST"])
+def api_bet_record():
+    """user が Camoufox で実際に BET した結果を手動記録
 
     body: {"outcome": "win" | "lose" | "tie"}
-      - "win"  → pending_bet の side と同じ結果のハンドを追加 (WIN 判定される)
-      - "lose" → pending_bet の side と逆の結果のハンドを追加 (LOSE 判定される)
-      - "tie"  → T を追加 (BET はスキップ、pending は残る)
+
+    動作:
+      - SEQ tracker を進行 (勝ち=player, 負け=banker)
+      - bet_history に追加 (PNL 計算)
+      - learning.log_bet で AI 学習データ蓄積
+      - 勝率・連敗数を更新
+      - タイは BET 履歴に記録しない (スキップ扱い)
+
+    注: 罫線 (SESSION.seq) 自体は scraper の auto_follow が更新するため、
+        この endpoint では seq は触らない。BET 結果のみを記録する。
     """
     if not SESSION.active:
         return jsonify({"ok": False, "error": "セッション未開始"}), 400
+    if not SESSION.entered:
+        return jsonify({"ok": False, "error": "テーブル未入室"}), 400
+
     outcome = (request.json or {}).get("outcome", "")
     if outcome not in ("win", "lose", "tie"):
         return jsonify({"ok": False, "error": "outcome は win/lose/tie"}), 400
+
     if outcome == "tie":
-        ret = SESSION.add_hand("T")
-        return jsonify({"ok": True, **ret})
-    if not SESSION.pending_bet:
-        return jsonify({"ok": False, "error": "BET 待ちのハンドがありません"}), 400
-    side = SESSION.pending_bet["side"]
-    opposite = "B" if side == "P" else "P"
-    hand_result = side if outcome == "win" else opposite
-    ret = SESSION.add_hand(hand_result)
-    return jsonify({"ok": True, **ret})
+        SESSION._log("BET_TIE", "タイ — BET はスキップ扱い")
+        return jsonify({"ok": True, "outcome": "tie", "summary": SESSION.summary()})
+
+    # 推奨されていた BET 側を取得
+    rec = decide_bet("".join(SESSION.seq), SESSION.entry_pattern)
+    side = rec.get("side") or "P"  # 推奨が LOOK の場合でも user が独断 BET したならデフォルト P
+    won = (outcome == "win")
+    unit_idx = SESSION.tracker.current_unit_idx
+    unit = OLD_SEQ[min(unit_idx, len(OLD_SEQ) - 1)]
+    pnl = unit if won else -unit
+    timestamp = datetime.now().strftime("%H:%M:%S")
+
+    bet_record = {
+        "side": side,
+        "result": side if won else ("B" if side == "P" else "P"),
+        "won": won,
+        "unit": unit,
+        "pnl": pnl,
+        "pattern": SESSION.entry_pattern,
+        "time": timestamp,
+        "reason": rec.get("reason", "manual"),
+    }
+    SESSION.bet_history.append(bet_record)
+    SESSION.losing_streak = 0 if won else SESSION.losing_streak + 1
+    SESSION.tracker.add_result("player" if won else "banker")
+    SESSION._log("BET_RESULT", f"{'WIN' if won else 'LOSE'} / ${unit:.0f} {side}")
+
+    # AI 学習データ蓄積
+    learning.log_bet({
+        "table": SESSION.current_table,
+        "entry_pattern": SESSION.entry_pattern,
+        "bet_side": side,
+        "result": bet_record["result"],
+        "won": won,
+        "unit": unit,
+        "seq_len_at_bet": len(SESSION.seq),
+        "reason": rec.get("reason", "manual"),
+    })
+
+    return jsonify({
+        "ok": True,
+        "won": won,
+        "unit": unit,
+        "pnl": pnl,
+        "side": side,
+        "summary": SESSION.summary(),
+    })
+
+
+@app.route("/api/bet/manual_resolve", methods=["POST"])
+def api_bet_manual_resolve():
+    """後方互換 — /api/bet/record にフォワード"""
+    import flask
+    return api_bet_record()
 
 
 @app.route("/api/lobby")
