@@ -15,7 +15,9 @@ from typing import Optional
 
 
 MASTER_URL = os.getenv("BACOPY_MASTER_URL", "https://master.bafather.uk")
-POLL_INTERVAL = int(os.getenv("PRAGMATIC_POLL_INTERVAL", "10"))  # 秒
+# master UI は 250ms 間隔で polling しているため、gui_v2 もリアルタイム性のため 1 秒に短縮
+# (10 秒だと VPS のハンド進行に最大 10 秒遅延 → リアルタイム感ゼロ)
+POLL_INTERVAL = float(os.getenv("PRAGMATIC_POLL_INTERVAL", "1.0"))  # 秒
 
 
 def _load_api_key() -> str:
@@ -35,14 +37,23 @@ def _load_api_key() -> str:
 
 
 def _fetch_snapshots(api_key: str) -> Optional[dict]:
-    """master /api/snapshots を叩いて pragmatic テーブルデータを返す"""
-    url = f"{MASTER_URL}/api/snapshots"
-    req = urllib.request.Request(url, headers={"Authorization": f"Bearer {api_key}"})
+    """master /api/snapshots を叩いて pragmatic テーブルデータを返す
+
+    nginx/CDN キャッシュ回避のため URL に timestamp query を付与 + no-cache headers。
+    これがないと VPS 前段の nginx が stale レスポンスを返してリアルタイム性が失われる。
+    """
+    cache_bust = int(time.time() * 1000)
+    url = f"{MASTER_URL}/api/snapshots?_={cache_bust}"
+    req = urllib.request.Request(url, headers={
+        "Authorization": f"Bearer {api_key}",
+        "Cache-Control": "no-cache",
+        "Pragma": "no-cache",
+    })
     try:
         with urllib.request.urlopen(req, timeout=15) as resp:
             data = json.loads(resp.read().decode("utf-8"))
     except Exception as e:
-        return {"_error": str(e)}  # エラー内容を返す (None だと区別できない)
+        return {"_error": str(e)}
     snaps = (data.get("snapshots") or {}).get("pragmatic") or {}
     return snaps if snaps else {"_error": f"empty response: ok={data.get('ok')} keys={list(data.keys())}"}
 
