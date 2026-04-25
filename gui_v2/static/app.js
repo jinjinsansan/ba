@@ -77,13 +77,66 @@ $('btnExitTable').addEventListener('click', async () => {
 // BET 結果手動記録 (user が Camoufox で実 BET 後にクリック)
 async function resolvePending(outcome) {
   const r = await api('/api/bet/record', { method: 'POST', body: { outcome } });
-  if (!r.ok) alert(r.error || '記録失敗');
+  if (!r.ok) { alert(r.error || '記録失敗'); return; }
+  // MM アラートが返ってきたら即時 popup
+  if (r.mm_alert) {
+    if (r.mm_alert.type === 'profit') {
+      alert(r.mm_alert.msg + '\n\nセッションを停止して利益を確定してください。');
+    } else if (r.mm_alert.type === 'stop_loss') {
+      alert(r.mm_alert.msg + '\n\n損切ラインに達したため、セッションは自動停止されました。');
+    }
+  }
   refresh();
+  refreshMm();
 }
 // 新 Record Panel (勝/負/タイ ボタン)
 $('btnRecWin')  && $('btnRecWin').addEventListener('click',  () => resolvePending('win'));
 $('btnRecLose') && $('btnRecLose').addEventListener('click', () => resolvePending('lose'));
 $('btnRecTie')  && $('btnRecTie').addEventListener('click',  () => resolvePending('tie'));
+
+// 🛡 Money Management 設定適用
+$('btnMmApply') && $('btnMmApply').addEventListener('click', async () => {
+  const pt = parseFloat($('mmProfitInput').value);
+  const sl = -Math.abs(parseFloat($('mmLossInput').value));
+  const r = await api('/api/mm/config', { method: 'POST', body: { profit_target: pt, stop_loss: sl } });
+  if (!r.ok) alert(r.error || 'MM 設定失敗');
+  refreshMm();
+});
+
+async function refreshMm() {
+  try {
+    const m = await api('/api/mm/status');
+    const pt = m.profit_target;
+    const sl = m.stop_loss;
+    const cur = m.current_pnl;
+    // 利確進捗
+    const profitPct = pt > 0 ? Math.min(Math.max(cur / pt * 100, 0), 100) : 0;
+    $('mmProfitFill').style.width = profitPct + '%';
+    $('mmProfitVal').textContent = `${cur >= 0 ? '+' : ''}$${cur} / +$${pt}`;
+    // 損切進捗 (負方向)
+    const lossPct = sl < 0 ? Math.min(Math.max(cur / sl * 100, 0), 100) : 0;
+    $('mmLossFill').style.width = lossPct + '%';
+    $('mmLossVal').textContent = `${cur >= 0 ? '+' : ''}$${cur} / $${sl}`;
+    // アラート
+    const block = $('mmAlertBlock');
+    block.classList.remove('profit-hit', 'stop-loss');
+    if (m.forced_stopped) {
+      block.classList.add('stop-loss');
+      $('mmAlertText').textContent = `🛑 損切ライン到達 (PNL ${cur}) — セッション強制終了済み`;
+    } else if (m.alerted_target) {
+      block.classList.add('profit-hit');
+      $('mmAlertText').textContent = `🎯 利確ライン到達 (PNL +${cur}) — 終了推奨`;
+    } else if (cur > 0) {
+      $('mmAlertText').textContent = `安全運用中 — 利確まで残り $${(pt - cur).toFixed(0)}`;
+    } else if (cur < 0) {
+      $('mmAlertText').textContent = `安全運用中 — 損切まで残り $${(cur - sl).toFixed(0)}`;
+    } else {
+      $('mmAlertText').textContent = `安全運用中 — まだ BET なし`;
+    }
+  } catch (e) {
+    console.error('mm refresh failed', e);
+  }
+}
 
 // ============== Scraper 制御 ==============
 
@@ -837,8 +890,10 @@ async function refreshSlow() {
   refreshSlow();
   refreshScraperStatus();
   refreshLearning();
+  refreshMm();
   setInterval(refresh, 1500);
   setInterval(refreshSlow, 2000);
   setInterval(refreshScraperStatus, 3000);
   setInterval(refreshLearning, 8000);
+  setInterval(refreshMm, 1500);  // 利確/損切 はリアルタイム更新が大事
 })();

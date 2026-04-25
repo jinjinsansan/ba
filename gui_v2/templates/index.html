@@ -147,9 +147,13 @@
     </div>
   </section>
 
-  <!-- 右: AI 判定 -->
-  <section class="panel ai">
-    <h2>🔮 AI 判定</h2>
+  <!-- 右: AI 判定 (参考情報 — 数学的 edge ゼロのため格下げ) -->
+  <section class="panel ai ai-demoted">
+    <h2>📋 AI 参考情報</h2>
+    <div class="ai-disclaimer">
+      ⚠️ 罫線パターンに数学的 edge は確認できず (28k シュー検証)<br>
+      以下は分類参考のみ — BET 判断は user の主観で
+    </div>
 
     <div class="ai-block pattern">
       <div class="lbl">Pattern</div>
@@ -196,6 +200,40 @@
         <div><span>1落連続</span><b id="featSingleRun">0</b></div>
         <div><span>末尾1落</span><b id="featTrailing">0</b></div>
         <div><span>overshoot</span><b id="featOvershoot">0</b></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- 🛡 資金管理 (Phase C1: 利確/損切ボディガード) -->
+  <section class="panel mm-panel" id="mmPanel">
+    <h2>🛡 資金管理 (Money Management)</h2>
+    <div class="mm-layout">
+      <div class="mm-config-block">
+        <div class="mm-row">
+          <label>利確ライン (+$)</label>
+          <input id="mmProfitInput" type="number" value="30" step="10">
+        </div>
+        <div class="mm-row">
+          <label>損切ライン (-$)</label>
+          <input id="mmLossInput" type="number" value="200" step="10">
+        </div>
+        <button id="btnMmApply" class="btn btn-ghost">設定適用</button>
+        <div class="mm-hint">数学的 edge ゼロ前提、「上手に負ける」ためのガード</div>
+      </div>
+      <div class="mm-progress-block">
+        <div class="mm-prog-row">
+          <div class="mm-prog-label">🎯 利確</div>
+          <div class="mm-prog-bar"><div class="mm-prog-fill profit" id="mmProfitFill"></div></div>
+          <div class="mm-prog-val" id="mmProfitVal">$0 / $30</div>
+        </div>
+        <div class="mm-prog-row">
+          <div class="mm-prog-label">🛑 損切</div>
+          <div class="mm-prog-bar"><div class="mm-prog-fill loss" id="mmLossFill"></div></div>
+          <div class="mm-prog-val" id="mmLossVal">$0 / -$200</div>
+        </div>
+      </div>
+      <div class="mm-alert-block" id="mmAlertBlock">
+        <div class="mm-alert-text" id="mmAlertText">利確/損切ライン未到達 — 安全運用中</div>
       </div>
     </div>
   </section>

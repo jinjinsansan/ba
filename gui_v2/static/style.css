@@ -216,7 +216,102 @@ body {
 .watchlist { grid-row: span 2; }
 .shoe { grid-column: 2; }
 .ai { grid-column: 3; grid-row: span 2; }
-.kpi-panel, .chart-panel, .learning-panel, .log-panel, .record-panel { grid-column: 1 / span 3; }
+.kpi-panel, .chart-panel, .learning-panel, .log-panel, .record-panel, .mm-panel { grid-column: 1 / span 3; }
+
+/* ========== Money Management Panel ========== */
+.mm-panel {
+  border-left: 4px solid var(--win);
+  background: linear-gradient(135deg, rgba(15, 20, 35, 0.9), rgba(0, 50, 30, 0.4));
+}
+.mm-panel h2 { color: var(--win) !important; border-bottom-color: rgba(0, 255, 136, 0.2); }
+.mm-layout {
+  display: grid;
+  grid-template-columns: 280px 1fr 220px;
+  gap: 16px; align-items: stretch;
+}
+.mm-config-block {
+  background: var(--bg-deep); border: 1px solid var(--border);
+  border-radius: 6px; padding: 10px 12px;
+}
+.mm-row {
+  display: flex; align-items: center; justify-content: space-between;
+  margin-bottom: 6px; font-size: 12px;
+}
+.mm-row label { color: var(--text-muted); font-family: var(--font-hud); letter-spacing: 0.05em; font-size: 11px; }
+.mm-row input {
+  width: 90px; padding: 4px 8px; background: var(--bg); color: var(--win);
+  border: 1px solid var(--border-h); border-radius: 4px;
+  font-family: var(--font-mono); font-size: 14px; text-align: right;
+}
+#btnMmApply { width: 100%; margin: 6px 0 4px; padding: 6px; }
+.mm-hint { font-size: 10px; color: var(--text-muted); line-height: 1.4; margin-top: 4px; }
+
+.mm-progress-block {
+  display: flex; flex-direction: column; gap: 12px; justify-content: center;
+  padding: 0 12px;
+}
+.mm-prog-row { display: flex; align-items: center; gap: 10px; }
+.mm-prog-label {
+  font-family: var(--font-hud); font-size: 11px; min-width: 60px;
+  letter-spacing: 0.1em;
+}
+.mm-prog-bar {
+  flex: 1; height: 14px; background: var(--bg-deep);
+  border: 1px solid var(--border); border-radius: 7px; overflow: hidden;
+}
+.mm-prog-fill {
+  height: 100%; transition: width 0.6s ease; border-radius: 6px;
+}
+.mm-prog-fill.profit { background: linear-gradient(90deg, var(--bg-glass), var(--win)); }
+.mm-prog-fill.loss   { background: linear-gradient(90deg, var(--bg-glass), var(--lose)); }
+.mm-prog-val {
+  font-family: var(--font-mono); font-size: 13px;
+  min-width: 110px; text-align: right; font-weight: 700;
+}
+
+.mm-alert-block {
+  background: var(--bg-deep); border: 1px solid var(--border);
+  border-left: 4px solid var(--text-muted);
+  border-radius: 6px; padding: 12px 14px;
+  display: flex; align-items: center;
+}
+.mm-alert-text {
+  font-size: 12px; line-height: 1.5; color: var(--text-muted);
+}
+.mm-alert-block.profit-hit {
+  border-left-color: var(--win); background: rgba(0, 255, 136, 0.08);
+  animation: mm-alert-glow 1.5s infinite;
+}
+.mm-alert-block.profit-hit .mm-alert-text { color: var(--win); font-weight: 700; }
+.mm-alert-block.stop-loss {
+  border-left-color: var(--lose); background: rgba(255, 51, 102, 0.12);
+  animation: mm-alert-glow 0.8s infinite;
+}
+.mm-alert-block.stop-loss .mm-alert-text { color: var(--lose); font-weight: 700; }
+@keyframes mm-alert-glow {
+  0%, 100% { box-shadow: 0 0 0 rgba(0, 255, 136, 0); }
+  50%      { box-shadow: 0 0 14px rgba(0, 255, 136, 0.6); }
+}
+
+/* ========== AI Demoted (参考情報降格) ========== */
+.ai-demoted h2 {
+  color: var(--text-muted) !important;
+  font-size: 11px !important;
+  letter-spacing: 0.15em !important;
+}
+.ai-demoted {
+  opacity: 0.78;
+  transition: opacity 0.2s;
+}
+.ai-demoted:hover { opacity: 1; }
+.ai-disclaimer {
+  font-size: 10px; color: var(--text-muted); line-height: 1.5;
+  background: var(--bg-deep); padding: 6px 8px; border-radius: 4px;
+  border-left: 3px solid var(--warn);
+  margin-bottom: 10px; font-family: var(--font-mono);
+}
+.ai-demoted .ai-block .val-big { font-size: 14px !important; }
+.ai-demoted .ai-block { padding: 7px 10px; margin-bottom: 6px; }
 
 /* ========== Record Panel (勝敗記録 + SEQ 進行) ========== */
 .record-panel { border-left: 4px solid var(--tie); }

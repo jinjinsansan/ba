@@ -113,6 +113,13 @@ class Session:
         # スクレイパ自動追従: True なら scraper から seq を上書き
         self.auto_follow_scraper = False
 
+        # 💰 資金管理 (Money Management) — Phase C1
+        # 数学的 edge ゼロ前提、「上手に負ける/早く引く」ためのガード
+        self.mm_profit_target = 30   # 利確ライン (USD)
+        self.mm_stop_loss     = -200 # 損切ライン (USD)
+        self.mm_alerted_target = False  # 利確アラート 1 回限り
+        self.mm_forced_stopped = False  # 損切による強制停止フラグ
+
     def reset(self):
         self.__init__()
 
@@ -596,12 +603,26 @@ def api_bet_record():
         "reason": rec.get("reason", "manual"),
     })
 
+    # 💰 資金管理チェック (利確 / 損切)
+    cur_pnl = sum(b["pnl"] for b in SESSION.bet_history)
+    mm_alert = None
+    if cur_pnl >= SESSION.mm_profit_target and not SESSION.mm_alerted_target:
+        SESSION.mm_alerted_target = True
+        SESSION._log("PROFIT_HIT", f"利確ライン到達: PNL=+${cur_pnl} ≥ +${SESSION.mm_profit_target}")
+        mm_alert = {"type": "profit", "msg": f"🎯 利確ライン到達 (+${cur_pnl}) — 終了推奨"}
+    if cur_pnl <= SESSION.mm_stop_loss and not SESSION.mm_forced_stopped:
+        SESSION.mm_forced_stopped = True
+        SESSION._log("STOP_LOSS", f"損切ライン到達: PNL=${cur_pnl} ≤ ${SESSION.mm_stop_loss}")
+        mm_alert = {"type": "stop_loss", "msg": f"🛑 損切ライン到達 ({cur_pnl}) — 強制終了"}
+        SESSION.stop()
+
     return jsonify({
         "ok": True,
         "won": won,
         "unit": unit,
         "pnl": pnl,
         "side": side,
+        "mm_alert": mm_alert,
         "summary": SESSION.summary(),
     })
 
@@ -893,6 +914,38 @@ def api_debug_scraper_state():
         "total_tables": len(lobby.get("tables", [])),
         "tables_with_seq": sorted(tables_with_seq, key=lambda x: -x[1])[:30],
         "tables_empty": tables_empty[:15],
+    })
+
+
+@app.route("/api/mm/config", methods=["POST"])
+def api_mm_config():
+    """資金管理設定 (利確/損切ライン)"""
+    body = request.json or {}
+    if "profit_target" in body:
+        SESSION.mm_profit_target = float(body["profit_target"])
+        SESSION.mm_alerted_target = False  # 設定変更で再アラート可
+    if "stop_loss" in body:
+        SESSION.mm_stop_loss = float(body["stop_loss"])
+        SESSION.mm_forced_stopped = False
+    SESSION._log("MM_CONFIG",
+                 f"利確 +${SESSION.mm_profit_target} / 損切 ${SESSION.mm_stop_loss}")
+    return jsonify({"ok": True,
+                    "profit_target": SESSION.mm_profit_target,
+                    "stop_loss": SESSION.mm_stop_loss})
+
+
+@app.route("/api/mm/status")
+def api_mm_status():
+    """資金管理状態 (現 PNL + ライン到達状況)"""
+    cur_pnl = sum(b["pnl"] for b in SESSION.bet_history)
+    return jsonify({
+        "profit_target": SESSION.mm_profit_target,
+        "stop_loss": SESSION.mm_stop_loss,
+        "current_pnl": cur_pnl,
+        "alerted_target": SESSION.mm_alerted_target,
+        "forced_stopped": SESSION.mm_forced_stopped,
+        "profit_pct": (cur_pnl / SESSION.mm_profit_target * 100) if SESSION.mm_profit_target else 0,
+        "loss_pct": (cur_pnl / SESSION.mm_stop_loss * 100) if SESSION.mm_stop_loss else 0,
     })
 
 
