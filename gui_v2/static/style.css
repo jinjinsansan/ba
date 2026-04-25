@@ -216,7 +216,82 @@ body {
 .watchlist { grid-row: span 2; }
 .shoe { grid-column: 2; }
 .ai { grid-column: 3; grid-row: span 2; }
-.kpi-panel, .chart-panel, .learning-panel, .log-panel { grid-column: 1 / span 3; }
+.kpi-panel, .chart-panel, .learning-panel, .log-panel, .record-panel { grid-column: 1 / span 3; }
+
+/* ========== Record Panel (勝敗記録 + SEQ 進行) ========== */
+.record-panel { border-left: 4px solid var(--tie); }
+.record-layout {
+  display: grid;
+  grid-template-columns: 1fr 1fr 1.5fr;
+  gap: 14px; align-items: stretch;
+}
+.record-buttons-block {
+  background: var(--bg-deep); border: 1px solid var(--border);
+  border-radius: 6px; padding: 10px 12px;
+}
+.record-hint {
+  font-size: 11px; color: var(--text-muted); margin-bottom: 8px; line-height: 1.5;
+}
+.record-buttons { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 6px; }
+.btn-rec {
+  padding: 14px 8px; border: 1px solid; border-radius: 5px;
+  font-family: var(--font-hud); font-weight: 900; font-size: 13px;
+  letter-spacing: 0.1em; cursor: pointer; transition: all 0.15s;
+}
+.btn-rec-win  { background: rgba(0, 255, 136, 0.10); color: var(--win); border-color: rgba(0, 255, 136, 0.4); }
+.btn-rec-win:hover:not(:disabled)  { background: var(--win); color: var(--bg); box-shadow: 0 0 12px var(--win); }
+.btn-rec-lose { background: rgba(255, 51, 102, 0.10); color: var(--lose); border-color: rgba(255, 51, 102, 0.4); }
+.btn-rec-lose:hover:not(:disabled) { background: var(--lose); color: white; box-shadow: 0 0 12px var(--lose); }
+.btn-rec-tie  { background: rgba(255, 204, 0, 0.10); color: var(--tie); border-color: rgba(255, 204, 0, 0.4); }
+.btn-rec-tie:hover:not(:disabled)  { background: var(--tie); color: var(--bg); box-shadow: 0 0 12px var(--tie); }
+.btn-rec:disabled { opacity: 0.3; cursor: not-allowed; }
+.btn-rec.active { animation: btn-rec-pulse 1.4s infinite; }
+@keyframes btn-rec-pulse {
+  0%, 100% { box-shadow: 0 0 0 rgba(255, 204, 0, 0); }
+  50%      { box-shadow: 0 0 12px rgba(255, 204, 0, 0.7); }
+}
+
+.seq-block {
+  display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px;
+}
+.seq-card {
+  background: var(--bg-deep); border: 1px solid var(--border);
+  border-left: 3px solid var(--accent);
+  border-radius: 5px; padding: 8px 12px; text-align: center;
+}
+.seq-card .lbl {
+  font-size: 9px; color: var(--text-muted); letter-spacing: 0.15em;
+  font-family: var(--font-hud); text-transform: uppercase;
+}
+.seq-card .val {
+  font-size: 22px; font-weight: 700; color: var(--tie); margin-top: 4px;
+  font-family: var(--font-mono);
+}
+
+.ox-block {
+  background: var(--bg-deep); border: 1px solid var(--border);
+  border-radius: 6px; padding: 10px 12px;
+}
+.ox-title {
+  font-size: 10px; color: var(--text-muted); letter-spacing: 0.12em;
+  font-family: var(--font-hud); margin-bottom: 8px; text-transform: uppercase;
+}
+.ox-title span { color: var(--tie); font-family: var(--font-mono); }
+.ox-row { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; }
+.ox-cell {
+  width: 30px; height: 30px; border-radius: 50%;
+  display: flex; align-items: center; justify-content: center;
+  font-family: var(--font-hud); font-weight: 900; font-size: 13px;
+  border: 2px solid;
+}
+.ox-cell.win  { background: rgba(0, 255, 136, 0.2); color: var(--win); border-color: var(--win); }
+.ox-cell.lose { background: rgba(255, 51, 102, 0.2); color: var(--lose); border-color: var(--lose); }
+.ox-cell.empty { background: transparent; color: var(--text-dim); border-color: var(--border); border-style: dashed; }
+.ox-cell.next  { background: rgba(255, 204, 0, 0.15); color: var(--tie); border-color: var(--tie); animation: ox-next 1.2s infinite; }
+@keyframes ox-next {
+  0%, 100% { box-shadow: 0 0 0 rgba(255, 204, 0, 0); transform: scale(1); }
+  50%      { box-shadow: 0 0 8px rgba(255, 204, 0, 0.7); transform: scale(1.07); }
+}
 
 /* ========== Lobby ========== */
 .lobby-meter {

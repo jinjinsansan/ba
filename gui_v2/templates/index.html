@@ -170,16 +170,6 @@
       <div class="fc-learn" id="fcLearnInfo" style="display:none"></div>
     </div>
 
-    <div class="ai-block pending" id="aiPendingBlock" style="display:none">
-      <div class="lbl">⏳ BET 実行待ち (Camoufox で実行してから結果を確定)</div>
-      <div class="pending-details" id="aiPendingDetails">-</div>
-      <div class="pending-actions">
-        <button id="btnPendingWin"  class="btn btn-win"  title="Camoufox で BET した結果、勝った">✅ 勝ち</button>
-        <button id="btnPendingLose" class="btn btn-lose" title="Camoufox で BET した結果、負けた">❌ 負け</button>
-        <button id="btnPendingTie"  class="btn btn-plain" title="タイで引き分け (BET 継続)">🟢 タイ</button>
-      </div>
-    </div>
-
     <div class="ai-block entry">
       <div class="lbl">エントリー判定</div>
       <div class="val-big" id="aiEntry">-</div>
@@ -206,6 +196,30 @@
         <div><span>1落連続</span><b id="featSingleRun">0</b></div>
         <div><span>末尾1落</span><b id="featTrailing">0</b></div>
         <div><span>overshoot</span><b id="featOvershoot">0</b></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- 勝敗記録 + SEQ 進行 (推奨パネルから独立) -->
+  <section class="panel record-panel" id="recordPanel">
+    <h2>📝 BET 結果記録 / SEQ 進行</h2>
+    <div class="record-layout">
+      <div class="record-buttons-block">
+        <div class="record-hint" id="recordHint">推奨が出ているとき、Camoufox で BET したらクリックして結果を記録</div>
+        <div class="record-buttons">
+          <button id="btnRecWin"  class="btn-rec btn-rec-win"  disabled>✅ 勝ち</button>
+          <button id="btnRecLose" class="btn-rec btn-rec-lose" disabled>❌ 負け</button>
+          <button id="btnRecTie"  class="btn-rec btn-rec-tie"  disabled>🟢 タイ</button>
+        </div>
+      </div>
+      <div class="seq-block">
+        <div class="seq-card"><div class="lbl">現 SEQ unit</div><div class="val" id="seqUnit">$1</div></div>
+        <div class="seq-card"><div class="lbl">overshoot</div><div class="val" id="seqOvershoot">0</div></div>
+        <div class="seq-card"><div class="lbl">累計セット</div><div class="val" id="seqSets">0</div></div>
+      </div>
+      <div class="ox-block">
+        <div class="ox-title">現セット <span id="oxSetIdx">1</span> 進捗 (<span id="oxScore">0/0</span>)</div>
+        <div class="ox-row" id="oxRow"></div>
       </div>
     </div>
   </section>

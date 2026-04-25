@@ -80,9 +80,10 @@ async function resolvePending(outcome) {
   if (!r.ok) alert(r.error || '記録失敗');
   refresh();
 }
-$('btnPendingWin')  && $('btnPendingWin').addEventListener('click',  () => resolvePending('win'));
-$('btnPendingLose') && $('btnPendingLose').addEventListener('click', () => resolvePending('lose'));
-$('btnPendingTie')  && $('btnPendingTie').addEventListener('click',  () => resolvePending('tie'));
+// 新 Record Panel (勝/負/タイ ボタン)
+$('btnRecWin')  && $('btnRecWin').addEventListener('click',  () => resolvePending('win'));
+$('btnRecLose') && $('btnRecLose').addEventListener('click', () => resolvePending('lose'));
+$('btnRecTie')  && $('btnRecTie').addEventListener('click',  () => resolvePending('tie'));
 
 // ============== Scraper 制御 ==============
 
@@ -363,7 +364,10 @@ function renderLobbyLive(lobby, focusedTableName) {
   });
 }
 
-function renderBigRoad(canvas, seq) {
+// 次 BET 位置のゴーストマーカー位置を保持 (描画後に外側で点滅描画用)
+let _nextBetPos = null;  // {x, y, side} | null
+
+function renderBigRoad(canvas, seq, betRecommend) {
   const ctx = canvas.getContext('2d');
   const W = canvas.width, H = canvas.height;
   ctx.fillStyle = '#0a1020';
@@ -381,17 +385,35 @@ function renderBigRoad(canvas, seq) {
   }
 
   // 大路: 縦落ち → ドラゴンターン
+  // T は直前の P/B セルに緑斜線を重ねる (本物のバカラ大路仕様)
   let col = 0, row = 0;
   let lastSide = null;
-  let bottomRow = 0;
-  for (const ch of seq) {
-    if (ch === 'T') continue;
+  let lastCellX = null, lastCellY = null;  // 直前 P/B セル位置 (T 重ねる用)
+  let lastTieCount = 0;  // 直前セルの累積 T 本数
+  let lastNonTieIdx = -1;  // seq 上の直前 P/B 位置
+
+  for (let i = 0; i < seq.length; i++) {
+    const ch = seq[i];
+    if (ch === 'T') {
+      // 直前 P/B セルに緑斜線を重ねる
+      if (lastCellX !== null) {
+        lastTieCount += 1;
+        const offset = (lastTieCount - 1) * 2;  // 複数 T 用に少しずらす
+        ctx.strokeStyle = '#16a34a';
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.moveTo(lastCellX - cellSize/2 + 2 + offset, lastCellY + cellSize/2 - 2);
+        ctx.lineTo(lastCellX + cellSize/2 - 2 + offset, lastCellY - cellSize/2 + 2);
+        ctx.stroke();
+      }
+      continue;
+    }
     if (ch !== lastSide) {
-      if (lastSide !== null) { col++; row = 0; bottomRow = 0; }
+      if (lastSide !== null) { col++; row = 0; }
       lastSide = ch;
     } else {
       row++;
-      if (row >= rows) { col++; /* dragon tail */ row = rows - 1; }
+      if (row >= rows) { col++; row = rows - 1; }
     }
     const cx = col * cellSize + cellSize / 2;
     const cy = row * cellSize + cellSize / 2;
@@ -400,8 +422,59 @@ function renderBigRoad(canvas, seq) {
     ctx.strokeStyle = ch === 'P' ? '#3b82f6' : '#dc2626';
     ctx.lineWidth = 2;
     ctx.stroke();
+    lastCellX = cx; lastCellY = cy; lastTieCount = 0;
+    lastNonTieIdx = i;
+  }
+
+  // 次 BET 位置のゴーストマーカー計算
+  _nextBetPos = null;
+  if (betRecommend && betRecommend.action === 'BET' && betRecommend.side === 'P') {
+    // 直前 P/B が P → 同じ列の次の row、B → 新列の row 0
+    let bx, by;
+    const prev = (lastNonTieIdx >= 0) ? seq[lastNonTieIdx] : null;
+    if (prev === 'P') {
+      // 同列の下に追加
+      let nrow = row + 1;
+      let ncol = col;
+      if (nrow >= rows) { ncol = col + 1; nrow = rows - 1; }
+      bx = ncol * cellSize + cellSize / 2;
+      by = nrow * cellSize + cellSize / 2;
+    } else {
+      // 新列の最上段
+      bx = (col + 1) * cellSize + cellSize / 2;
+      by = 0 * cellSize + cellSize / 2;
+    }
+    _nextBetPos = { x: bx, y: by, cellSize: cellSize };
   }
 }
+
+// 点滅マーカー描画 (rAF ループ)
+function _drawGhostMarker() {
+  const canvas = $('bigRoad');
+  if (!canvas || !_nextBetPos) return;
+  const ctx = canvas.getContext('2d');
+  const t = (Date.now() % 1200) / 1200;  // 1.2s 周期
+  const alpha = 0.3 + 0.5 * Math.abs(Math.sin(t * Math.PI));  // 0.3 ↔ 0.8
+  const r = _nextBetPos.cellSize / 2 - 2;
+  ctx.save();
+  ctx.beginPath();
+  ctx.arc(_nextBetPos.x, _nextBetPos.y, r, 0, Math.PI * 2);
+  ctx.strokeStyle = `rgba(0, 229, 255, ${alpha})`;
+  ctx.lineWidth = 3;
+  ctx.stroke();
+  // 中心に点
+  ctx.beginPath();
+  ctx.arc(_nextBetPos.x, _nextBetPos.y, 3, 0, Math.PI * 2);
+  ctx.fillStyle = `rgba(0, 229, 255, ${alpha + 0.2})`;
+  ctx.fill();
+  ctx.restore();
+}
+
+function _ghostLoop() {
+  _drawGhostMarker();
+  requestAnimationFrame(_ghostLoop);
+}
+requestAnimationFrame(_ghostLoop);
 
 function renderHandHistory(history) {
   const box = $('handHistory');
@@ -499,14 +572,7 @@ function renderAI(data) {
     $('fcConfRow').style.display = 'none';
   }
 
-  // === BET 結果記録パネル (entered + BET 推奨中なら常に表示) ===
-  const pendingBlock = $('aiPendingBlock');
-  if (data.entered && bet.action === 'BET' && bet.side) {
-    pendingBlock.style.display = 'block';
-    $('aiPendingDetails').innerHTML = `推奨: <b>${bet.side}</b> $${(data.next_unit||1).toFixed(0)} <span style="color:#8a96a8;font-weight:400;font-size:11px">(${data.entry_pattern || ''})</span><br><span style="font-size:10px;color:#8a96a8">Camoufox で BET したら下のボタンで結果記録</span>`;
-  } else {
-    pendingBlock.style.display = 'none';
-  }
+  // 旧 aiPendingBlock は record-panel に分離済 (renderRecordPanel で扱う)
 
   const f = info.features || {};
   $('feat5plus').textContent = f.n_long5 ?? 0;
@@ -572,6 +638,57 @@ function renderShoeMeta(info) {
   $('metaB').textContent = info.b_cnt;
   $('metaT').textContent = info.t_cnt;
   $('metaBLead').textContent = info.b_lead >= 0 ? '+' + info.b_lead : info.b_lead;
+}
+
+// ============== Record Panel (勝敗記録 + SEQ 進行) ==============
+
+function renderRecordPanel(data) {
+  const s = data.session;
+  const bet = data.bet_recommend || {};
+  const isPending = data.entered && bet.action === 'BET' && bet.side;
+
+  // SEQ 数値
+  $('seqUnit').textContent = `$${s.current_unit}`;
+  $('seqOvershoot').textContent = s.overshoot;
+  $('seqSets').textContent = s.sets_completed;
+
+  // ボタン active / hint
+  const btnW = $('btnRecWin'), btnL = $('btnRecLose'), btnT = $('btnRecTie');
+  if (isPending) {
+    btnW.disabled = btnL.disabled = btnT.disabled = false;
+    btnW.classList.add('active'); btnL.classList.add('active');
+    $('recordHint').innerHTML =
+      `🟢 <b>${bet.side}</b> $${s.current_unit} を Camoufox で BET → 結果クリック`;
+  } else {
+    btnW.disabled = btnL.disabled = btnT.disabled = true;
+    btnW.classList.remove('active'); btnL.classList.remove('active');
+    $('recordHint').textContent = data.entered
+      ? '推奨待機中 — BET 推奨が出たら勝敗ボタンが有効化されます'
+      : 'テーブル focus → AI 推奨 → BET → 結果記録';
+  }
+
+  // ○✕ 進捗バー (現セット 7 ターン)
+  $('oxSetIdx').textContent = s.sets_completed + 1;
+  $('oxScore').textContent = `${s.wins}勝 ${s.losses}負`;
+  // 現セットの結果文字列を tracker から取得することは API 側で必要だが、
+  // 現状の summary に current_turn のみあるので簡易表示
+  const turn = s.current_turn || 0;
+  const cells = [];
+  // 累積 wins/losses ではなく current set のみ表示するため、bet_history から逆算
+  // シンプルに直近 7 件の結果を ○ ✕ で表示 (set 切替前は前 set を含む可能性あり)
+  const rh = data.hand_history || [];
+  const recent = rh.filter(h => h.bet_resolved).slice(-7);
+  for (let i = 0; i < 7; i++) {
+    if (i < recent.length) {
+      const won = recent[i].bet_resolved.won;
+      cells.push(`<div class="ox-cell ${won ? 'win' : 'lose'}">${won ? '○' : '✕'}</div>`);
+    } else if (i === recent.length && isPending) {
+      cells.push(`<div class="ox-cell next">?</div>`);
+    } else {
+      cells.push(`<div class="ox-cell empty">·</div>`);
+    }
+  }
+  $('oxRow').innerHTML = cells.join('');
 }
 
 function renderLog(log) {
@@ -647,12 +764,13 @@ async function refresh() {
   try {
     const data = await api('/api/status');
     renderWatchlist(data.watchlist);
-    renderBigRoad($('bigRoad'), data.seq);
+    renderBigRoad($('bigRoad'), data.seq, data.bet_recommend);
     renderHandHistory(data.hand_history);
     renderAI(data);
     renderKPI(data.session);
     renderShoeMeta(data.info);
     renderLog(data.action_log);
+    renderRecordPanel(data);
     currentTable = data.session.table;
   } catch (e) {
     console.error(e);
