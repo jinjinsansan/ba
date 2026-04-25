@@ -39,12 +39,12 @@ def _fetch_snapshots(api_key: str) -> Optional[dict]:
     url = f"{MASTER_URL}/api/snapshots"
     req = urllib.request.Request(url, headers={"Authorization": f"Bearer {api_key}"})
     try:
-        with urllib.request.urlopen(req, timeout=8) as resp:
+        with urllib.request.urlopen(req, timeout=15) as resp:
             data = json.loads(resp.read().decode("utf-8"))
     except Exception as e:
-        return None
+        return {"_error": str(e)}  # エラー内容を返す (None だと区別できない)
     snaps = (data.get("snapshots") or {}).get("pragmatic") or {}
-    return snaps
+    return snaps if snaps else {"_error": f"empty response: ok={data.get('ok')} keys={list(data.keys())}"}
 
 
 class PragmaticBridge:
@@ -130,7 +130,7 @@ class PragmaticBridge:
         while self._running:
             try:
                 snaps = _fetch_snapshots(self._api_key)
-                if snaps is not None:
+                if snaps and "_error" not in snaps:
                     with self._lock:
                         self._data = snaps
                     self._n_tables = len(snaps)
@@ -138,8 +138,9 @@ class PragmaticBridge:
                     self._status = f"running ({self._n_tables} tables)"
                     self._last_error = ""
                 else:
-                    self._last_error = "API fetch failed"
-                    self._status = f"error: {self._last_error}"
+                    err = (snaps or {}).get("_error", "empty response")
+                    self._last_error = err
+                    self._status = f"error: {err[:80]}"
             except Exception as e:
                 self._last_error = str(e)
                 self._status = f"error: {e}"

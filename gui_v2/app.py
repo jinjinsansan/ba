@@ -785,6 +785,8 @@ def api_debug_scraper_state():
     return jsonify({
         "ok": True,
         "bridge_status": st,
+        "api_key_loaded": bool(get_bridge()._api_key),
+        "api_key_len": len(get_bridge()._api_key),
         "total_tables": len(lobby.get("tables", [])),
         "tables_with_seq": sorted(tables_with_seq, key=lambda x: -x[1])[:30],
         "tables_empty": tables_empty[:15],
