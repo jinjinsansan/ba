@@ -367,17 +367,22 @@ def _auto_follow_sync():
         r = bridge.get_table_bead_road(SESSION.current_table)
         if not r.get("ok"):
             return
-        live_seq = r["seq"]  # P/B のみ (T 無視)
-        # ローカル seq の P/B 部分
-        local_pb = "".join(ch for ch in SESSION.seq if ch in ("P", "B"))
-        if live_seq == local_pb:
+        live_seq = r["seq"]  # P/B/T すべて含む
+        local_full = "".join(SESSION.seq)
+        if live_seq == local_full:
             return
-        if live_seq.startswith(local_pb):
-            tail = live_seq[len(local_pb):]
+        if live_seq.startswith(local_full):
+            # VPS が先行 → 差分を追加
+            tail = live_seq[len(local_full):]
             for ch in tail:
                 SESSION.add_hand(ch)
+        elif local_full.startswith(live_seq):
+            # ローカルが先行 (手動入力済み) → 何もしない
+            pass
         else:
-            SESSION._log("FOLLOW_WARN", f"scraper seq 乖離 live={live_seq[-10:]!r} local={local_pb[-10:]!r} — ⚡ 同期ボタンで上書きを")
+            # 乖離: VPS データで強制上書き
+            SESSION.seq = list(live_seq)
+            SESSION._log("FOLLOW_RESYNC", f"seq 乖離 → VPS で上書き live={len(live_seq)}手")
     except Exception as e:
         SESSION._log("FOLLOW_ERR", str(e)[:120])
 
