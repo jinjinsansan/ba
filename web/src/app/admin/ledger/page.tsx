@@ -60,7 +60,20 @@ export default async function AdminLedgerPage() {
       <div className="max-w-7xl mx-auto px-4 sm:px-6 py-8 sm:py-10">
         <div className="hud-label mb-2">Admin Console</div>
         <h1 className="text-2xl sm:text-3xl font-black mb-2 font-hud">FX 運用家計簿</h1>
-        <p className="text-text-muted text-sm mb-6">投資家・運用者・会社の資金フローをすべて記録・可視化</p>
+        <p className="text-text-muted text-sm mb-3">投資家・運用者・会社の資金フローをすべて記録・可視化</p>
+
+        {/* 仕様サマリ (折りたたみ) */}
+        <details className="mb-6 glass-card rounded-lg p-3 text-xs">
+          <summary className="cursor-pointer text-accent hover:text-text font-semibold">📖 計算ルール / 用語の説明 (クリックで開閉)</summary>
+          <div className="mt-3 space-y-2 text-text-muted leading-relaxed">
+            <div><strong className="text-text">1 つめ口座</strong>: Hさんが BET する口座 ($50,000)。毎日の利益は <strong>Hさんが全額出金</strong>するため、口座残高は常に $50,000 維持。会計上は利益の 80% が J/K/会社 の取り分として残る。</div>
+            <div><strong className="text-text">2 つめ口座</strong>: 運用者が管理する口座 ($46,900)。<strong>J/K/会社 への経費出金はここから物理的に行う</strong> (= 1 つめ口座の利益 80% 分の現物 USDT を出金するための口座)。</div>
+            <div><strong className="text-text">別チャージ ($2,100)</strong>: 運用者の自己資金。Hさん画面では「チャージ資金」として見せている。AI 開発費 (運用益外例外) の支払い財源。</div>
+            <div><strong className="text-text">未出金取り分 (1つめ口座のみで計算)</strong>: 1つめ口座累計取り分 − J/K/会社 既出金累計。AI 開発費は運用益外例外なので含めない。</div>
+            <div><strong className="text-text">運用者残利益</strong>: 1つめ 80% + 2つめ利益 − 2つめ口座からの出金累計。<br/>内訳 = 2つめ口座内残存 + 1つめ chargeRefund 物理残高。</div>
+            <div className="text-amber-300/80 mt-2">⚠ <strong>将来予定</strong>: Hさんの累積出金が投資総額 ($96,900) に近づくと、利益の 80% を chargeBalance に再入金する動きが発生 (= 1つめ口座のチャージ資金補充)。今後対応予定。</div>
+          </div>
+        </details>
 
         {/* 投資家別タブ (将来複数投資家対応) */}
         <div className="flex flex-wrap gap-2 mb-6">
@@ -199,25 +212,54 @@ export default async function AdminLedgerPage() {
                     )}
                   </div>
 
-                  {/* 1つめ口座 J/K/会社 未出金取り分 (= chargeRefund pool の内訳) */}
+                  {/* 1つめ口座 J/K/会社 未出金取り分 = (累計取り分 - 既出金) */}
                   <div className="rounded-lg p-4 border border-cyan-500/30" style={{ background: 'rgba(6,182,212,0.05)' }}>
-                    <div className="text-xs text-cyan-400 font-semibold tracking-widest mb-3">UNPAID SHARES IN ACCOUNT1 (1つめ口座 未出金取り分)</div>
-                    <div className="text-[10px] text-text-muted mb-2 leading-tight">
-                      ※ 1 つめ口座の chargeRefund pool ({fmt(s.remaining_charge_refund)}) はまだ口座から物理出金していないため、全額が J/K/会社の未出金取り分として残っています
+                    <div className="text-xs text-cyan-400 font-semibold tracking-widest mb-3">UNPAID SHARES IN ACCOUNT1 (1つめ口座のみで計算した未出金取り分)</div>
+                    <div className="text-[10px] text-text-muted mb-3 leading-tight">
+                      ※ 計算式: 1 つめ口座 累計取り分 − 既出金分 (経費出金は概念上 1 つめ取り分から差し引く)。AI 開発費 ({fmt(s.ai_dev_total)}) は運用益外例外で除外。
                     </div>
-                    <div className="grid grid-cols-2 gap-2 text-sm">
-                      <div className="text-text-muted">J 未出金 (利益の20%)</div>
-                      <div className="font-mono text-right text-cyan-300 font-bold">{fmt(s.j_share_in_account1)}</div>
-                      <div className="text-text-muted">K 未出金 (利益の30%)</div>
-                      <div className="font-mono text-right text-cyan-300 font-bold">{fmt(s.k_share_in_account1)}</div>
-                      <div className="text-text-muted">会社配当 未出金 (利益の30%)</div>
-                      <div className="font-mono text-right text-cyan-300 font-bold">{fmt(s.company_share_in_account1)}</div>
-                      <div className="text-text-muted border-t border-text-muted/20 pt-1">合計 (= chargeRefund 残)</div>
-                      <div className="font-mono text-right border-t border-text-muted/20 pt-1 font-bold">
+
+                    {/* J */}
+                    <div className="mb-3 pb-3 border-b border-text-muted/15">
+                      <div className="flex justify-between items-baseline mb-1">
+                        <span className="text-sm font-semibold">J (利益の 20%)</span>
+                        <span className="font-mono text-right text-cyan-300 font-bold text-lg">{fmt(s.j_unpaid_in_account1)}</span>
+                      </div>
+                      <div className="text-[11px] text-text-muted font-mono pl-3">
+                        累計取り分 {fmt(s.j_share_in_account1)} − 既出金 {fmt(s.j_total)}
+                      </div>
+                    </div>
+
+                    {/* K */}
+                    <div className="mb-3 pb-3 border-b border-text-muted/15">
+                      <div className="flex justify-between items-baseline mb-1">
+                        <span className="text-sm font-semibold">K (利益の 30%)</span>
+                        <span className="font-mono text-right text-cyan-300 font-bold text-lg">{fmt(s.k_unpaid_in_account1)}</span>
+                      </div>
+                      <div className="text-[11px] text-text-muted font-mono pl-3">
+                        累計取り分 {fmt(s.k_share_in_account1)} − 既出金 K本人 {fmt(s.k_total)} − Kの兄 {fmt(s.k_brother_total)}
+                      </div>
+                    </div>
+
+                    {/* 会社配当 */}
+                    <div className="mb-2">
+                      <div className="flex justify-between items-baseline mb-1">
+                        <span className="text-sm font-semibold">会社配当 (利益の 30%)</span>
+                        <span className="font-mono text-right text-cyan-300 font-bold text-lg">{fmt(s.company_unpaid_in_account1)}</span>
+                      </div>
+                      <div className="text-[11px] text-text-muted font-mono pl-3">
+                        累計取り分 {fmt(s.company_share_in_account1)} − 既出金 {fmt(s.company_total)}
+                      </div>
+                    </div>
+
+                    {/* 合計 */}
+                    <div className="grid grid-cols-2 gap-2 text-sm pt-2 border-t-2 border-cyan-500/30">
+                      <div className="font-bold">未出金合計</div>
+                      <div className="font-mono text-right font-bold text-lg">
                         {fmt(
-                          parseFloat(s.j_share_in_account1 ?? 0) +
-                          parseFloat(s.k_share_in_account1 ?? 0) +
-                          parseFloat(s.company_share_in_account1 ?? 0)
+                          parseFloat(s.j_unpaid_in_account1 ?? 0) +
+                          parseFloat(s.k_unpaid_in_account1 ?? 0) +
+                          parseFloat(s.company_unpaid_in_account1 ?? 0)
                         )}
                       </div>
                     </div>
