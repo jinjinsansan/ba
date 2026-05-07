@@ -186,7 +186,11 @@ SELECT
   COALESCE(exp.k_total, 0) AS k_total,
   COALESCE(exp.k_brother_total, 0) AS k_brother_total,
   COALESCE(exp.company_total, 0) AS company_total,
-  COALESCE(exp.ai_dev_total, 0) AS ai_dev_total
+  COALESCE(exp.ai_dev_total, 0) AS ai_dev_total,
+  -- 1 つめ口座 累計取り分 (= chargeRefund 構成内訳、現状はまだ未出金)
+  COALESCE(a1.j_share_total, 0) AS j_share_in_account1,
+  COALESCE(a1.k_share_total, 0) AS k_share_in_account1,
+  COALESCE(a1.company_share_total, 0) AS company_share_in_account1
 FROM ledger_investors i
 LEFT JOIN ledger_reserve_funds rf ON rf.investor_id = i.id
 LEFT JOIN a1 ON a1.investor_id = i.id

@@ -199,6 +199,30 @@ export default async function AdminLedgerPage() {
                     )}
                   </div>
 
+                  {/* 1つめ口座 J/K/会社 未出金取り分 (= chargeRefund pool の内訳) */}
+                  <div className="rounded-lg p-4 border border-cyan-500/30" style={{ background: 'rgba(6,182,212,0.05)' }}>
+                    <div className="text-xs text-cyan-400 font-semibold tracking-widest mb-3">UNPAID SHARES IN ACCOUNT1 (1つめ口座 未出金取り分)</div>
+                    <div className="text-[10px] text-text-muted mb-2 leading-tight">
+                      ※ 1 つめ口座の chargeRefund pool ({fmt(s.remaining_charge_refund)}) はまだ口座から物理出金していないため、全額が J/K/会社の未出金取り分として残っています
+                    </div>
+                    <div className="grid grid-cols-2 gap-2 text-sm">
+                      <div className="text-text-muted">J 未出金 (利益の20%)</div>
+                      <div className="font-mono text-right text-cyan-300 font-bold">{fmt(s.j_share_in_account1)}</div>
+                      <div className="text-text-muted">K 未出金 (利益の30%)</div>
+                      <div className="font-mono text-right text-cyan-300 font-bold">{fmt(s.k_share_in_account1)}</div>
+                      <div className="text-text-muted">会社配当 未出金 (利益の30%)</div>
+                      <div className="font-mono text-right text-cyan-300 font-bold">{fmt(s.company_share_in_account1)}</div>
+                      <div className="text-text-muted border-t border-text-muted/20 pt-1">合計 (= chargeRefund 残)</div>
+                      <div className="font-mono text-right border-t border-text-muted/20 pt-1 font-bold">
+                        {fmt(
+                          parseFloat(s.j_share_in_account1 ?? 0) +
+                          parseFloat(s.k_share_in_account1 ?? 0) +
+                          parseFloat(s.company_share_in_account1 ?? 0)
+                        )}
+                      </div>
+                    </div>
+                  </div>
+
                   {/* 経費受領 */}
                   <div className="rounded-lg p-4 border border-purple-500/20" style={{ background: 'rgba(168,85,247,0.05)' }}>
                     <div className="text-xs text-purple-400 font-semibold tracking-widest mb-3">EXPENSE RECIPIENTS (経費受取累計)</div>

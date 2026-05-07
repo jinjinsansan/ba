@@ -55,11 +55,11 @@ const expenseEntries: ExpenseWithdrawal[] = [
     sourceLabel: '別+2つめ',
     withdrawFromReserve: 2100,
     withdrawFromAccount2: 5919,
-    jReceived: 1000,
+    jReceived: 2100,
     kReceived: 2000,
     kBrotherReceived: 919,
     companyReceived: 2000,
-    aiDevExpense: 2100,
+    aiDevExpense: 1000,
   },
 ];
 
@@ -92,11 +92,11 @@ const expected: Array<[string, number]> = [
   ['所在合計 (検算)',               12636.00],
   ['2 つめ口座 現在残高',           50000.00],
   ['別チャージ残高',                0.00],
-  ['J 受取累計',                    1000.00],
+  ['J 受取累計',                    2100.00],
   ['K 受取累計',                    2000.00],
   ['Kの兄 受取累計',                919.00],
   ['会社 受取累計',                 2000.00],
-  ['AI開発費等',                    2100.00],
+  ['AI開発費等',                    1000.00],
   ['出金合計 (全配布)',             8019.00],
 ];
 
