@@ -216,7 +216,7 @@ export default async function AdminLedgerPage() {
                   <div className="rounded-lg p-4 border border-cyan-500/30" style={{ background: 'rgba(6,182,212,0.05)' }}>
                     <div className="text-xs text-cyan-400 font-semibold tracking-widest mb-3">UNPAID SHARES IN ACCOUNT1 (1つめ口座のみで計算した未出金取り分)</div>
                     <div className="text-[10px] text-text-muted mb-3 leading-tight">
-                      ※ 計算式: 1 つめ口座 累計取り分 − 既出金分 (経費出金は概念上 1 つめ取り分から差し引く)。AI 開発費 ({fmt(s.ai_dev_total)}) は運用益外例外で除外。
+                      ※ 計算式: 1 つめ口座 累計取り分 − 既出金分。「会社累計」 = K の兄 + 旧会社配当 + AI 開発費 (= 全て会社経費扱い)。
                     </div>
 
                     {/* J */}
@@ -237,18 +237,19 @@ export default async function AdminLedgerPage() {
                         <span className="font-mono text-right text-cyan-300 font-bold text-lg">{fmt(s.k_unpaid_in_account1)}</span>
                       </div>
                       <div className="text-[11px] text-text-muted font-mono pl-3">
-                        累計取り分 {fmt(s.k_share_in_account1)} − 既出金 K本人 {fmt(s.k_total)} − Kの兄 {fmt(s.k_brother_total)}
+                        累計取り分 {fmt(s.k_share_in_account1)} − 既出金 {fmt(s.k_total)}
                       </div>
                     </div>
 
-                    {/* 会社配当 */}
+                    {/* 会社累計 */}
                     <div className="mb-2">
                       <div className="flex justify-between items-baseline mb-1">
-                        <span className="text-sm font-semibold">会社配当 (利益の 30%)</span>
+                        <span className="text-sm font-semibold">会社累計 (利益の 30%)</span>
                         <span className="font-mono text-right text-cyan-300 font-bold text-lg">{fmt(s.company_unpaid_in_account1)}</span>
                       </div>
                       <div className="text-[11px] text-text-muted font-mono pl-3">
-                        累計取り分 {fmt(s.company_share_in_account1)} − 既出金 {fmt(s.company_total)}
+                        累計取り分 {fmt(s.company_share_in_account1)} − 既出金会社累計 {fmt(s.company_total_merged)}
+                        <span className="text-text-dim"> (= K兄 {fmt(s.k_brother_total)} + 旧会社 {fmt(s.company_total)} + AI {fmt(s.ai_dev_total)})</span>
                       </div>
                     </div>
 
@@ -265,7 +266,7 @@ export default async function AdminLedgerPage() {
                     </div>
                   </div>
 
-                  {/* 経費受領 */}
+                  {/* 経費受領 (3 カテゴリに統合表示) */}
                   <div className="rounded-lg p-4 border border-purple-500/20" style={{ background: 'rgba(168,85,247,0.05)' }}>
                     <div className="text-xs text-purple-400 font-semibold tracking-widest mb-3">EXPENSE RECIPIENTS (経費受取累計)</div>
                     <div className="grid grid-cols-2 gap-2 text-sm">
@@ -273,16 +274,28 @@ export default async function AdminLedgerPage() {
                       <div className="font-mono text-right">{fmt(s.j_total)}</div>
                       <div className="text-text-muted">K 受取累計</div>
                       <div className="font-mono text-right">{fmt(s.k_total)}</div>
-                      <div className="text-text-muted">K の兄 受取累計</div>
-                      <div className="font-mono text-right">{fmt(s.k_brother_total)}</div>
-                      <div className="text-text-muted">会社 (配当金) 累計</div>
-                      <div className="font-mono text-right">{fmt(s.company_total)}</div>
-                      <div className="text-text-muted">AI 開発費等</div>
-                      <div className="font-mono text-right">{fmt(s.ai_dev_total)}</div>
+                      <div className="text-text-muted">会社累計</div>
+                      <div className="font-mono text-right font-bold">{fmt(s.company_total_merged)}</div>
                       <div className="text-text-muted border-t border-text-muted/20 pt-1">出金合計</div>
                       <div className="font-mono text-right border-t border-text-muted/20 pt-1 font-bold">
                         {fmt(s.expense_total)}
                       </div>
+                    </div>
+                    <div className="text-[10px] text-text-muted mt-2 pl-1">
+                      ※ 会社累計 = K の兄 ({fmt(s.k_brother_total)}) + 旧会社配当 ({fmt(s.company_total)}) + AI 開発費 ({fmt(s.ai_dev_total)})
+                    </div>
+                    {/* 内訳ページへのリンク */}
+                    <div className="mt-3 pt-3 border-t border-text-muted/15 flex justify-between items-center">
+                      <div className="text-[11px] text-text-muted">
+                        内訳記録: <span className="font-mono">{fmt(s.company_breakdown_total)}</span> / <span className="font-mono">{fmt(s.company_total_merged)}</span>
+                        {Math.abs(parseFloat(s.company_breakdown_remaining ?? 0)) < 0.01
+                          ? <span className="text-emerald-400 ml-2">✓ 一致</span>
+                          : <span className="text-amber-400 ml-2">残 {fmt(s.company_breakdown_remaining)}</span>}
+                      </div>
+                      <Link href={`/admin/ledger/expense-breakdown?investor=${s.investor_id}`}
+                        className="text-xs text-purple-400 hover:text-purple-300 underline">
+                        📒 経費内訳を開く
+                      </Link>
                     </div>
                   </div>
                 </div>
@@ -301,6 +314,10 @@ export default async function AdminLedgerPage() {
                 <Link href={`/admin/ledger/expenses?investor=${s.investor_id}`}
                   className="px-4 py-2 rounded border border-purple-500/30 hover:bg-purple-500/10 text-purple-400">
                   🧾 経費出金台帳
+                </Link>
+                <Link href={`/admin/ledger/expense-breakdown?investor=${s.investor_id}`}
+                  className="px-4 py-2 rounded border border-purple-500/30 hover:bg-purple-500/10 text-purple-400">
+                  📒 経費内訳
                 </Link>
               </div>
             </section>
