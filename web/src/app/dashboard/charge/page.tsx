@@ -8,7 +8,7 @@ import { createClient } from '@/lib/supabase-browser'
 export default function ChargePage() {
   const t = useTranslations('charge')
   const [amount, setAmount] = useState('')
-  const [network, setNetwork] = useState<'TRC-20' | 'ERC-20'>('TRC-20')
+  const network = 'TRC-20' as const
   const [promoCode, setPromoCode] = useState('')
   const [promoMessage, setPromoMessage] = useState('')
   const [promoValid, setPromoValid] = useState(false)
@@ -75,9 +75,9 @@ export default function ChargePage() {
             <p className="text-text-muted mb-8">{t('done.activatedMsg')}</p>
           ) : (
             <>
-              <p className="text-text-muted mb-4">{t('done.sendPrefix')} <span className="text-text font-bold">${finalAmount} USDT</span> ({network}) {t('done.sendSuffix')}</p>
+              <p className="text-text-muted mb-4">{t('done.sendPrefix')} <span className="text-text font-bold">${finalAmount} USDT</span> (TRC-20) {t('done.sendSuffix')}</p>
               <div className="p-4 rounded-xl glass-soft font-mono text-sm text-player break-all mb-4">
-                {network === 'TRC-20' ? (process.env.NEXT_PUBLIC_USDT_TRC20 || t('walletMissing.trc')) : (process.env.NEXT_PUBLIC_USDT_ERC20 || t('walletMissing.erc'))}
+                {process.env.NEXT_PUBLIC_USDT_TRC20 || t('walletMissing.trc')}
               </div>
               <p className="text-text-muted text-sm mb-8">{t('done.confirmMsg')}</p>
             </>
@@ -107,14 +107,9 @@ export default function ChargePage() {
           </div>
 
           <div>
-          <label className="block text-sm text-text-muted mb-2">{t('networkLabel')}</label>
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              {(['TRC-20', 'ERC-20'] as const).map(n => (
-                <button key={n} type="button" onClick={() => setNetwork(n)}
-                  className={`p-3 rounded-xl border text-center transition ${network === n ? 'border-accent/60 bg-accent/10 text-accent' : 'border-accent/15 bg-bg-card hover:border-accent/30 text-text-muted'}`}>
-                  {n}
-                </button>
-              ))}
+            <label className="block text-sm text-text-muted mb-2">{t('networkLabel')}</label>
+            <div className="p-3 rounded-xl border border-accent/60 bg-accent/10 text-accent text-center">
+              TRC-20 (USDT)
             </div>
           </div>
 

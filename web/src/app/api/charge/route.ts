@@ -8,7 +8,7 @@ export async function POST(req: NextRequest) {
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
   const { amount, promoCode, network } = await req.json()
-  if (!network || !['TRC-20', 'ERC-20'].includes(network)) return NextResponse.json({ error: 'Invalid network' }, { status: 400 })
+  if (!network || network !== 'TRC-20') return NextResponse.json({ error: 'Invalid network (TRC-20 only)' }, { status: 400 })
 
   const admin = createAdminClient()
   let chargeAmount = parseFloat(amount) || 0
