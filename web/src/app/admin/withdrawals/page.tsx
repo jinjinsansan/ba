@@ -22,20 +22,6 @@ export default async function AdminWithdrawalsPage() {
 
   return (
     <div className="min-h-screen">
-      <nav className="glass-panel border-b border-accent/20 rounded-none">
-        <div className="max-w-6xl mx-auto px-4 sm:px-6 h-16 flex items-center justify-between">
-          <Link href="/" className="text-sm font-hud tracking-[0.35em] text-accent">LAPLACE</Link>
-          <div className="flex flex-wrap items-center gap-3 text-xs sm:text-sm">
-            <Link href="/admin" className="text-text-muted hover:text-text">管理</Link>
-            <Link href="/admin/orders" className="text-text-muted hover:text-text">注文</Link>
-            <Link href="/admin/users" className="text-text-muted hover:text-text">ユーザー</Link>
-            <Link href="/admin/promos" className="text-text-muted hover:text-text">プロモ</Link>
-            <Link href="/admin/tickets" className="text-text-muted hover:text-text">チケット</Link>
-            <Link href="/admin/withdrawals" className="text-text font-semibold">出金申請</Link>
-            <Link href="/admin/ledger" className="text-emerald-400 hover:text-emerald-300">📊 資金管理</Link>
-          </div>
-        </div>
-      </nav>
 
       <div className="max-w-6xl mx-auto px-4 sm:px-6 py-8 sm:py-10">
         <div className="hud-label mb-2">Admin Console</div>
