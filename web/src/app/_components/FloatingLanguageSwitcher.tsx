@@ -6,15 +6,17 @@ import { LanguageSwitcher } from './LanguageSwitcher'
 /**
  * 画面右上に固定表示する言語切替。
  * - /admin 配下では非表示 (admin は日本語固定方針)
- * - ランディング (/) ではヘッダー nav 内にも LanguageSwitcher を出しているが、
- *   重複を避けるため / では非表示にする
+ * - /me 配下では非表示 (AppShell の右上ハンバーガーと被るため、メンバー画面は
+ *   日本語固定運用)
+ * - ランディング (= サインインフォーム /) も非表示 (LoginForm に重ねない)
  */
 export function FloatingLanguageSwitcher() {
   const pathname = usePathname()
 
   const hidden =
     pathname === '/' ||
-    pathname.startsWith('/admin')
+    pathname.startsWith('/admin') ||
+    pathname.startsWith('/me')
 
   if (hidden) return null
 

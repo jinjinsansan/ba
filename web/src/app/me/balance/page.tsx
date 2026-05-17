@@ -22,16 +22,40 @@ export default async function BalancePage() {
           <div className="hud-label mb-2">Balance</div>
           <h1 className="text-2xl sm:text-3xl font-hud">残高・チャージ</h1>
         </div>
-        <Link href="/dashboard/charge" className="btn-primary px-5 py-2.5 text-sm">今すぐ資金追加</Link>
+        {billing?.is_free ? (
+          <button
+            type="button"
+            disabled
+            className="px-5 py-2.5 text-sm rounded-lg bg-bg-glass text-text-dim border border-accent/10 cursor-not-allowed opacity-60"
+            title="管理者から課金免除を受けているためチャージ不要です"
+          >
+            資金追加 (免除済)
+          </button>
+        ) : (
+          <Link href="/dashboard/charge" className="btn-primary px-5 py-2.5 text-sm">今すぐ資金追加</Link>
+        )}
       </div>
+
+      {/* Free notice */}
+      {billing?.is_free && (
+        <div className="p-4 rounded-2xl border border-accent/30 bg-accent/5">
+          <div className="text-sm font-bold text-accent mb-1">課金免除プラン適用中</div>
+          <div className="text-xs text-text-muted leading-relaxed">
+            管理者から課金免除を受けているため、ライセンス料・日次手数料・チャージはすべて不要です。
+            残高数値は内部表示で、実際の課金には使用されません。
+          </div>
+        </div>
+      )}
 
       {/* Current balances */}
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
         <div className="p-4 rounded-xl glass-card">
           <div className="text-[10px] tracking-widest text-text-dim uppercase">Current Balance</div>
-          <div className="text-2xl font-bold text-text mt-1">
-            {billing?.is_free ? '— FREE' : `$${Number(billing?.balance || 0).toFixed(2)}`}
-          </div>
+          {billing?.is_free ? (
+            <div className="text-xl font-bold text-accent mt-1">課金免除</div>
+          ) : (
+            <div className="text-2xl font-bold text-text mt-1">${Number(billing?.balance || 0).toFixed(2)}</div>
+          )}
         </div>
         <div className="p-4 rounded-xl glass-card">
           <div className="text-[10px] tracking-widest text-text-dim uppercase">Total Charged</div>

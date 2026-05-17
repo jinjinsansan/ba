@@ -26,7 +26,6 @@ const USER_MENU: MenuItem[] = [
   { href: '/me/settlements', label: '日次精算履歴', icon: '☰' },
   { href: '/me/telegram', label: 'Telegram 連携', icon: '✦' },
   { href: '/me/referral', label: '紹介プログラム', icon: '✚' },
-  { href: '/me/download', label: 'ダウンロード', icon: '⤓' },
   { href: '/me/support', label: 'サポート', icon: '?' },
 ]
 
