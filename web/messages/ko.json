@@ -13,7 +13,7 @@
     "titleLine2": "엣지는",
     "titleLine3": "여기에",
     "titleLine4": "있다.",
-    "tagline": "패턴 인식. 자동 실행. 정밀한 리스크 제어. LAPLACE는 규율과 확률이 만나는 곳에서 작동합니다.",
+    "tagline": "패턴 인식. 자동 실행. 정밀한 리스크 제어. Bafather는 규율과 확률이 만나는 곳에서 작동합니다.",
     "cta": "이용 시작",
     "how": "작동 방식",
     "stats": {
@@ -39,7 +39,7 @@
     "hudLabel": "이용",
     "titleLine1": "라이선스 1회.",
     "titleLine2": "구독 없음.",
-    "licenseLabel": "LAPLACE 라이선스",
+    "licenseLabel": "Bafather 라이선스",
     "priceNote": "USDT · 일회성 · 최초 충전에서 차감",
     "features": [
       "예측 엔진 풀 액세스",
@@ -57,7 +57,7 @@
     "titleLine2": "그 후는 완전 자동.",
     "steps": [
       { "title": "결제", "desc": "USDT로 라이선스 구매. TRC-20 또는 ERC-20. 30분 이내 확인." },
-      { "title": "다운로드", "desc": "전용 LAPLACE.exe 수령. 라이선스 키에 연결됨." },
+      { "title": "다운로드", "desc": "전용 Bafather.exe 수령. 라이선스 키에 연결됨." },
       { "title": "연결", "desc": "내장 브라우저에서 Stake에 한 번 로그인. 인증 정보는 로컬에만 저장." },
       { "title": "실행", "desc": "START 누르기만 하면 시스템이 자율 작동. 추가 입력 불필요." }
     ]
@@ -89,11 +89,11 @@
     "zh": "中文"
   },
   "auth": {
-    "accessLabel": "LAPLACE ACCESS",
+    "accessLabel": "Bafather ACCESS",
     "loading": "로드 중...",
     "login": {
       "title": "돌아오신 것을 환영합니다",
-      "subtitle": "LAPLACE 대시보드에 로그인",
+      "subtitle": "Bafather 대시보드에 로그인",
       "email": "이메일",
       "password": "비밀번호",
       "emailPlaceholder": "you@example.com",
@@ -105,7 +105,7 @@
     },
     "signup": {
       "title": "계정 생성",
-      "subtitle": "LAPLACE에 가입하고 승리를 시작하세요",
+      "subtitle": "Bafather에 가입하고 승리를 시작하세요",
       "confirmSent": "이메일에서 확인 링크를 눌러주세요.",
       "email": "이메일",
       "password": "비밀번호",
@@ -144,7 +144,7 @@
     },
     "download": {
       "title": "소프트웨어 다운로드",
-      "button": "LAPLACE v{version} 다운로드",
+      "button": "Bafather v{version} 다운로드",
       "updated": "업데이트:",
       "directUrl": "직접 URL:",
       "preparing": "다운로드 준비 중...",
@@ -211,8 +211,8 @@
   "purchase": {
     "hudLabel": "라이선스 액세스",
     "title": "라이선스 구매",
-    "subtitle": "LAPLACE AI 엔진의 모든 기능 이용",
-    "licenseName": "LAPLACE 라이선스",
+    "subtitle": "Bafather AI 엔진의 모든 기능 이용",
+    "licenseName": "Bafather 라이선스",
     "features": [
       "AI 예측 엔진 풀 액세스",
       "베팅 자동 실행",
@@ -301,7 +301,7 @@
     "minHint": "최소 출금 금액은 $10 입니다. 보상을 쌓아 임계값에 도달하세요."
   },
   "report": {
-    "title": "LAPLACE 리포트",
+    "title": "Bafather 리포트",
     "accessLabel": "REPORT ACCESS",
     "passwordPlaceholder": "비밀번호",
     "enter": "ENTER",

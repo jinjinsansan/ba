@@ -13,7 +13,7 @@
     "titleLine2": "エッジは",
     "titleLine3": "ここに",
     "titleLine4": "ある。",
-    "tagline": "パターン認識。自動執行。精密なリスク制御。LAPLACE は、規律と確率が交わる場所で稼働します。",
+    "tagline": "パターン認識。自動執行。精密なリスク制御。Bafather は、規律と確率が交わる場所で稼働します。",
     "cta": "利用を開始",
     "how": "仕組みを見る",
     "stats": {
@@ -39,7 +39,7 @@
     "hudLabel": "利用",
     "titleLine1": "ライセンス一括。",
     "titleLine2": "サブスクなし。",
-    "licenseLabel": "LAPLACE ライセンス",
+    "licenseLabel": "Bafather ライセンス",
     "priceNote": "USDT · 一括払い · 初回チャージから差引",
     "features": [
       "予測エンジン フル アクセス",
@@ -57,7 +57,7 @@
     "titleLine2": "あとは全自動。",
     "steps": [
       { "title": "支払い", "desc": "USDT でライセンスを購入。TRC-20 または ERC-20。30 分以内に確認完了。" },
-      { "title": "ダウンロード", "desc": "お客様専用の LAPLACE.exe を受け取り。ライセンスキーに紐付き。" },
+      { "title": "ダウンロード", "desc": "お客様専用の Bafather.exe を受け取り。ライセンスキーに紐付き。" },
       { "title": "接続", "desc": "内蔵ブラウザで Stake に一度ログイン。認証情報は端末内に留まります。" },
       { "title": "稼働", "desc": "START ボタンを押すだけ。以降はシステムが自律稼働。追加操作不要。" }
     ]
@@ -89,11 +89,11 @@
     "zh": "中文"
   },
   "auth": {
-    "accessLabel": "LAPLACE ACCESS",
+    "accessLabel": "Bafather ACCESS",
     "loading": "読み込み中...",
     "login": {
       "title": "おかえりなさい",
-      "subtitle": "LAPLACE ダッシュボードにログイン",
+      "subtitle": "Bafather ダッシュボードにログイン",
       "email": "メールアドレス",
       "password": "パスワード",
       "emailPlaceholder": "you@example.com",
@@ -105,7 +105,7 @@
     },
     "signup": {
       "title": "アカウント作成",
-      "subtitle": "LAPLACE に参加して勝利を手に",
+      "subtitle": "Bafather に参加して勝利を手に",
       "confirmSent": "メールを確認し、確認リンクをクリックしてください。",
       "email": "メールアドレス",
       "password": "パスワード",
@@ -144,7 +144,7 @@
     },
     "download": {
       "title": "ソフトウェア ダウンロード",
-      "button": "LAPLACE v{version} をダウンロード",
+      "button": "Bafather v{version} をダウンロード",
       "updated": "更新日:",
       "directUrl": "直接 URL:",
       "preparing": "ダウンロードを準備中です...",
@@ -211,8 +211,8 @@
   "purchase": {
     "hudLabel": "ライセンス アクセス",
     "title": "ライセンス購入",
-    "subtitle": "LAPLACE AI エンジンの全機能を入手",
-    "licenseName": "LAPLACE ライセンス",
+    "subtitle": "Bafather AI エンジンの全機能を入手",
+    "licenseName": "Bafather ライセンス",
     "features": [
       "AI 予測エンジン フル アクセス",
       "BET 自動執行",
@@ -301,7 +301,7 @@
     "minHint": "最小出金額は $10 です。報酬を積み上げて閾値に到達してください。"
   },
   "report": {
-    "title": "LAPLACE レポート",
+    "title": "Bafather レポート",
     "accessLabel": "REPORT ACCESS",
     "passwordPlaceholder": "パスワード",
     "enter": "ENTER",

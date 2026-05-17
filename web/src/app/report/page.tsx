@@ -87,7 +87,7 @@ export default function ReportPage() {
           padding: '32px 24px', width: 'min(90vw, 360px)', textAlign: 'center',
         }}>
           <div style={{ color: 'var(--accent)', fontSize: 'clamp(20px, 4vw, 24px)', fontWeight: 900, letterSpacing: '4px', marginBottom: '8px' }}>
-            LAPLACE
+            Bafather
           </div>
           <div style={{ color: 'var(--text-dim)', fontSize: '11px', letterSpacing: '2px', marginBottom: '24px' }}>
             {t('accessLabel')}

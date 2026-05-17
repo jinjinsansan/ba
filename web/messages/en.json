@@ -13,7 +13,7 @@
     "titleLine2": "EDGE",
     "titleLine3": "IS",
     "titleLine4": "REAL.",
-    "tagline": "Pattern recognition. Automated execution. Surgical risk control. LAPLACE operates where discipline meets probability.",
+    "tagline": "Pattern recognition. Automated execution. Surgical risk control. Bafather operates where discipline meets probability.",
     "cta": "GET ACCESS",
     "how": "How it works",
     "stats": {
@@ -39,7 +39,7 @@
     "hudLabel": "Access",
     "titleLine1": "One license.",
     "titleLine2": "No subscription.",
-    "licenseLabel": "LAPLACE License",
+    "licenseLabel": "Bafather License",
     "priceNote": "USDT · One-time · Deducted from first charge",
     "features": [
       "Full prediction engine access",
@@ -57,7 +57,7 @@
     "titleLine2": "Then nothing.",
     "steps": [
       { "title": "Pay", "desc": "Purchase license with USDT. TRC-20 or ERC-20. Confirmed within 30 minutes." },
-      { "title": "Download", "desc": "Receive your personalized LAPLACE.exe. Bound to your license key." },
+      { "title": "Download", "desc": "Receive your personalized Bafather.exe. Bound to your license key." },
       { "title": "Connect", "desc": "Sign into Stake once inside the built-in browser. Credentials stay local." },
       { "title": "Run", "desc": "Press START. The system operates autonomously. No further input required." }
     ]
@@ -89,11 +89,11 @@
     "zh": "中文"
   },
   "auth": {
-    "accessLabel": "LAPLACE ACCESS",
+    "accessLabel": "Bafather ACCESS",
     "loading": "Loading...",
     "login": {
       "title": "Welcome Back",
-      "subtitle": "Login to your LAPLACE dashboard",
+      "subtitle": "Login to your Bafather dashboard",
       "email": "Email",
       "password": "Password",
       "emailPlaceholder": "you@example.com",
@@ -105,7 +105,7 @@
     },
     "signup": {
       "title": "Create Account",
-      "subtitle": "Join LAPLACE and start winning",
+      "subtitle": "Join Bafather and start winning",
       "confirmSent": "Check your email for a confirmation link.",
       "email": "Email",
       "password": "Password",
@@ -144,7 +144,7 @@
     },
     "download": {
       "title": "Software Download",
-      "button": "Download LAPLACE v{version}",
+      "button": "Download Bafather v{version}",
       "updated": "Updated:",
       "directUrl": "Direct URL:",
       "preparing": "Your download is being prepared...",
@@ -211,8 +211,8 @@
   "purchase": {
     "hudLabel": "License Access",
     "title": "Purchase License",
-    "subtitle": "Get full access to LAPLACE AI Engine",
-    "licenseName": "LAPLACE License",
+    "subtitle": "Get full access to Bafather AI Engine",
+    "licenseName": "Bafather License",
     "features": [
       "Full AI prediction engine",
       "Automated bet execution",
@@ -301,7 +301,7 @@
     "minHint": "Minimum withdrawal is $10. Keep earning to reach the threshold."
   },
   "report": {
-    "title": "LAPLACE Report",
+    "title": "Bafather Report",
     "accessLabel": "REPORT ACCESS",
     "passwordPlaceholder": "Password",
     "enter": "ENTER",

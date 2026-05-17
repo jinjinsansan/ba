@@ -132,7 +132,7 @@ function PurchaseForm() {
         <div className="p-5 sm:p-6 rounded-xl glass-soft mb-8">
           <div className="flex justify-between items-center mb-2">
             <span className="text-text-muted">{t('summary.license')}</span>
-            <span className="font-bold text-text">LAPLACE</span>
+            <span className="font-bold text-text">Bafather</span>
           </div>
           <div className="flex justify-between items-center mb-2">
             <span className="text-text-muted">{t('summary.network')}</span>

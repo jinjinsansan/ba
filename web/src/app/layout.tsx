@@ -5,7 +5,7 @@ import { FloatingLanguageSwitcher } from './_components/FloatingLanguageSwitcher
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "LAPLACE - AI Baccarat Prediction Engine",
+  title: "Bafather - AI Baccarat Prediction Engine",
   description: "AI-powered baccarat prediction with automated bet execution",
 };
 
