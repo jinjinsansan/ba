@@ -2,6 +2,11 @@ import { createAdminClient } from '@/lib/supabase-admin'
 import { revalidatePath } from 'next/cache'
 import Link from 'next/link'
 import { notFound } from 'next/navigation'
+import { Card, CardHead } from '@/components/ui/Card'
+import { PageHeader, Label } from '@/components/ui/PageHeader'
+import { Pill } from '@/components/ui/Pill'
+import { Money } from '@/components/ui/Money'
+import { Button } from '@/components/ui/Button'
 import RealtimePnlCard from '../../../dashboard/RealtimePnlCard'
 
 export const dynamic = 'force-dynamic'
@@ -36,7 +41,6 @@ export default async function AdminUserDetailPage({ params }: { params: Promise<
 
   if (!profile) notFound()
 
-  // この user を紹介した人 (referrer) を referred_by コードから lookup
   const referredByCode = String(profile.referred_by || '').trim()
   const { data: referrer } = referredByCode
     ? await admin.from('profiles').select('id, email, referral_code').eq('referral_code', referredByCode).maybeSingle()
@@ -126,145 +130,149 @@ export default async function AdminUserDetailPage({ params }: { params: Promise<
   }
 
   return (
-    <div className="space-y-6">
-      {/* Header */}
-      <div className="flex items-start justify-between flex-wrap gap-3">
-        <div>
-          <Link href="/admin/users" className="text-xs text-text-muted hover:text-text">← ユーザー一覧</Link>
-          <h1 className="text-2xl sm:text-3xl font-hud mt-2 break-all">{profile.email}</h1>
-          <div className="flex gap-2 mt-3 flex-wrap">
-            {profile.is_admin && <span className="text-[10px] bg-yellow-500/20 text-yellow-400 px-2 py-0.5 rounded uppercase tracking-widest">Admin</span>}
-            {billing?.is_free && <span className="text-[10px] bg-accent/20 text-accent px-2 py-0.5 rounded uppercase tracking-widest">Free</span>}
-            {billing?.suspended && <span className="text-[10px] bg-banker/20 text-banker px-2 py-0.5 rounded uppercase tracking-widest">Locked</span>}
-            {!billing?.suspended && !billing?.is_free && <span className="text-[10px] bg-green-500/20 text-green-400 px-2 py-0.5 rounded uppercase tracking-widest">Active</span>}
-          </div>
-        </div>
-        <div className="text-right text-xs text-text-dim">
-          <div>登録: {new Date(profile.created_at).toLocaleString('ja-JP')}</div>
-          <div>ID: {profile.id.slice(0, 8)}...</div>
-          {profile.referral_code && <div>紹介コード: {profile.referral_code}</div>}
-        </div>
+    <div>
+      <div className="mb-4">
+        <Link href="/admin/users" className="font-mono text-[11px] text-text-dim hover:text-cyan tracking-[0.15em] uppercase">← Users 一覧へ</Link>
       </div>
 
-      {/* 概要 (Stats) */}
-      <section className="p-5 rounded-2xl glass-card">
-        <h2 className="text-lg font-bold mb-3">概要</h2>
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-          <div className="p-3 rounded-lg bg-bg-glass border border-accent/10">
-            <div className="text-[10px] tracking-widest text-text-dim uppercase">Balance</div>
-            <div className="text-xl font-bold text-text mt-1">${Number(billing?.balance || 0).toFixed(2)}</div>
+      <PageHeader
+        kicker="Admin · User Detail"
+        title={profile.email}
+        sub={`ID: ${profile.id.slice(0, 8)}... / 登録: ${new Date(profile.created_at).toLocaleString('ja-JP')}${profile.referral_code ? ` / コード: ${profile.referral_code}` : ''}`}
+        right={
+          <div className="flex gap-1 flex-wrap">
+            {profile.is_admin && <Pill tone="admin">ADMIN</Pill>}
+            {billing?.is_free && <Pill tone="free">FREE</Pill>}
+            {billing?.suspended && <Pill tone="danger">SUSPENDED</Pill>}
+            {!billing?.suspended && !billing?.is_free && <Pill tone="live">ACTIVE</Pill>}
           </div>
-          <div className="p-3 rounded-lg bg-bg-glass border border-accent/10">
-            <div className="text-[10px] tracking-widest text-text-dim uppercase">Profit Share</div>
-            <div className="text-xl font-bold text-text mt-1">{billing ? `${(Number(billing.profit_share_rate) * 100).toFixed(0)}%` : '—'}</div>
+        }
+      />
+
+      {/* 概要 */}
+      <Card padded={false} className="mb-4">
+        <CardHead>概要</CardHead>
+        <div className="grid grid-cols-2 sm:grid-cols-4 px-5 py-5">
+          <div>
+            <Label>Balance</Label>
+            <div className="mt-1.5">
+              {billing?.is_free
+                ? <span className="text-xl font-semibold text-cyan">課金免除</span>
+                : <Money value={Number(billing?.balance ?? 0)} size="xl" weight="bold" />}
+            </div>
           </div>
-          <div className="p-3 rounded-lg bg-bg-glass border border-accent/10">
-            <div className="text-[10px] tracking-widest text-text-dim uppercase">Total Charged</div>
-            <div className="text-xl font-bold text-text mt-1">${Number(billing?.total_charged || 0).toFixed(2)}</div>
+          <div className="sm:pl-4 sm:border-l border-white/[0.07]">
+            <Label>Profit Share</Label>
+            <div className="mt-1.5 text-xl font-semibold text-text font-mono">{billing ? `${(Number(billing.profit_share_rate) * 100).toFixed(0)}%` : '—'}</div>
           </div>
-          <div className="p-3 rounded-lg bg-bg-glass border border-accent/10">
-            <div className="text-[10px] tracking-widest text-text-dim uppercase">Carry Loss</div>
-            <div className="text-xl font-bold text-banker mt-1">${Number(billing?.carry_loss || 0).toFixed(2)}</div>
+          <div className="sm:pl-4 sm:border-l border-white/[0.07]">
+            <Label>Total Charged</Label>
+            <div className="mt-1.5"><Money value={Number(billing?.total_charged ?? 0)} size="xl" weight="semibold" /></div>
+          </div>
+          <div className="sm:pl-4 sm:border-l border-white/[0.07]">
+            <Label>Carry Loss</Label>
+            <div className="mt-1.5"><Money value={Number(billing?.carry_loss ?? 0)} size="xl" weight="semibold" tone={Number(billing?.carry_loss ?? 0) > 0 ? 'lose' : 'muted'} /></div>
           </div>
         </div>
-      </section>
+      </Card>
 
       {/* Billing 操作 */}
-      <section className="p-5 rounded-2xl glass-card">
-        <h2 className="text-lg font-bold mb-3">Billing 操作</h2>
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+      <Card padded={false} className="mb-4">
+        <CardHead>Billing 操作</CardHead>
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 px-5 py-5">
           <form action={updateBalance} className="space-y-2">
-            <label className="block text-xs text-text-muted">残高を手動設定 ($)</label>
+            <Label>残高を手動設定 ($)</Label>
             <div className="flex gap-2">
-              <input name="balance" type="number" step="0.01" defaultValue={Number(billing?.balance || 0).toFixed(2)} className="flex-1 px-3 py-2 rounded bg-bg-glass border border-accent/15 text-text text-sm" />
-              <button type="submit" className="btn-outline px-4 py-2 text-xs">更新</button>
+              <input name="balance" type="number" step="0.01" defaultValue={Number(billing?.balance || 0).toFixed(2)} className="flex-1 px-3 py-2 rounded bg-white/[0.02] border border-white/[0.07] text-text text-sm font-mono" />
+              <Button tone="outline" size="md" type="submit">更新</Button>
             </div>
           </form>
 
           <form action={updateProfitShareRate} className="space-y-2">
-            <label className="block text-xs text-text-muted">分配率 (%)</label>
+            <Label>分配率 (%)</Label>
             <div className="flex gap-2">
-              <input name="rate" type="number" min="0" max="100" defaultValue={billing ? (Number(billing.profit_share_rate) * 100).toFixed(0) : '20'} className="flex-1 px-3 py-2 rounded bg-bg-glass border border-accent/15 text-text text-sm" />
-              <button type="submit" className="btn-outline px-4 py-2 text-xs">更新</button>
+              <input name="rate" type="number" min="0" max="100" defaultValue={billing ? (Number(billing.profit_share_rate) * 100).toFixed(0) : '20'} className="flex-1 px-3 py-2 rounded bg-white/[0.02] border border-white/[0.07] text-text text-sm font-mono" />
+              <Button tone="outline" size="md" type="submit">更新</Button>
             </div>
           </form>
 
           <form action={toggleSuspended}>
-            <button type="submit" className={`w-full py-2 rounded text-sm ${billing?.suspended ? 'bg-green-500/15 text-green-400 border border-green-500/30 hover:border-green-500/60' : 'bg-banker/15 text-banker border border-banker/30 hover:border-banker/60'} transition`}>
+            <Button tone={billing?.suspended ? 'success' : 'danger'} size="md" type="submit" className="w-full">
               {billing?.suspended ? 'サスペンド解除' : 'サスペンドする'}
-            </button>
+            </Button>
           </form>
 
           <form action={toggleFree}>
-            <button type="submit" className={`w-full py-2 rounded text-sm ${billing?.is_free ? 'bg-text-muted/15 text-text-muted border border-text-muted/30' : 'bg-accent/15 text-accent border border-accent/30 hover:border-accent/60'} transition`}>
+            <Button tone={billing?.is_free ? 'secondary' : 'outline'} size="md" type="submit" className="w-full">
               {billing?.is_free ? 'FREE モードを解除' : 'FREE モードにする'}
-            </button>
+            </Button>
           </form>
         </div>
-      </section>
+      </Card>
 
-      {/* Realtime session_state */}
-      <section className="p-5 rounded-2xl glass-card">
-        <h2 className="text-lg font-bold mb-3">ライブ運用状況 (session_state)</h2>
-        <RealtimePnlCard initial={sessionState} />
-      </section>
-
-      {/* Bot Config */}
-      <section className="p-5 rounded-2xl glass-card">
-        <div className="flex items-center justify-between mb-3 flex-wrap gap-2">
-          <h2 className="text-lg font-bold">Bot Config / Telegram</h2>
-          {!!botConfig.customer_telegram_chat_id && (
-            <form action={unlinkTelegram}>
-              <button type="submit" className="btn-outline text-xs px-3 py-1">Telegram 連携を解除</button>
-            </form>
-          )}
+      {/* Realtime */}
+      <Card padded={false} className="mb-4">
+        <CardHead>ライブ運用状況 (session_state)</CardHead>
+        <div className="px-5 py-5">
+          <RealtimePnlCard initial={sessionState} />
         </div>
-        <div className="text-xs space-y-2">
-          <div>
-            <span className="text-text-dim">Telegram 連携: </span>
-            <span className={botConfig.customer_telegram_chat_id ? 'text-green-400' : 'text-text-muted'}>
-              {botConfig.customer_telegram_chat_id ? `✓ ${botConfig.customer_telegram_username ? '@' + String(botConfig.customer_telegram_username) : 'linked'}` : '未連携'}
-            </span>
+      </Card>
+
+      {/* Bot Config / Telegram */}
+      <Card padded={false} className="mb-4">
+        <CardHead right={!!botConfig.customer_telegram_chat_id ? (
+          <form action={unlinkTelegram}><Button tone="danger" size="sm" type="submit">解除</Button></form>
+        ) : undefined}>
+          Bot Config / Telegram
+        </CardHead>
+        <div className="px-5 py-5 text-sm space-y-3">
+          <div className="flex items-center gap-2">
+            <Label>Telegram 連携</Label>
+            {botConfig.customer_telegram_chat_id
+              ? <Pill tone="live" dot>連携済み{botConfig.customer_telegram_username ? ` (@${String(botConfig.customer_telegram_username)})` : ''}</Pill>
+              : <Pill tone="info">未連携</Pill>}
           </div>
-          {!!botConfig.customer_telegram_linked_at && String(botConfig.customer_telegram_linked_at).length > 0 && (
-            <div><span className="text-text-dim">連携日時: </span>{new Date(String(botConfig.customer_telegram_linked_at)).toLocaleString('ja-JP')}</div>
+          {!!botConfig.customer_telegram_linked_at && (
+            <div className="text-xs text-text-muted">連携日時: {new Date(String(botConfig.customer_telegram_linked_at)).toLocaleString('ja-JP')}</div>
           )}
           <details className="mt-3">
-            <summary className="text-text-muted cursor-pointer">bot_config JSON 全体 (debug)</summary>
-            <pre className="mt-2 p-3 rounded bg-bg-glass border border-accent/10 text-[10px] overflow-x-auto">{JSON.stringify(botConfig, null, 2)}</pre>
+            <summary className="text-xs text-text-muted cursor-pointer hover:text-text">bot_config JSON 全体 (debug)</summary>
+            <pre className="mt-2 p-3 rounded bg-white/[0.02] border border-white/[0.07] text-[10px] overflow-x-auto font-mono">{JSON.stringify(botConfig, null, 2)}</pre>
           </details>
         </div>
-      </section>
+      </Card>
 
-      {/* チャージ履歴 + 承認 */}
-      <section className="p-5 rounded-2xl glass-card">
-        <h2 className="text-lg font-bold mb-3">チャージ履歴 ({(charges || []).length})</h2>
+      {/* チャージ履歴 */}
+      <Card padded={false} className="mb-4">
+        <CardHead>チャージ履歴 ({(charges || []).length})</CardHead>
         {charges?.length ? (
           <div className="overflow-x-auto">
             <table className="min-w-[640px] w-full text-sm">
               <thead>
-                <tr className="text-text-muted text-left border-b border-accent/10">
-                  <th className="pb-2">日付</th><th className="pb-2">金額</th><th className="pb-2">ステータス</th><th className="pb-2">操作</th>
+                <tr className="border-b border-white/[0.07]">
+                  {[['日付','left'],['金額','right'],['ステータス','left'],['操作','left']].map(([h,a],i) => (
+                    <th key={i} className={['px-5 py-3 font-mono text-[10px] text-text-dim tracking-[0.15em] uppercase font-normal', a === 'right' ? 'text-right' : 'text-left'].join(' ')}>{h}</th>
+                  ))}
                 </tr>
               </thead>
               <tbody>
-                {charges.map(c => (
-                  <tr key={c.id} className="border-b border-white/5">
-                    <td className="py-2">{new Date(c.created_at).toLocaleDateString('ja-JP')}</td>
-                    <td className="py-2 font-bold">${Number(c.amount).toLocaleString()}</td>
-                    <td className="py-2">
-                      <span className={`px-2 py-0.5 rounded text-xs ${c.status === 'confirmed' ? 'bg-green-500/20 text-green-400' : c.status === 'rejected' ? 'bg-banker/20 text-banker' : 'bg-yellow-500/20 text-yellow-400'}`}>{c.status}</span>
+                {charges.map((c, idx) => (
+                  <tr key={c.id} className={idx ? 'border-t border-white/[0.07]' : ''}>
+                    <td className="px-5 py-3 font-mono text-xs text-text-muted">{new Date(c.created_at).toLocaleDateString('ja-JP')}</td>
+                    <td className="px-5 py-3 text-right"><Money value={Number(c.amount)} size="md" weight="bold" /></td>
+                    <td className="px-5 py-3">
+                      <Pill tone={c.status === 'confirmed' ? 'live' : c.status === 'rejected' ? 'danger' : 'warn'}>{c.status}</Pill>
                     </td>
-                    <td className="py-2">
+                    <td className="px-5 py-3">
                       {c.status === 'pending' && (
                         <div className="flex gap-1">
                           <form action={approveCharge}>
                             <input type="hidden" name="chargeId" value={c.id} />
-                            <button className="text-xs bg-green-500/15 text-green-400 hover:bg-green-500/25 px-2 py-1 rounded">承認</button>
+                            <Button tone="success" size="sm" type="submit">承認</Button>
                           </form>
                           <form action={rejectCharge}>
                             <input type="hidden" name="chargeId" value={c.id} />
-                            <button className="text-xs bg-banker/15 text-banker hover:bg-banker/25 px-2 py-1 rounded">却下</button>
+                            <Button tone="danger" size="sm" type="submit">却下</Button>
                           </form>
                         </div>
                       )}
@@ -274,18 +282,20 @@ export default async function AdminUserDetailPage({ params }: { params: Promise<
               </tbody>
             </table>
           </div>
-        ) : <p className="text-text-muted text-sm">なし</p>}
-      </section>
+        ) : <div className="px-5 py-6 text-text-muted text-sm">なし</div>}
+      </Card>
 
-      {/* 日次精算 (invoices) */}
-      <section className="p-5 rounded-2xl glass-card">
-        <h2 className="text-lg font-bold mb-3">日次精算履歴 (直近 30 件)</h2>
+      {/* 日次精算 */}
+      <Card padded={false} className="mb-4">
+        <CardHead>日次精算履歴 (直近 30 件)</CardHead>
         {(invoices?.length || deductions?.length) ? (
           <div className="overflow-x-auto">
             <table className="min-w-[760px] w-full text-sm">
               <thead>
-                <tr className="text-text-muted text-left border-b border-accent/10">
-                  <th className="pb-2">日付</th><th className="pb-2">PnL</th><th className="pb-2">Net</th><th className="pb-2">手数料</th><th className="pb-2">未払い</th><th className="pb-2">Status</th>
+                <tr className="border-b border-white/[0.07]">
+                  {[['日付','left'],['PnL','right'],['Net','right'],['手数料','right'],['未払い','right'],['Status','left']].map(([h,a],i) => (
+                    <th key={i} className={['px-5 py-3 font-mono text-[10px] text-text-dim tracking-[0.15em] uppercase font-normal', a === 'right' ? 'text-right' : 'text-left'].join(' ')}>{h}</th>
+                  ))}
                 </tr>
               </thead>
               <tbody>
@@ -297,127 +307,127 @@ export default async function AdminUserDetailPage({ params }: { params: Promise<
                   const out = Number(row.outstanding_amount || 0)
                   const st = String(row.status || (out > 0 ? 'unpaid' : 'paid'))
                   return (
-                    <tr key={`${row.id || idx}-${date}`} className="border-b border-white/5">
-                      <td className="py-2">{date}</td>
-                      <td className={`py-2 font-bold ${dp >= 0 ? 'text-green-400' : 'text-banker'}`}>{dp >= 0 ? '+' : ''}${dp.toFixed(2)}</td>
-                      <td className={`py-2 ${np >= 0 ? 'text-text' : 'text-banker'}`}>{np >= 0 ? '+' : ''}${np.toFixed(2)}</td>
-                      <td className="py-2 text-accent">${fee.toFixed(2)}</td>
-                      <td className={`py-2 ${out > 0 ? 'text-yellow-400' : 'text-text-muted'}`}>${out.toFixed(2)}</td>
-                      <td className="py-2"><span className={`px-2 py-0.5 rounded text-xs ${st === 'unpaid' ? 'bg-yellow-500/20 text-yellow-400' : st === 'paid' ? 'bg-green-500/20 text-green-400' : 'bg-slate-500/20 text-slate-300'}`}>{st}</span></td>
+                    <tr key={`${row.id || idx}-${date}`} className={idx ? 'border-t border-white/[0.07]' : ''}>
+                      <td className="px-5 py-3 font-mono text-xs text-text-muted">{date}</td>
+                      <td className="px-5 py-3 text-right"><Money value={dp} sign size="md" weight="semibold" tone={dp >= 0 ? 'win' : 'lose'} /></td>
+                      <td className="px-5 py-3 text-right"><Money value={np} sign size="md" weight="medium" tone={np >= 0 ? undefined : 'lose'} /></td>
+                      <td className="px-5 py-3 text-right"><Money value={fee} size="md" weight="medium" tone="cyan" /></td>
+                      <td className="px-5 py-3 text-right"><Money value={out} size="md" weight="medium" tone={out > 0 ? 'warn' : 'muted'} /></td>
+                      <td className="px-5 py-3"><Pill tone={st === 'unpaid' ? 'warn' : st === 'paid' ? 'live' : 'paid'}>{st}</Pill></td>
                     </tr>
                   )
                 })}
               </tbody>
             </table>
           </div>
-        ) : <p className="text-text-muted text-sm">なし</p>}
-      </section>
+        ) : <div className="px-5 py-6 text-text-muted text-sm">なし</div>}
+      </Card>
 
       {/* 注文履歴 */}
-      <section className="p-5 rounded-2xl glass-card">
-        <h2 className="text-lg font-bold mb-3">注文履歴 ({(orders || []).length})</h2>
+      <Card padded={false} className="mb-4">
+        <CardHead>注文履歴 ({(orders || []).length})</CardHead>
         {orders?.length ? (
           <div className="overflow-x-auto">
             <table className="min-w-[520px] w-full text-sm">
-              <thead><tr className="text-text-muted text-left border-b border-accent/10"><th className="pb-2">日付</th><th className="pb-2">タイプ</th><th className="pb-2">金額</th><th className="pb-2">ステータス</th></tr></thead>
+              <thead>
+                <tr className="border-b border-white/[0.07]">
+                  {[['日付','left'],['タイプ','left'],['金額','right'],['ステータス','left']].map(([h,a],i) => (
+                    <th key={i} className={['px-5 py-3 font-mono text-[10px] text-text-dim tracking-[0.15em] uppercase font-normal', a === 'right' ? 'text-right' : 'text-left'].join(' ')}>{h}</th>
+                  ))}
+                </tr>
+              </thead>
               <tbody>
-                {orders.map(o => (
-                  <tr key={o.id} className="border-b border-white/5">
-                    <td className="py-2">{new Date(o.created_at).toLocaleDateString('ja-JP')}</td>
-                    <td className="py-2">{o.type || '—'}</td>
-                    <td className="py-2 font-bold">${Number(o.amount || 0).toFixed(2)}</td>
-                    <td className="py-2"><span className={`px-2 py-0.5 rounded text-xs ${o.status === 'confirmed' || o.status === 'delivered' ? 'bg-green-500/20 text-green-400' : 'bg-yellow-500/20 text-yellow-400'}`}>{o.status}</span></td>
+                {orders.map((o, i) => (
+                  <tr key={o.id} className={i ? 'border-t border-white/[0.07]' : ''}>
+                    <td className="px-5 py-3 font-mono text-xs text-text-muted">{new Date(o.created_at).toLocaleDateString('ja-JP')}</td>
+                    <td className="px-5 py-3 text-text">{o.type || '—'}</td>
+                    <td className="px-5 py-3 text-right"><Money value={Number(o.amount || 0)} size="md" weight="bold" /></td>
+                    <td className="px-5 py-3"><Pill tone={o.status === 'confirmed' || o.status === 'delivered' ? 'live' : 'warn'}>{o.status}</Pill></td>
                   </tr>
                 ))}
               </tbody>
             </table>
           </div>
-        ) : <p className="text-text-muted text-sm">なし</p>}
-      </section>
+        ) : <div className="px-5 py-6 text-text-muted text-sm">なし</div>}
+      </Card>
 
       {/* 紹介情報 */}
-      <section className="p-5 rounded-2xl glass-card">
-        <h2 className="text-lg font-bold mb-3">紹介情報</h2>
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-4">
-          <div className="p-3 rounded-lg bg-bg-glass border border-accent/10">
-            <div className="text-[10px] text-text-dim tracking-widest uppercase">このユーザの紹介コード</div>
-            <div className="text-sm font-bold mt-1">{profile.referral_code || '—'}</div>
-          </div>
-          <div className="p-3 rounded-lg bg-bg-glass border border-accent/10">
-            <div className="text-[10px] text-text-dim tracking-widest uppercase">紹介者として獲得</div>
-            <div className="text-sm font-bold mt-1">${totalCommissionEarned.toFixed(2)}</div>
-          </div>
-          <div className="p-3 rounded-lg bg-bg-glass border border-accent/10">
-            <div className="text-[10px] text-text-dim tracking-widest uppercase">被紹介として支払い</div>
-            <div className="text-sm font-bold mt-1">{(commissionsAsReferred || []).length} 件</div>
-          </div>
-        </div>
-
-        {/* 紹介された場合の報酬率設定 */}
-        {referredByCode ? (
-          <div className="mt-4 p-4 rounded-xl bg-bg-glass border border-accent/20">
-            <div className="text-sm font-bold mb-2">このユーザを紹介した人 (紹介元)</div>
-            {referrer ? (
-              <Link href={`/admin/users/${referrer.id}`} className="text-accent hover:underline text-sm break-all inline-block mb-3">
-                → {referrer.email} (コード: {referredByCode})
-              </Link>
-            ) : (
-              <div className="text-text-muted text-xs mb-3">紹介コード: {referredByCode} (referrer profile が見つかりません — コードのみ存在)</div>
-            )}
-
-            <form action={updateReferrerShareRate} className="space-y-2">
-              <label className="block text-xs text-text-muted font-semibold">紹介者報酬率 (%)</label>
-              <p className="text-[11px] text-text-dim leading-relaxed">
-                このユーザが支払う手数料 (operator fee) のうち、何 % を上記の紹介者に渡すかを設定します。
-                cron settle (毎日 JST 00:05) で適用されます。デフォルト: 20% / 未設定: 0%
-              </p>
-              <div className="flex gap-2 items-center">
-                <input
-                  name="rate"
-                  type="number"
-                  min="0"
-                  max="100"
-                  step="1"
-                  defaultValue={billing && billing.referrer_share_rate !== null && billing.referrer_share_rate !== undefined
-                    ? (Number(billing.referrer_share_rate) * 100).toFixed(0)
-                    : '20'}
-                  className="w-24 px-3 py-2 rounded bg-bg-card border border-accent/15 text-text text-sm"
-                />
-                <span className="text-text-muted text-sm">%</span>
-                <button type="submit" className="btn-outline px-4 py-2 text-xs ml-auto">更新</button>
-              </div>
-              <div className="text-[10px] text-text-dim mt-2">
-                現在値: {billing?.referrer_share_rate !== null && billing?.referrer_share_rate !== undefined
-                  ? `${(Number(billing.referrer_share_rate) * 100).toFixed(0)}%`
-                  : '未設定 (default 20%)'}
-              </div>
-            </form>
-            <div className="mt-3 text-[10px] text-text-dim">
-              ※ この設定は LAPLACE_ENABLE_DYNAMIC_REFERRAL_SPLIT=true (Vercel env) のときのみ有効です。
+      <Card padded={false} className="mb-4">
+        <CardHead>紹介情報</CardHead>
+        <div className="px-5 py-5">
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-4">
+            <div className="p-3 rounded border border-white/[0.07] bg-white/[0.02]">
+              <Label>このユーザの紹介コード</Label>
+              <div className="text-sm font-bold mt-1 font-mono">{profile.referral_code || '—'}</div>
+            </div>
+            <div className="p-3 rounded border border-white/[0.07] bg-white/[0.02]">
+              <Label>紹介者として獲得</Label>
+              <div className="mt-1"><Money value={totalCommissionEarned} size="md" weight="bold" tone="win" /></div>
+            </div>
+            <div className="p-3 rounded border border-white/[0.07] bg-white/[0.02]">
+              <Label>被紹介として支払い</Label>
+              <div className="text-sm font-bold mt-1 font-mono">{(commissionsAsReferred || []).length} 件</div>
             </div>
           </div>
-        ) : (
-          <div className="text-xs text-text-muted">このユーザを紹介した人は登録されていません (referred_by 無し)。</div>
-        )}
-      </section>
 
-      {/* ライセンス / 配布物 */}
-      <section className="p-5 rounded-2xl glass-card">
-        <h2 className="text-lg font-bold mb-3">配布物 ({(deliverables || []).length})</h2>
-        {deliverables?.length ? (
-          <div className="space-y-2 text-sm">
-            {deliverables.map(d => (
-              <div key={d.id} className="flex items-center justify-between border-t border-accent/10 pt-2">
-                <div>
-                  <span className="text-text font-semibold">v{d.version}</span>
-                  <span className="text-text-dim text-xs ml-2">{d.created_at ? new Date(d.created_at).toLocaleDateString('ja-JP') : ''}</span>
+          {referredByCode ? (
+            <div className="mt-4 p-4 rounded border border-cyan/30 bg-cyan/[0.03]">
+              <div className="text-sm font-bold mb-2 text-cyan">このユーザを紹介した人 (紹介元)</div>
+              {referrer ? (
+                <Link href={`/admin/users/${referrer.id}`} className="text-cyan hover:underline text-sm break-all inline-block mb-3">
+                  → {referrer.email} (コード: {referredByCode})
+                </Link>
+              ) : (
+                <div className="text-text-muted text-xs mb-3">紹介コード: {referredByCode} (referrer profile が見つかりません)</div>
+              )}
+
+              <form action={updateReferrerShareRate} className="space-y-2">
+                <Label>紹介者報酬率 (%)</Label>
+                <p className="text-[11px] text-text-dim leading-relaxed">
+                  このユーザが支払う手数料のうち何 % を上記の紹介者に渡すか (cron settle で適用)。デフォルト 20% / 未設定 0%
+                </p>
+                <div className="flex gap-2 items-center">
+                  <input
+                    name="rate" type="number" min="0" max="100" step="1"
+                    defaultValue={billing && billing.referrer_share_rate !== null && billing.referrer_share_rate !== undefined ? (Number(billing.referrer_share_rate) * 100).toFixed(0) : '20'}
+                    className="w-24 px-3 py-2 rounded bg-white/[0.02] border border-white/[0.07] text-text text-sm font-mono"
+                  />
+                  <span className="text-text-muted text-sm">%</span>
+                  <Button tone="outline" size="sm" type="submit" className="ml-auto">更新</Button>
                 </div>
-                <code className="text-[10px] text-text-dim break-all max-w-[60%] text-right">{d.file_path}</code>
+                <div className="text-[10px] text-text-dim mt-2">
+                  現在値: {billing?.referrer_share_rate !== null && billing?.referrer_share_rate !== undefined
+                    ? `${(Number(billing.referrer_share_rate) * 100).toFixed(0)}%`
+                    : '未設定 (default 20%)'}
+                </div>
+              </form>
+              <div className="mt-3 text-[10px] text-text-dim">
+                ※ LAPLACE_ENABLE_DYNAMIC_REFERRAL_SPLIT=true (Vercel env) のときのみ有効
+              </div>
+            </div>
+          ) : (
+            <div className="text-xs text-text-muted">このユーザを紹介した人は登録されていません (referred_by 無し)。</div>
+          )}
+        </div>
+      </Card>
+
+      {/* 配布物 */}
+      <Card padded={false}>
+        <CardHead>配布物 ({(deliverables || []).length})</CardHead>
+        {deliverables?.length ? (
+          <div>
+            {deliverables.map((d, i) => (
+              <div key={d.id} className={`flex items-center justify-between px-5 py-3 ${i ? 'border-t border-white/[0.07]' : ''}`}>
+                <div>
+                  <span className="text-text font-semibold font-mono">v{d.version}</span>
+                  <span className="text-text-dim text-xs ml-2 font-mono">{d.created_at ? new Date(d.created_at).toLocaleDateString('ja-JP') : ''}</span>
+                </div>
+                <code className="text-[10px] text-text-dim break-all max-w-[60%] text-right font-mono">{d.file_path}</code>
               </div>
             ))}
           </div>
-        ) : <p className="text-text-muted text-sm">なし</p>}
-      </section>
+        ) : <div className="px-5 py-6 text-text-muted text-sm">なし</div>}
+      </Card>
     </div>
   )
 }

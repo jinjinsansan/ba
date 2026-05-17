@@ -1,5 +1,6 @@
 import { createClient } from '@/lib/supabase-server'
 import { createAdminClient } from '@/lib/supabase-admin'
+import { PageHeader } from '@/components/ui/PageHeader'
 import ReferralSection from '../../dashboard/ReferralSection'
 
 export default async function ReferralPage() {
@@ -52,12 +53,12 @@ export default async function ReferralPage() {
     .reduce((s, w) => s + Number(w.amount), 0) ?? 0
 
   return (
-    <div className="space-y-6">
-      <div>
-        <div className="hud-label mb-2">Referral</div>
-        <h1 className="text-2xl sm:text-3xl font-hud">紹介プログラム</h1>
-        <p className="text-text-muted text-sm mt-2">あなたの紹介から成立したチャージに対して報酬が発生します。</p>
-      </div>
+    <div>
+      <PageHeader
+        kicker="Member · Referral"
+        title="紹介プログラム"
+        sub="あなたの紹介から成立したチャージに対して報酬が発生します"
+      />
       <ReferralSection
         referralUrl={referralUrl}
         referred={referredWithCharges}

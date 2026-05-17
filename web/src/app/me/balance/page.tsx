@@ -1,5 +1,10 @@
-import { createClient } from '@/lib/supabase-server'
 import Link from 'next/link'
+import { createClient } from '@/lib/supabase-server'
+import { Card, CardHead } from '@/components/ui/Card'
+import { PageHeader, Label } from '@/components/ui/PageHeader'
+import { Pill } from '@/components/ui/Pill'
+import { Money } from '@/components/ui/Money'
+import { Button } from '@/components/ui/Button'
 
 export default async function BalancePage() {
   const supabase = await createClient()
@@ -16,110 +21,102 @@ export default async function BalancePage() {
   const walletAddress = String(process.env.NEXT_PUBLIC_USDT_TRC20 || '').trim()
 
   return (
-    <div className="space-y-6">
-      <div className="flex items-start justify-between gap-3 flex-wrap">
-        <div>
-          <div className="hud-label mb-2">Balance</div>
-          <h1 className="text-2xl sm:text-3xl font-hud">残高・チャージ</h1>
-        </div>
-        {billing?.is_free ? (
-          <button
-            type="button"
-            disabled
-            className="px-5 py-2.5 text-sm rounded-lg bg-bg-glass text-text-dim border border-accent/10 cursor-not-allowed opacity-60"
-            title="管理者から課金免除を受けているためチャージ不要です"
-          >
-            資金追加 (免除済)
-          </button>
-        ) : (
-          <Link href="/dashboard/charge" className="btn-primary px-5 py-2.5 text-sm">今すぐ資金追加</Link>
-        )}
-      </div>
+    <div>
+      <PageHeader
+        kicker="Member · Balance"
+        title="残高・チャージ"
+        right={
+          billing?.is_free
+            ? <Button tone="ghost" size="sm" disabled>資金追加 (免除済)</Button>
+            : <Link href="/dashboard/charge"><Button tone="primary" size="sm">今すぐ資金追加</Button></Link>
+        }
+      />
 
-      {/* Free notice */}
       {billing?.is_free && (
-        <div className="p-4 rounded-2xl border border-accent/30 bg-accent/5">
-          <div className="text-sm font-bold text-accent mb-1">課金免除プラン適用中</div>
-          <div className="text-xs text-text-muted leading-relaxed">
-            管理者から課金免除を受けているため、ライセンス料・日次手数料・チャージはすべて不要です。
-            残高数値は内部表示で、実際の課金には使用されません。
+        <Card className="mb-4 border-cyan/30 bg-cyan/[0.03]">
+          <div className="flex items-start gap-3">
+            <Pill tone="free">FREE</Pill>
+            <div>
+              <div className="text-sm font-semibold text-cyan mb-1">課金免除プラン適用中</div>
+              <div className="text-xs text-text-muted leading-relaxed">
+                管理者から課金免除を受けているため、ライセンス料・日次手数料・チャージはすべて不要です。残高数値は内部表示で、実際の課金には使用されません。
+              </div>
+            </div>
           </div>
-        </div>
+        </Card>
       )}
 
-      {/* Current balances */}
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-        <div className="p-4 rounded-xl glass-card">
-          <div className="text-[10px] tracking-widest text-text-dim uppercase">Current Balance</div>
-          {billing?.is_free ? (
-            <div className="text-xl font-bold text-accent mt-1">課金免除</div>
-          ) : (
-            <div className="text-2xl font-bold text-text mt-1">${Number(billing?.balance || 0).toFixed(2)}</div>
+      <Card padded={false} className="mb-4">
+        <CardHead>Current Balances</CardHead>
+        <div className="grid grid-cols-1 sm:grid-cols-3 px-5 py-5">
+          <div>
+            <Label>Current Balance</Label>
+            <div className="mt-1.5">
+              {billing?.is_free
+                ? <span className="text-xl font-semibold text-cyan">課金免除</span>
+                : <Money value={Number(billing?.balance ?? 0)} size="2xl" weight="bold" />}
+            </div>
+          </div>
+          <div className="sm:pl-4 sm:border-l border-white/[0.07]">
+            <Label>Total Charged</Label>
+            <div className="mt-1.5"><Money value={Number(billing?.total_charged ?? 0)} size="2xl" weight="semibold" /></div>
+          </div>
+          <div className="sm:pl-4 sm:border-l border-white/[0.07]">
+            <Label>Carry Loss</Label>
+            <div className="mt-1.5"><Money value={Number(billing?.carry_loss ?? 0)} size="2xl" weight="semibold" tone={Number(billing?.carry_loss ?? 0) > 0 ? 'lose' : 'muted'} /></div>
+          </div>
+        </div>
+      </Card>
+
+      <Card padded={false} className="mb-4">
+        <CardHead>チャージ手順</CardHead>
+        <div className="px-5 py-5">
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 text-xs mb-4">
+            <div className="p-3 rounded border border-white/[0.07] bg-white/[0.02]">
+              <Label>未確認チャージ</Label>
+              <div className={`text-base font-semibold mt-1 ${pendingCount > 0 ? 'text-warn' : 'text-win'}`}>{pendingCount} 件</div>
+            </div>
+            <div className="p-3 rounded border border-white/[0.07] bg-white/[0.02]">
+              <Label>最終反映</Label>
+              <div className="text-base font-semibold text-text mt-1">{lastConfirmed ? new Date(lastConfirmed.created_at).toLocaleDateString('ja-JP') : '未反映'}</div>
+            </div>
+            <div className="p-3 rounded border border-white/[0.07] bg-white/[0.02]">
+              <Label>プラン</Label>
+              <div className="text-base font-semibold text-text mt-1">
+                {billing?.is_free ? 'FREE' : `${billing ? (Number(billing.profit_share_rate) * 100).toFixed(0) : '?'}% Share`}
+              </div>
+            </div>
+          </div>
+          <div className="space-y-2 text-xs text-text-muted">
+            <div className="flex items-start gap-2"><span className="text-cyan font-semibold">1.</span><span>「今すぐ資金追加」から金額を入力して申請</span></div>
+            <div className="flex items-start gap-2"><span className="text-cyan font-semibold">2.</span><span>USDT (TRC-20) を送金</span></div>
+            <div className="flex items-start gap-2"><span className="text-cyan font-semibold">3.</span><span>管理承認後に残高へ反映 (未払いがあれば自動充当)</span></div>
+          </div>
+          {walletAddress && (
+            <div className="mt-3 text-[11px] text-text-dim break-all font-mono">送金先(TRC-20): {walletAddress}</div>
           )}
         </div>
-        <div className="p-4 rounded-xl glass-card">
-          <div className="text-[10px] tracking-widest text-text-dim uppercase">Total Charged</div>
-          <div className="text-2xl font-bold text-text mt-1">${Number(billing?.total_charged || 0).toFixed(2)}</div>
-        </div>
-        <div className="p-4 rounded-xl glass-card">
-          <div className="text-[10px] tracking-widest text-text-dim uppercase">Carry Loss</div>
-          <div className="text-2xl font-bold text-banker mt-1">${Number(billing?.carry_loss || 0).toFixed(2)}</div>
-        </div>
-      </div>
+      </Card>
 
-      {/* Charge guide */}
-      <div className="p-5 rounded-2xl glass-card">
-        <h2 className="text-lg font-bold mb-3">チャージ手順</h2>
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 text-xs mb-4">
-          <div className="p-3 rounded-lg bg-bg-glass border border-accent/10">
-            <div className="text-text-dim">未確認チャージ</div>
-            <div className={`text-base font-semibold mt-1 ${pendingCount > 0 ? 'text-yellow-400' : 'text-green-400'}`}>{pendingCount} 件</div>
-          </div>
-          <div className="p-3 rounded-lg bg-bg-glass border border-accent/10">
-            <div className="text-text-dim">最終反映</div>
-            <div className="text-base font-semibold text-text mt-1">
-              {lastConfirmed ? new Date(lastConfirmed.created_at).toLocaleDateString('ja-JP') : '未反映'}
-            </div>
-          </div>
-          <div className="p-3 rounded-lg bg-bg-glass border border-accent/10">
-            <div className="text-text-dim">プラン</div>
-            <div className="text-base font-semibold text-text mt-1">
-              {billing?.is_free ? 'FREE' : `${billing ? (Number(billing.profit_share_rate) * 100).toFixed(0) : '?'}% Share`}
-            </div>
-          </div>
-        </div>
-        <div className="space-y-2 text-xs text-text-muted">
-          <div className="flex items-start gap-2"><span className="text-accent">1.</span><span>「今すぐ資金追加」から金額を入力して申請</span></div>
-          <div className="flex items-start gap-2"><span className="text-accent">2.</span><span>USDT (TRC-20) を送金</span></div>
-          <div className="flex items-start gap-2"><span className="text-accent">3.</span><span>管理承認後に残高へ反映 (未払いがあれば自動充当)</span></div>
-        </div>
-        {walletAddress && (
-          <div className="mt-3 text-[11px] text-text-dim break-all">送金先(TRC-20): {walletAddress}</div>
-        )}
-      </div>
-
-      {/* Charge history */}
-      <div className="p-5 rounded-2xl glass-card">
-        <h2 className="text-lg font-bold mb-4">チャージ履歴</h2>
+      <Card padded={false}>
+        <CardHead>チャージ履歴 ({(charges || []).length})</CardHead>
         {charges?.length ? (
           <div className="overflow-x-auto">
             <table className="min-w-[520px] w-full text-sm">
               <thead>
-                <tr className="text-text-muted text-left">
-                  <th className="pb-2">日付</th>
-                  <th className="pb-2">金額</th>
-                  <th className="pb-2">ステータス</th>
+                <tr className="border-b border-white/[0.07]">
+                  <th className="px-5 py-3 font-mono text-[10px] text-text-dim tracking-[0.15em] uppercase font-normal text-left">日付</th>
+                  <th className="px-5 py-3 font-mono text-[10px] text-text-dim tracking-[0.15em] uppercase font-normal text-right">金額</th>
+                  <th className="px-5 py-3 font-mono text-[10px] text-text-dim tracking-[0.15em] uppercase font-normal text-left">ステータス</th>
                 </tr>
               </thead>
               <tbody>
-                {charges.map(c => (
-                  <tr key={c.id} className="border-t border-accent/10">
-                    <td className="py-2">{new Date(c.created_at).toLocaleDateString()}</td>
-                    <td className="py-2 font-bold">${Number(c.amount).toLocaleString()}</td>
-                    <td className="py-2">
-                      <span className={`px-2 py-0.5 rounded text-xs ${c.status === 'confirmed' ? 'bg-green-500/20 text-green-400' : 'bg-yellow-500/20 text-yellow-400'}`}>
-                        {c.status}
-                      </span>
+                {charges.map((c, i) => (
+                  <tr key={c.id} className={i ? 'border-t border-white/[0.07]' : ''}>
+                    <td className="px-5 py-3 text-text-muted font-mono text-xs">{new Date(c.created_at).toLocaleDateString('ja-JP')}</td>
+                    <td className="px-5 py-3 text-right"><Money value={Number(c.amount)} size="md" weight="semibold" /></td>
+                    <td className="px-5 py-3">
+                      <Pill tone={c.status === 'confirmed' ? 'live' : c.status === 'rejected' ? 'danger' : 'warn'}>{c.status}</Pill>
                     </td>
                   </tr>
                 ))}
@@ -127,9 +124,9 @@ export default async function BalancePage() {
             </table>
           </div>
         ) : (
-          <p className="text-text-muted text-sm">まだチャージ履歴がありません。</p>
+          <div className="px-5 py-6 text-text-muted text-sm">まだチャージ履歴がありません。</div>
         )}
-      </div>
+      </Card>
     </div>
   )
 }

@@ -1,4 +1,8 @@
 import { createClient } from '@/lib/supabase-server'
+import { Card, CardHead } from '@/components/ui/Card'
+import { PageHeader, Label } from '@/components/ui/PageHeader'
+import { Pill } from '@/components/ui/Pill'
+import { Money } from '@/components/ui/Money'
 
 type InvoiceRow = {
   id?: string
@@ -34,69 +38,61 @@ export default async function SettlementsPage() {
   const rows: Array<InvoiceRow & DeductionRow> = (invoices?.length ? invoices : (deductions || [])) as Array<InvoiceRow & DeductionRow>
 
   return (
-    <div className="space-y-6">
-      <div>
-        <div className="hud-label mb-2">Settlements</div>
-        <h1 className="text-2xl sm:text-3xl font-hud">日次精算履歴</h1>
-        <p className="text-text-muted text-sm mt-2">毎日 JST 00:05 に前日分の損益・手数料が確定します。</p>
-      </div>
+    <div>
+      <PageHeader
+        kicker="Member · Settlements"
+        title="日次精算履歴"
+        sub="毎日 JST 00:05 に前日分の損益・手数料が確定します"
+        right={outstandingTotal > 0 ? <Pill tone="warn">未払い ${outstandingTotal.toFixed(2)}</Pill> : <Pill tone="paid">未払いなし</Pill>}
+      />
 
-      {/* Summary */}
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-        <div className="p-4 rounded-xl glass-card">
-          <div className="text-[10px] tracking-widest text-text-dim uppercase">Outstanding (未払い)</div>
-          <div className={`text-2xl font-bold mt-1 ${outstandingTotal > 0 ? 'text-yellow-400' : 'text-green-400'}`}>${outstandingTotal.toFixed(2)}</div>
+      <Card padded={false} className="mb-4">
+        <CardHead>30 Days Summary</CardHead>
+        <div className="grid grid-cols-1 sm:grid-cols-3 px-5 py-5">
+          <div>
+            <Label>Outstanding (未払い)</Label>
+            <div className="mt-1.5"><Money value={outstandingTotal} size="2xl" weight="bold" tone={outstandingTotal > 0 ? 'warn' : 'win'} /></div>
+          </div>
+          <div className="sm:pl-4 sm:border-l border-white/[0.07]">
+            <Label>30日 損益合計</Label>
+            <div className="mt-1.5"><Money value={last30Profit} sign size="2xl" weight="bold" tone={last30Profit >= 0 ? 'win' : 'lose'} /></div>
+          </div>
+          <div className="sm:pl-4 sm:border-l border-white/[0.07]">
+            <Label>30日 手数料合計</Label>
+            <div className="mt-1.5"><Money value={last30Fee} size="2xl" weight="bold" tone="cyan" /></div>
+          </div>
         </div>
-        <div className="p-4 rounded-xl glass-card">
-          <div className="text-[10px] tracking-widest text-text-dim uppercase">30日 損益合計</div>
-          <div className={`text-2xl font-bold mt-1 ${last30Profit >= 0 ? 'text-green-400' : 'text-banker'}`}>{last30Profit >= 0 ? '+' : ''}${last30Profit.toFixed(2)}</div>
-        </div>
-        <div className="p-4 rounded-xl glass-card">
-          <div className="text-[10px] tracking-widest text-text-dim uppercase">30日 手数料合計</div>
-          <div className="text-2xl font-bold text-accent mt-1">${last30Fee.toFixed(2)}</div>
-        </div>
-      </div>
+      </Card>
 
-      {/* History table */}
-      <div className="p-5 rounded-2xl glass-card">
-        <div className="flex items-center justify-between mb-4 gap-3 flex-wrap">
-          <h2 className="text-lg font-bold">履歴 (最大 60 件)</h2>
-          <span className="text-xs text-text-dim">JST 日次確定ベース</span>
-        </div>
+      <Card padded={false}>
+        <CardHead right={<span className="font-mono text-[11px] text-text-dim">JST 日次確定ベース</span>}>履歴 (最大 60 件)</CardHead>
         {rows.length ? (
           <div className="overflow-x-auto">
             <table className="min-w-[760px] w-full text-sm">
               <thead>
-                <tr className="text-text-muted text-left">
-                  <th className="pb-2">日付</th>
-                  <th className="pb-2">日次 PnL</th>
-                  <th className="pb-2">Net</th>
-                  <th className="pb-2">手数料</th>
-                  <th className="pb-2">Outstanding</th>
-                  <th className="pb-2">ステータス</th>
+                <tr className="border-b border-white/[0.07]">
+                  {[['日付','left'],['日次 PnL','right'],['Net','right'],['手数料','right'],['未払い','right'],['ステータス','left']].map(([h,a],i) => (
+                    <th key={i} className={['px-5 py-3 font-mono text-[10px] text-text-dim tracking-[0.15em] uppercase font-normal', a === 'right' ? 'text-right' : 'text-left'].join(' ')}>{h}</th>
+                  ))}
                 </tr>
               </thead>
               <tbody>
                 {rows.map((row, idx) => {
                   const date = String(row.settle_date || row.date || '')
-                  const dailyProfit = Number(row.daily_profit || 0)
-                  const netProfit = Number(row.net_profit ?? row.daily_profit ?? 0)
+                  const dp = Number(row.daily_profit || 0)
+                  const np = Number(row.net_profit ?? row.daily_profit ?? 0)
                   const fee = Number(row.operator_fee_amount ?? row.fee_amount ?? 0)
-                  const outstanding = Number(row.outstanding_amount ?? 0)
-                  const statusLabel = String(row.status || (outstanding > 0 ? 'unpaid' : 'paid'))
+                  const out = Number(row.outstanding_amount || 0)
+                  const st = String(row.status || (out > 0 ? 'unpaid' : 'paid'))
                   return (
-                    <tr key={`${row.id || idx}-${date}`} className="border-t border-accent/10">
-                      <td className="py-2">{date || '—'}</td>
-                      <td className={`py-2 font-bold ${dailyProfit >= 0 ? 'text-green-400' : 'text-banker'}`}>{dailyProfit >= 0 ? '+' : ''}${dailyProfit.toFixed(2)}</td>
-                      <td className={`py-2 ${netProfit >= 0 ? 'text-text' : 'text-banker'}`}>{netProfit >= 0 ? '+' : ''}${netProfit.toFixed(2)}</td>
-                      <td className="py-2 text-accent">${fee.toFixed(2)}</td>
-                      <td className={`py-2 ${outstanding > 0 ? 'text-yellow-400' : 'text-text-muted'}`}>${outstanding.toFixed(2)}</td>
-                      <td className="py-2">
-                        <span className={`px-2 py-0.5 rounded text-xs ${
-                          statusLabel === 'unpaid' ? 'bg-yellow-500/20 text-yellow-400' :
-                          statusLabel === 'paid' ? 'bg-green-500/20 text-green-400' :
-                          'bg-slate-500/20 text-slate-300'
-                        }`}>{statusLabel}</span>
+                    <tr key={`${row.id || idx}-${date}`} className={idx ? 'border-t border-white/[0.07]' : ''}>
+                      <td className="px-5 py-3 font-mono text-xs text-text-muted">{date}</td>
+                      <td className="px-5 py-3 text-right"><Money value={dp} sign size="md" weight="semibold" tone={dp >= 0 ? 'win' : 'lose'} /></td>
+                      <td className="px-5 py-3 text-right"><Money value={np} sign size="md" weight="medium" tone={np >= 0 ? undefined : 'lose'} /></td>
+                      <td className="px-5 py-3 text-right"><Money value={fee} size="md" weight="medium" tone="cyan" /></td>
+                      <td className="px-5 py-3 text-right"><Money value={out} size="md" weight="medium" tone={out > 0 ? 'warn' : 'muted'} /></td>
+                      <td className="px-5 py-3">
+                        <Pill tone={st === 'unpaid' ? 'warn' : st === 'paid' ? 'live' : 'paid'}>{st}</Pill>
                       </td>
                     </tr>
                   )
@@ -105,9 +101,9 @@ export default async function SettlementsPage() {
             </table>
           </div>
         ) : (
-          <p className="text-text-muted text-sm">まだ精算履歴がありません。受け子で BET セッションが完了し、JST 00:05 の cron が走ると 1 行追加されます。</p>
+          <div className="px-5 py-6 text-text-muted text-sm">まだ精算履歴がありません。受け子で BET セッションが完了し、JST 00:05 の cron が走ると 1 行追加されます。</div>
         )}
-      </div>
+      </Card>
     </div>
   )
 }

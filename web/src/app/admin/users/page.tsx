@@ -1,5 +1,10 @@
-import { createAdminClient } from '@/lib/supabase-admin'
 import Link from 'next/link'
+import { createAdminClient } from '@/lib/supabase-admin'
+import { Card } from '@/components/ui/Card'
+import { PageHeader } from '@/components/ui/PageHeader'
+import { Pill } from '@/components/ui/Pill'
+import { Money } from '@/components/ui/Money'
+import { Dot } from '@/components/ui/Dot'
 
 export const dynamic = 'force-dynamic'
 
@@ -22,7 +27,7 @@ type ProfileWithBilling = {
 
 function bill(u: ProfileWithBilling): BillingLite | null {
   if (!u.billing) return null
-  return Array.isArray(u.billing) ? (u.billing[0] || null) : u.billing
+  return Array.isArray(u.billing) ? u.billing[0] || null : u.billing
 }
 
 function todayPnl(b: BillingLite | null): number | null {
@@ -37,6 +42,14 @@ function todayPnl(b: BillingLite | null): number | null {
   return null
 }
 
+function isLive(b: BillingLite | null): boolean {
+  if (!b?.session_state || typeof b.session_state !== 'object') return false
+  const ss = b.session_state as Record<string, unknown>
+  const lastAt = typeof ss.last_balance_at === 'string' ? new Date(ss.last_balance_at).getTime() : NaN
+  if (!Number.isFinite(lastAt)) return false
+  return Date.now() - lastAt < 90_000
+}
+
 export default async function AdminUsersPage() {
   const admin = createAdminClient()
   const { data: users } = await admin
@@ -47,58 +60,75 @@ export default async function AdminUsersPage() {
   const rows = (users || []) as ProfileWithBilling[]
 
   return (
-    <div className="space-y-6">
-      <div>
-        <div className="hud-label mb-2">Users</div>
-        <h1 className="text-2xl sm:text-3xl font-hud">ユーザー一覧</h1>
-        <p className="text-text-muted text-sm mt-2">クリックで個別ユーザーページへ ({rows.length} 名)</p>
-      </div>
+    <div>
+      <PageHeader
+        kicker="Admin · Users"
+        title="ユーザー一覧"
+        sub="クリックで個別ユーザーページへ"
+        right={<Pill tone="admin">{rows.length} 名</Pill>}
+      />
 
-      <div className="overflow-x-auto glass-card p-4">
-        <table className="min-w-[840px] w-full text-sm">
+      <Card padded={false} className="overflow-x-auto">
+        <table className="min-w-[960px] w-full text-sm">
           <thead>
-            <tr className="text-text-muted text-left border-b border-accent/10">
-              <th className="pb-3 pr-4">メール</th>
-              <th className="pb-3 pr-4">残高</th>
-              <th className="pb-3 pr-4">当日 PnL</th>
-              <th className="pb-3 pr-4">分配率</th>
-              <th className="pb-3 pr-4">ステータス</th>
-              <th className="pb-3 pr-4">登録日</th>
-              <th className="pb-3"></th>
+            <tr className="border-b border-white/[0.07]">
+              {[
+                ['Email', 'left'],
+                ['Balance', 'right'],
+                ['Today PnL', 'right'],
+                ['Share', 'right'],
+                ['Status', 'left'],
+                ['Joined', 'left'],
+                ['', 'right'],
+              ].map(([h, a], i) => (
+                <th key={i} className={['px-5 py-3 font-mono text-[10px] text-text-dim tracking-[0.15em] uppercase font-normal', a === 'right' ? 'text-right' : 'text-left'].join(' ')}>{h}</th>
+              ))}
             </tr>
           </thead>
           <tbody>
-            {rows.map(u => {
+            {rows.map((u, i) => {
               const b = bill(u)
               const pnl = todayPnl(b)
+              const live = isLive(b)
               return (
-                <tr key={u.id} className="border-b border-white/5 hover:bg-bg-glass transition">
-                  <td className="py-3 pr-4">
-                    <Link href={`/admin/users/${u.id}`} className="text-text hover:text-accent break-all">{u.email}</Link>
-                    {u.is_admin && <span className="ml-2 text-[10px] text-yellow-400 bg-yellow-500/10 px-1.5 py-0.5 rounded">Admin</span>}
-                  </td>
-                  <td className="py-3 pr-4 font-bold">{b?.is_free ? '— FREE' : `$${Number(b?.balance || 0).toFixed(2)}`}</td>
-                  <td className="py-3 pr-4 font-bold">
-                    {pnl === null ? <span className="text-text-dim">—</span> : <span className={pnl >= 0 ? 'text-green-400' : 'text-banker'}>{pnl >= 0 ? '+' : ''}${pnl.toFixed(2)}</span>}
-                  </td>
-                  <td className="py-3 pr-4">{b ? `${(Number(b.profit_share_rate) * 100).toFixed(0)}%` : '—'}</td>
-                  <td className="py-3 pr-4">
-                    <div className="flex gap-1 flex-wrap">
-                      {b?.suspended && <span className="text-[10px] bg-banker/20 text-banker px-1.5 py-0.5 rounded">Locked</span>}
-                      {b?.is_free && <span className="text-[10px] bg-accent/20 text-accent px-1.5 py-0.5 rounded">Free</span>}
-                      {!b?.suspended && !b?.is_free && <span className="text-[10px] bg-green-500/20 text-green-400 px-1.5 py-0.5 rounded">Active</span>}
+                <tr key={u.id} className={i ? 'border-t border-white/[0.07]' : ''}>
+                  <td className="px-5 py-3">
+                    <div className="flex items-center gap-2.5 min-w-0">
+                      <Dot tone={live ? 'win' : 'dim'} pulse={live} />
+                      <Link href={`/admin/users/${u.id}`} className="text-cyan hover:underline break-all min-w-0">{u.email}</Link>
+                      {u.is_admin && <Pill tone="admin">ADMIN</Pill>}
                     </div>
                   </td>
-                  <td className="py-3 pr-4 text-text-dim text-xs">{new Date(u.created_at).toLocaleDateString('ja-JP')}</td>
-                  <td className="py-3">
-                    <Link href={`/admin/users/${u.id}`} className="text-xs text-accent hover:underline">詳細 →</Link>
+                  <td className="px-5 py-3 text-right">
+                    {b?.is_free
+                      ? <span className="font-mono text-cyan text-sm">— FREE</span>
+                      : <Money value={Number(b?.balance ?? 0)} size="md" weight="medium" />}
+                  </td>
+                  <td className="px-5 py-3 text-right">
+                    {pnl === null
+                      ? <span className="text-text-dim">—</span>
+                      : <Money value={pnl} sign size="md" weight="semibold" tone={pnl >= 0 ? 'win' : 'lose'} />}
+                  </td>
+                  <td className="px-5 py-3 text-right font-mono text-text-muted">
+                    {b ? `${(Number(b.profit_share_rate) * 100).toFixed(0)}%` : '—'}
+                  </td>
+                  <td className="px-5 py-3">
+                    <div className="flex gap-1 flex-wrap">
+                      {b?.suspended && <Pill tone="danger">SUSPENDED</Pill>}
+                      {b?.is_free && <Pill tone="free">FREE</Pill>}
+                      {!b?.suspended && !b?.is_free && <Pill tone="live">ACTIVE</Pill>}
+                    </div>
+                  </td>
+                  <td className="px-5 py-3 text-text-muted font-mono text-xs">{new Date(u.created_at).toLocaleDateString('ja-JP')}</td>
+                  <td className="px-5 py-3 text-right">
+                    <Link href={`/admin/users/${u.id}`} className="text-text-dim hover:text-cyan">→</Link>
                   </td>
                 </tr>
               )
             })}
           </tbody>
         </table>
-      </div>
+      </Card>
     </div>
   )
 }
