@@ -143,7 +143,7 @@ export default async function OperatorWall() {
 
   return (
     <div
-      className="relative h-full overflow-hidden p-12 lg:p-14 flex flex-col"
+      className="relative lg:h-full overflow-hidden p-6 sm:p-10 lg:p-14 flex flex-col"
       style={{
         background:
           'radial-gradient(ellipse 80% 60% at 20% 30%, rgba(92,223,255,.10) 0%, transparent 60%),' +
@@ -164,23 +164,23 @@ export default async function OperatorWall() {
       />
 
       {/* Brand */}
-      <div className="relative z-10 mb-9">
-        <div className="font-hud text-2xl font-bold text-cyan tracking-[0.2em]">
+      <div className="relative z-10 mb-6 sm:mb-9">
+        <div className="font-hud text-xl sm:text-2xl font-bold text-cyan tracking-[0.2em]">
           BAFATHER
         </div>
-        <div className="font-mono text-[11px] text-text-dim mt-1.5 tracking-[0.25em] uppercase">
+        <div className="font-mono text-[10px] sm:text-[11px] text-text-dim mt-1.5 tracking-[0.25em] uppercase">
           Baccarat Copy-Trade Network
         </div>
       </div>
 
       {/* Tagline */}
-      <div className="relative z-10 mb-8 max-w-[480px]">
-        <h2 className="text-[32px] font-bold leading-[1.25] tracking-[-0.015em] m-0">
+      <div className="relative z-10 mb-6 sm:mb-8 max-w-[480px]">
+        <h2 className="text-[22px] sm:text-[28px] lg:text-[32px] font-bold leading-[1.25] tracking-[-0.015em] m-0">
           会員制<span className="text-cyan">コピートレード式</span>
           <br />
           バカラ運用。
         </h2>
-        <p className="text-text-muted text-sm mt-3.5 leading-[1.7]">
+        <p className="text-text-muted text-xs sm:text-sm mt-3 sm:mt-3.5 leading-[1.7]">
           JST 24 時間体制で稼働する代行ネットワーク。
           <br />
           あなたは結果だけを Telegram で受け取ります。
@@ -188,15 +188,15 @@ export default async function OperatorWall() {
       </div>
 
       {/* Live aggregate */}
-      <div className="relative z-10 bg-black/50 border border-white/[0.07] rounded-[10px] px-5 py-4 mb-4 backdrop-blur grid grid-cols-[1.4fr_1fr_1fr] gap-6">
-        <div>
+      <div className="relative z-10 bg-black/50 border border-white/[0.07] rounded-[10px] px-4 sm:px-5 py-3.5 sm:py-4 mb-4 backdrop-blur grid grid-cols-2 sm:grid-cols-[1.4fr_1fr_1fr] gap-4 sm:gap-6">
+        <div className="col-span-2 sm:col-span-1">
           <div className="flex items-center gap-2 mb-1">
             <Dot tone="win" pulse />
             <span className="font-mono text-[10px] text-text-dim tracking-[0.18em] uppercase">
               Today · Aggregate
             </span>
           </div>
-          <Money value={data.todayPnl} sign size="3xl" weight="semibold" tone="win" />
+          <Money value={data.todayPnl} sign size="2xl" weight="semibold" tone="win" />
         </div>
         <div>
           <div className="font-mono text-[10px] text-text-dim tracking-[0.18em] uppercase mb-1">
@@ -254,9 +254,9 @@ export default async function OperatorWall() {
         ))}
       </div>
 
-      <div className="flex-1" />
+      <div className="hidden lg:block flex-1" />
 
-      <div className="relative z-10 font-mono text-[10px] text-text-dim tracking-[0.2em] uppercase mt-6">
+      <div className="relative z-10 font-mono text-[9px] sm:text-[10px] text-text-dim tracking-[0.2em] uppercase mt-6">
         ssl encrypted · 24/7 jst ops · v2.4.0
       </div>
     </div>

@@ -12,10 +12,9 @@ export default async function HomePage() {
 
   return (
     <div className="min-h-screen grid grid-cols-1 lg:grid-cols-[1.45fr_1fr]">
-      {/* Hide the marketing wall on small screens — too much for mobile login */}
-      <div className="hidden lg:block">
-        <OperatorWall />
-      </div>
+      {/* Mobile: stacked vertically (Wall on top, Form below).
+          Desktop (lg+): side-by-side. */}
+      <OperatorWall />
       <LoginForm />
     </div>
   )
