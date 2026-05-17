@@ -204,3 +204,22 @@
     @apply transition;
   }
 }
+
+/* Dot pulse animation (used by <Dot pulse> and Rail / AdminRail) */
+@keyframes bpulse {
+  0%   { box-shadow: 0 0 0 0 currentColor; opacity: 0.55; }
+  70%  { box-shadow: 0 0 0 6px transparent; opacity: 0; }
+  100% { box-shadow: 0 0 0 0 transparent; opacity: 0; }
+}
+.pulse-dot {
+  position: relative;
+}
+.pulse-dot::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  animation: bpulse 2s infinite;
+  background: currentColor;
+  pointer-events: none;
+}

@@ -97,7 +97,7 @@ export default function RealtimePnlCard({ initial }: { initial: SessionState | n
         </span>
       </div>
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-        <div className="p-4 rounded-xl bg-bg-card border border-accent/10">
+        <div className="p-4 rounded-xl bg-surface border border-accent/10">
           <div className="text-xs text-text-muted mb-1">{t('dailyPnl')}</div>
           <div className={`text-3xl font-black ${pnl == null ? 'text-text' : pnl >= 0 ? 'text-green-400' : 'text-banker'}`}>
             {pnl == null ? '—' : `${pnl >= 0 ? '+' : ''}$${pnl.toFixed(2)}`}
@@ -106,14 +106,14 @@ export default function RealtimePnlCard({ initial }: { initial: SessionState | n
             <div className="text-[10px] text-text-muted mt-1">{t('fallbackBalance')}</div>
           )}
         </div>
-        <div className="p-4 rounded-xl bg-bg-card border border-accent/10">
+        <div className="p-4 rounded-xl bg-surface border border-accent/10">
           <div className="text-xs text-text-muted mb-1">{t('stakeBalance')}</div>
           <div className="text-xl font-bold text-text">{balance != null ? `$${balance.toFixed(2)}` : '—'}</div>
           {openBal != null && (
             <div className="text-[10px] text-text-muted mt-1">{t('openBalance')}: ${openBal.toFixed(2)}</div>
           )}
         </div>
-        <div className="p-4 rounded-xl bg-bg-card border border-accent/10">
+        <div className="p-4 rounded-xl bg-surface border border-accent/10">
           <div className="text-xs text-text-muted mb-1">{t('bets')}</div>
           <div className="text-xl font-bold text-text">{bets ?? '—'}</div>
           {(wins != null || losses != null || ties != null) && (
