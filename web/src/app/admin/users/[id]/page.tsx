@@ -199,7 +199,7 @@ export default async function AdminUserDetailPage({ params }: { params: Promise<
       <section className="p-5 rounded-2xl glass-card">
         <div className="flex items-center justify-between mb-3 flex-wrap gap-2">
           <h2 className="text-lg font-bold">Bot Config / Telegram</h2>
-          {botConfig.customer_telegram_chat_id && (
+          {!!botConfig.customer_telegram_chat_id && (
             <form action={unlinkTelegram}>
               <button type="submit" className="btn-outline text-xs px-3 py-1">Telegram 連携を解除</button>
             </form>
@@ -209,10 +209,10 @@ export default async function AdminUserDetailPage({ params }: { params: Promise<
           <div>
             <span className="text-text-dim">Telegram 連携: </span>
             <span className={botConfig.customer_telegram_chat_id ? 'text-green-400' : 'text-text-muted'}>
-              {botConfig.customer_telegram_chat_id ? `✓ ${botConfig.customer_telegram_username ? '@' + botConfig.customer_telegram_username : 'linked'}` : '未連携'}
+              {botConfig.customer_telegram_chat_id ? `✓ ${botConfig.customer_telegram_username ? '@' + String(botConfig.customer_telegram_username) : 'linked'}` : '未連携'}
             </span>
           </div>
-          {botConfig.customer_telegram_linked_at !== undefined && botConfig.customer_telegram_linked_at !== null && String(botConfig.customer_telegram_linked_at).length > 0 && (
+          {!!botConfig.customer_telegram_linked_at && String(botConfig.customer_telegram_linked_at).length > 0 && (
             <div><span className="text-text-dim">連携日時: </span>{new Date(String(botConfig.customer_telegram_linked_at)).toLocaleString('ja-JP')}</div>
           )}
           <details className="mt-3">
