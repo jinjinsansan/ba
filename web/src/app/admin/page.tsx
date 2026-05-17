@@ -71,14 +71,14 @@ export default async function AdminPage() {
       <Card padded={false} className="mb-4">
         <CardHead>Action Queue</CardHead>
         <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-px bg-white/[0.05]">
-          {[
-            { href: '/admin/users', label: '総ユーザー', count: userCount || 0, tone: 'cyan' as const },
-            { href: '/admin/orders', label: '未確認注文', count: pendingOrders || 0, tone: (pendingOrders || 0) > 0 ? 'warn' : 'muted' as const },
-            { href: '/admin/orders', label: '未確認チャージ', count: pendingCharges || 0, tone: (pendingCharges || 0) > 0 ? 'warn' : 'muted' as const },
-            { href: '/admin/tickets', label: '未対応チケット', count: openTickets || 0, tone: (openTickets || 0) > 0 ? 'lose' : 'muted' as const },
-            { href: '/admin/withdrawals', label: '出金申請', count: pendingWithdrawals || 0, tone: (pendingWithdrawals || 0) > 0 ? 'win' : 'muted' as const },
-            { href: '/admin/users', label: 'サスペンド中', count: suspendedUsers || 0, tone: (suspendedUsers || 0) > 0 ? 'lose' : 'muted' as const },
-          ].map(item => (
+          {([
+            { href: '/admin/users', label: '総ユーザー', count: userCount || 0, tone: 'cyan' },
+            { href: '/admin/orders', label: '未確認注文', count: pendingOrders || 0, tone: (pendingOrders || 0) > 0 ? 'warn' : 'muted' },
+            { href: '/admin/orders', label: '未確認チャージ', count: pendingCharges || 0, tone: (pendingCharges || 0) > 0 ? 'warn' : 'muted' },
+            { href: '/admin/tickets', label: '未対応チケット', count: openTickets || 0, tone: (openTickets || 0) > 0 ? 'lose' : 'muted' },
+            { href: '/admin/withdrawals', label: '出金申請', count: pendingWithdrawals || 0, tone: (pendingWithdrawals || 0) > 0 ? 'win' : 'muted' },
+            { href: '/admin/users', label: 'サスペンド中', count: suspendedUsers || 0, tone: (suspendedUsers || 0) > 0 ? 'lose' : 'muted' },
+          ] as Array<{ href: string; label: string; count: number; tone: 'cyan' | 'warn' | 'lose' | 'win' | 'muted' }>).map(item => (
             <Link key={item.label} href={item.href} className="bg-surface hover:bg-white/[0.03] px-4 py-5 transition group">
               <Money value={item.count} size="2xl" weight="bold" tone={item.tone === 'muted' ? 'dim' : item.tone} />
               <div className="text-xs text-text-muted mt-1">{item.label}</div>
