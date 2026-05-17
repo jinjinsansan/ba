@@ -250,6 +250,25 @@
       "goDashboard": "Go to Dashboard"
     }
   },
+  "realtimePnl": {
+    "title": "Live Operation",
+    "live": "Active",
+    "paused": "Paused",
+    "dailyPnl": "Today's P&L (live)",
+    "stakeBalance": "Stake Balance",
+    "openBalance": "Opening",
+    "bets": "Bets",
+    "wins": "W",
+    "losses": "L",
+    "ties": "T",
+    "lastUpdate": "Last update",
+    "agoSec": "s ago",
+    "agoMin": "m ago",
+    "agoHour": "h ago",
+    "agoDay": "d ago",
+    "noData": "No data from the receiver yet. Start the receiver GUI and a BET session.",
+    "fallbackBalance": "(balance-diff fallback, daily_bet_pnl pending)"
+  },
   "referral": {
     "title": "Referral Program",
     "urlLabel": "Your Referral URL",

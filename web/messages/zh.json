@@ -250,6 +250,25 @@
       "goDashboard": "前往仪表板"
     }
   },
+  "realtimePnl": {
+    "title": "实时运营状态",
+    "live": "运行中",
+    "paused": "已停止",
+    "dailyPnl": "今日盈亏 (实时)",
+    "stakeBalance": "Stake 余额",
+    "openBalance": "今日开盘",
+    "bets": "下注次数",
+    "wins": "胜",
+    "losses": "负",
+    "ties": "平",
+    "lastUpdate": "最近更新",
+    "agoSec": "秒前",
+    "agoMin": "分钟前",
+    "agoHour": "小时前",
+    "agoDay": "天前",
+    "noData": "尚未收到接收端数据。请启动接收端 GUI 并开始 BET 会话。",
+    "fallbackBalance": "(余额差额回退, daily_bet_pnl 待接收)"
+  },
   "referral": {
     "title": "推荐计划",
     "urlLabel": "您的推荐 URL",

@@ -250,6 +250,25 @@
       "goDashboard": "대시보드로"
     }
   },
+  "realtimePnl": {
+    "title": "실시간 운용 상태",
+    "live": "가동 중",
+    "paused": "중지",
+    "dailyPnl": "당일 손익 (실시간)",
+    "stakeBalance": "Stake 잔고",
+    "openBalance": "시작 잔고",
+    "bets": "BET 횟수",
+    "wins": "승",
+    "losses": "패",
+    "ties": "무",
+    "lastUpdate": "최종 업데이트",
+    "agoSec": "초 전",
+    "agoMin": "분 전",
+    "agoHour": "시간 전",
+    "agoDay": "일 전",
+    "noData": "수신측에서 데이터가 아직 도착하지 않았습니다. 수신 GUI를 시작하고 BET 세션을 시작하세요.",
+    "fallbackBalance": "(잔고 차이 대체, daily_bet_pnl 미수신)"
+  },
   "referral": {
     "title": "추천 프로그램",
     "urlLabel": "나의 추천 URL",

@@ -6,6 +6,7 @@ import { getTranslations } from 'next-intl/server'
 import DashboardClient from './DashboardClient'
 import SupportForm from './SupportForm'
 import ReferralSection from './ReferralSection'
+import RealtimePnlCard from './RealtimePnlCard'
 
 export default async function DashboardPage() {
   const t = await getTranslations('dashboard')
@@ -159,6 +160,9 @@ export default async function DashboardPage() {
             <div className="text-2xl font-bold text-banker">${billing?.carry_loss?.toFixed(2) || '0.00'}</div>
           </div>
         </div>
+
+        {/* Realtime Live Operation (executor session_state polling) */}
+        <RealtimePnlCard initial={(billing as { session_state?: Record<string, unknown> } | null)?.session_state ?? null} />
 
         {/* Download + Referral */}
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">

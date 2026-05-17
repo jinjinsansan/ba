@@ -250,6 +250,25 @@
       "goDashboard": "ダッシュボードへ"
     }
   },
+  "realtimePnl": {
+    "title": "ライブ運用状況",
+    "live": "稼働中",
+    "paused": "停止中",
+    "dailyPnl": "当日損益 (リアルタイム)",
+    "stakeBalance": "Stake 残高",
+    "openBalance": "本日開始時",
+    "bets": "BET 件数",
+    "wins": "勝",
+    "losses": "敗",
+    "ties": "引き分け",
+    "lastUpdate": "最終更新",
+    "agoSec": "秒前",
+    "agoMin": "分前",
+    "agoHour": "時間前",
+    "agoDay": "日前",
+    "noData": "受け子からのデータをまだ受信していません。受け子 GUI を起動して BET セッションを開始してください。",
+    "fallbackBalance": "(残高差分ベース、daily_bet_pnl 未着)"
+  },
   "referral": {
     "title": "紹介プログラム",
     "urlLabel": "あなたの紹介 URL",
