@@ -36,6 +36,12 @@ export default async function AdminUserDetailPage({ params }: { params: Promise<
 
   if (!profile) notFound()
 
+  // この user を紹介した人 (referrer) を referred_by コードから lookup
+  const referredByCode = String(profile.referred_by || '').trim()
+  const { data: referrer } = referredByCode
+    ? await admin.from('profiles').select('id, email, referral_code').eq('referral_code', referredByCode).maybeSingle()
+    : { data: null }
+
   const botConfig = (billing?.bot_config && typeof billing.bot_config === 'object')
     ? (billing.bot_config as Record<string, unknown>)
     : {}
@@ -74,6 +80,14 @@ export default async function AdminUserDetailPage({ params }: { params: Promise<
     const a = createAdminClient()
     const { data: cur } = await a.from('billing').select('is_free').eq('user_id', id).single()
     await a.from('billing').update({ is_free: !cur?.is_free, updated_at: new Date().toISOString() }).eq('user_id', id)
+    revalidatePath(`/admin/users/${id}`)
+  }
+  async function updateReferrerShareRate(formData: FormData) {
+    'use server'
+    const pct = parseFloat(String(formData.get('rate') || '0'))
+    if (!Number.isFinite(pct) || pct < 0 || pct > 100) return
+    const a = createAdminClient()
+    await a.from('billing').update({ referrer_share_rate: pct / 100, updated_at: new Date().toISOString() }).eq('user_id', id)
     revalidatePath(`/admin/users/${id}`)
   }
   async function approveCharge(formData: FormData) {
@@ -326,7 +340,7 @@ export default async function AdminUserDetailPage({ params }: { params: Promise<
         <h2 className="text-lg font-bold mb-3">紹介情報</h2>
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-4">
           <div className="p-3 rounded-lg bg-bg-glass border border-accent/10">
-            <div className="text-[10px] text-text-dim tracking-widest uppercase">紹介コード</div>
+            <div className="text-[10px] text-text-dim tracking-widest uppercase">このユーザの紹介コード</div>
             <div className="text-sm font-bold mt-1">{profile.referral_code || '—'}</div>
           </div>
           <div className="p-3 rounded-lg bg-bg-glass border border-accent/10">
@@ -338,7 +352,53 @@ export default async function AdminUserDetailPage({ params }: { params: Promise<
             <div className="text-sm font-bold mt-1">{(commissionsAsReferred || []).length} 件</div>
           </div>
         </div>
-        {profile.referred_by && <div className="text-xs text-text-muted">この人を紹介したコード: {profile.referred_by}</div>}
+
+        {/* 紹介された場合の報酬率設定 */}
+        {referredByCode ? (
+          <div className="mt-4 p-4 rounded-xl bg-bg-glass border border-accent/20">
+            <div className="text-sm font-bold mb-2">このユーザを紹介した人 (紹介元)</div>
+            {referrer ? (
+              <Link href={`/admin/users/${referrer.id}`} className="text-accent hover:underline text-sm break-all inline-block mb-3">
+                → {referrer.email} (コード: {referredByCode})
+              </Link>
+            ) : (
+              <div className="text-text-muted text-xs mb-3">紹介コード: {referredByCode} (referrer profile が見つかりません — コードのみ存在)</div>
+            )}
+
+            <form action={updateReferrerShareRate} className="space-y-2">
+              <label className="block text-xs text-text-muted font-semibold">紹介者報酬率 (%)</label>
+              <p className="text-[11px] text-text-dim leading-relaxed">
+                このユーザが支払う手数料 (operator fee) のうち、何 % を上記の紹介者に渡すかを設定します。
+                cron settle (毎日 JST 00:05) で適用されます。デフォルト: 20% / 未設定: 0%
+              </p>
+              <div className="flex gap-2 items-center">
+                <input
+                  name="rate"
+                  type="number"
+                  min="0"
+                  max="100"
+                  step="1"
+                  defaultValue={billing && billing.referrer_share_rate !== null && billing.referrer_share_rate !== undefined
+                    ? (Number(billing.referrer_share_rate) * 100).toFixed(0)
+                    : '20'}
+                  className="w-24 px-3 py-2 rounded bg-bg-card border border-accent/15 text-text text-sm"
+                />
+                <span className="text-text-muted text-sm">%</span>
+                <button type="submit" className="btn-outline px-4 py-2 text-xs ml-auto">更新</button>
+              </div>
+              <div className="text-[10px] text-text-dim mt-2">
+                現在値: {billing?.referrer_share_rate !== null && billing?.referrer_share_rate !== undefined
+                  ? `${(Number(billing.referrer_share_rate) * 100).toFixed(0)}%`
+                  : '未設定 (default 20%)'}
+              </div>
+            </form>
+            <div className="mt-3 text-[10px] text-text-dim">
+              ※ この設定は LAPLACE_ENABLE_DYNAMIC_REFERRAL_SPLIT=true (Vercel env) のときのみ有効です。
+            </div>
+          </div>
+        ) : (
+          <div className="text-xs text-text-muted">このユーザを紹介した人は登録されていません (referred_by 無し)。</div>
+        )}
       </section>
 
       {/* ライセンス / 配布物 */}
