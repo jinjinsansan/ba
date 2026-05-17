@@ -12,7 +12,6 @@ const ADMIN_MENU = [
   { href: '/admin/promos', label: 'プロモ', icon: '%' },
   { href: '/admin/tickets', label: 'チケット', icon: '?' },
   { href: '/admin/withdrawals', label: '出金申請', icon: '⤴' },
-  { href: '/admin/ledger', label: '資金管理', icon: '☰' },
 ]
 
 export default function AdminShell({ userEmail, children }: { userEmail: string; children: React.ReactNode }) {

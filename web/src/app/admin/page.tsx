@@ -87,6 +87,7 @@ export default async function AdminPage() {
           <div className="text-sm text-text-muted mt-1">サスペンド中</div>
         </Link>
       </div>
+      {/* (note) /admin/ledger ページは廃止 (2026-05-17) */}
 
       {/* Recent signups */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
@@ -131,8 +132,8 @@ export default async function AdminPage() {
         <div className="text-xs text-text-muted mb-3">クイックリンク</div>
         <div className="flex flex-wrap gap-2 text-sm">
           <Link href="/admin/users" className="px-3 py-1.5 rounded-lg bg-bg-glass border border-accent/15 hover:border-accent/40 transition">ユーザー一覧</Link>
-          <Link href="/admin/ledger" className="px-3 py-1.5 rounded-lg bg-bg-glass border border-emerald-500/30 text-emerald-400 hover:border-emerald-400/60 transition">📊 資金管理</Link>
           <Link href="/admin/promos" className="px-3 py-1.5 rounded-lg bg-bg-glass border border-accent/15 hover:border-accent/40 transition">プロモコード</Link>
+          <Link href="/admin/tickets" className="px-3 py-1.5 rounded-lg bg-bg-glass border border-accent/15 hover:border-accent/40 transition">チケット</Link>
         </div>
       </div>
     </div>
