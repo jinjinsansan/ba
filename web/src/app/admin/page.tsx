@@ -78,12 +78,20 @@ export default async function AdminPage() {
             { href: '/admin/tickets', label: '未対応チケット', count: openTickets || 0, tone: (openTickets || 0) > 0 ? 'lose' : 'muted' },
             { href: '/admin/withdrawals', label: '出金申請', count: pendingWithdrawals || 0, tone: (pendingWithdrawals || 0) > 0 ? 'win' : 'muted' },
             { href: '/admin/users', label: 'サスペンド中', count: suspendedUsers || 0, tone: (suspendedUsers || 0) > 0 ? 'lose' : 'muted' },
-          ] as Array<{ href: string; label: string; count: number; tone: 'cyan' | 'warn' | 'lose' | 'win' | 'muted' }>).map(item => (
-            <Link key={item.label} href={item.href} className="bg-surface hover:bg-white/[0.03] px-4 py-5 transition group">
-              <Money value={item.count} size="2xl" weight="bold" tone={item.tone === 'muted' ? 'dim' : item.tone} />
-              <div className="text-xs text-text-muted mt-1">{item.label}</div>
-            </Link>
-          ))}
+          ] as Array<{ href: string; label: string; count: number; tone: 'cyan' | 'warn' | 'lose' | 'win' | 'muted' }>).map(item => {
+            const toneClass =
+              item.tone === 'muted' ? 'text-text-dim' :
+              item.tone === 'cyan'  ? 'text-cyan'     :
+              item.tone === 'warn'  ? 'text-warn'     :
+              item.tone === 'lose'  ? 'text-lose'     :
+              item.tone === 'win'   ? 'text-win'      : 'text-text'
+            return (
+              <Link key={item.label} href={item.href} className="bg-surface hover:bg-white/[0.03] px-4 py-5 transition group">
+                <div className={`font-mono tabular-nums font-bold text-[28px] leading-none ${toneClass}`}>{item.count}</div>
+                <div className="text-xs text-text-muted mt-1">{item.label}</div>
+              </Link>
+            )
+          })}
         </div>
       </Card>
 
