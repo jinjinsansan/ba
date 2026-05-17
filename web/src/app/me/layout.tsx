@@ -1,6 +1,6 @@
 import { createClient } from '@/lib/supabase-server'
 import { redirect } from 'next/navigation'
-import AppShell from './_components/AppShell'
+import Rail from '@/components/ui/Rail'
 
 export default async function MeLayout({ children }: { children: React.ReactNode }) {
   const supabase = await createClient()
@@ -13,13 +13,13 @@ export default async function MeLayout({ children }: { children: React.ReactNode
   ])
 
   return (
-    <AppShell
+    <Rail
       userEmail={profile?.email || user.email || ''}
       isAdmin={!!profile?.is_admin}
       isSuspended={!!billing?.suspended}
       isFree={!!billing?.is_free}
     >
       {children}
-    </AppShell>
+    </Rail>
   )
 }

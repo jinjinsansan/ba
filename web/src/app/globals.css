@@ -1,32 +1,66 @@
-@import url('https://fonts.googleapis.com/css2?family=Orbitron:wght@400;600;700;900&family=Share+Tech+Mono&family=Inter:wght@300;400;500;600;700;900&display=swap');
+/* =====================================================================
+   bafather · Mercury × HUD · globals.css
+   --------------------------------------------------------------------- */
+
+@import url('https://fonts.googleapis.com/css2?family=Orbitron:wght@500;700&family=Inter:wght@400;500;600;700&family=Noto+Sans+JP:wght@400;500;700&family=JetBrains+Mono:wght@400;500;600;700&display=swap');
 
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
+/* ===========================================================
+   Tokens
+   =========================================================== */
 :root {
-  --bg: #05080f;
-  --bg-card: rgba(15, 20, 35, 0.85);
-  --bg-glass: rgba(20, 28, 50, 0.6);
-  --accent: #00e5ff;
-  --accent-dim: rgba(0, 229, 255, 0.15);
-  --win: #00ff88;
-  --lose: #ff3366;
-  --tie: #ffcc00;
-  --text: #e0e8f0;
-  --text-muted: #7888a0;
-  --text-dim: #4a5568;
-  --border: rgba(0, 229, 255, 0.12);
-  --border-strong: rgba(0, 229, 255, 0.38);
-  --glow: 0 0 20px rgba(0, 229, 255, 0.15);
-  --font-hud: 'Orbitron', sans-serif;
-  --font-mono: 'Share Tech Mono', monospace;
-  --font-body: 'Inter', 'Segoe UI', sans-serif;
+  /* surfaces */
+  --bg:        #0a0d12;          /* page background */
+  --bg-rail:   #0c1017;          /* sidebar background */
+  --surface:   #10141c;          /* card background */
+  --surface-2: #161b25;          /* nested / hover */
+  --surface-3: #1c2230;          /* input wells */
+
+  /* borders */
+  --border:    rgba(255,255,255,0.07);
+  --border-hi: rgba(255,255,255,0.14);
+
+  /* text */
+  --text:        #e6ecf3;        /* contrast 15:1 */
+  --text-muted:  #8b97a9;        /* contrast 5.7:1 — AA */
+  --text-dim:    #6b7d97;        /* contrast 4.0:1 — AA small */
+
+  /* semantic */
+  --cyan:      #5cdfff;          /* primary accent / live indicator / link */
+  --cyan-dim:  #3a8fa5;
+  --amber:     #ffb547;          /* admin identity / warning */
+  --amber-dim: #a37130;
+  --win:       #3fd49a;          /* PnL win / paid / active */
+  --lose:      #ff6479;          /* PnL lose / destructive */
+  --warn:      #ffb547;          /* pending / unpaid */
+
+  /* data-domain (baccarat) — DO NOT use for UI semantic */
+  --d-banker:  #ff6479;
+  --d-player:  #4a9eff;
+  --d-tie:     #ffcc40;
+
+  /* fonts */
+  --font-hud:  'Orbitron', 'Noto Sans JP', 'Inter', system-ui, sans-serif;
+  --font-mono: 'JetBrains Mono', 'Share Tech Mono', ui-monospace, monospace;
+  --font-body: 'Inter', 'Noto Sans JP', 'Segoe UI', system-ui, sans-serif;
 }
 
+/* ===========================================================
+   Base
+   =========================================================== */
 @layer base {
-  * {
+  *,
+  *::before,
+  *::after {
     @apply box-border;
+  }
+
+  html {
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
   }
 
   body {
@@ -34,76 +68,139 @@
     background: var(--bg);
     color: var(--text);
     min-height: 100vh;
-    -webkit-font-smoothing: antialiased;
+    line-height: 1.55;
   }
 
+  /* Latin-only HUD tracking. Japanese keeps natural spacing. */
   h1, h2, h3, h4 {
+    font-family: var(--font-body);
+    font-weight: 700;
+    letter-spacing: -0.01em;
+  }
+  .font-hud,
+  h1:lang(en), h2:lang(en), h3:lang(en), h4:lang(en) {
     font-family: var(--font-hud);
-    letter-spacing: 0.08em;
+    letter-spacing: 0.04em;
   }
 
+  /* Numeric runs always tabular. */
+  .num,
+  .tabular {
+    font-variant-numeric: tabular-nums;
+    font-feature-settings: 'tnum';
+  }
+
+  /* Selection */
   ::selection {
-    background: var(--accent-dim);
+    background: rgba(92, 223, 255, 0.20);
     color: var(--text);
   }
+
+  /* Focus ring — visible & consistent */
+  :focus-visible {
+    outline: 2px solid var(--cyan);
+    outline-offset: 2px;
+    border-radius: 4px;
+  }
+
+  /* Placeholders */
+  input::placeholder,
+  textarea::placeholder {
+    color: var(--text-dim);
+  }
+
+  /* Remove default button outline; rely on :focus-visible */
+  button { outline: none; }
 }
 
-body::before {
-  content: '';
-  position: fixed;
-  inset: 0;
-  background-image:
-    linear-gradient(rgba(0,229,255,0.035) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(0,229,255,0.035) 1px, transparent 1px);
-  background-size: 40px 40px;
-  pointer-events: none;
-  z-index: 0;
-  opacity: 0.5;
-}
-
-body::after {
-  content: '';
-  position: fixed;
-  top: -120px;
-  left: 50%;
-  transform: translateX(-50%);
-  width: 680px;
-  height: 320px;
-  background: radial-gradient(ellipse at center, rgba(0,229,255,0.08) 0%, transparent 70%);
-  pointer-events: none;
-  z-index: 0;
-}
-
+/* ===========================================================
+   Components — only the few that are reused widely.
+   Prefer real React components (handoff/components/*) over
+   these utility classes. They are kept for legacy templates.
+   =========================================================== */
 @layer components {
-  .glass-panel {
-    @apply bg-bg-card border border-accent/20 backdrop-blur-xl shadow-[0_0_25px_rgba(0,229,255,0.12)];
+  /* Surface — flat, hairline, no glow */
+  .surface {
+    @apply bg-[var(--surface)] border border-[var(--border)] rounded-[10px];
   }
 
-  .glass-card {
-    @apply bg-bg-card border border-accent/15 backdrop-blur-xl shadow-[0_0_30px_rgba(0,229,255,0.12)];
-  }
-
+  /* "glass-card" kept for backwards compat but now flat. */
+  .glass-card,
+  .glass-panel,
   .glass-soft {
-    @apply bg-bg-glass border border-accent/10 backdrop-blur-xl;
+    @apply bg-[var(--surface)] border border-[var(--border)];
   }
 
-  .hud-title {
-    @apply font-hud uppercase tracking-[0.35em] text-accent;
+  /* HUD kicker — small uppercase Latin label */
+  .kicker {
+    font-family: var(--font-mono);
+    font-size: 11px;
+    color: var(--text-dim);
+    letter-spacing: 0.25em;
+    text-transform: uppercase;
   }
 
-  .hud-label {
-    @apply text-[10px] uppercase tracking-[0.3em] text-text-muted;
+  /* Small label — used inside cards */
+  .field-label {
+    font-family: var(--font-mono);
+    font-size: 10px;
+    color: var(--text-dim);
+    letter-spacing: 0.15em;
+    text-transform: uppercase;
   }
 
+  /* Money / numeric display */
+  .num-mono {
+    font-family: var(--font-mono);
+    font-variant-numeric: tabular-nums;
+    font-feature-settings: 'tnum';
+  }
+
+  /* Primary CTA — flat fill, focus ring, japanese-safe tracking */
   .btn-primary {
-    @apply bg-accent text-black font-hud uppercase tracking-[0.25em] text-xs px-6 py-3 rounded-lg shadow-[0_0_20px_rgba(0,229,255,0.25)] transition;
+    @apply inline-flex items-center justify-center gap-2;
+    @apply bg-[var(--cyan)] text-[#001721] font-semibold;
+    @apply px-5 py-2.5 text-sm rounded-md;
+    @apply hover:brightness-110 transition;
+  }
+  .btn-primary:lang(en) {
+    @apply font-hud uppercase tracking-[0.2em] text-xs;
+  }
+
+  .btn-secondary {
+    @apply inline-flex items-center justify-center gap-2;
+    @apply bg-white/[0.05] text-[var(--text)] border border-[var(--border)];
+    @apply px-5 py-2.5 text-sm rounded-md;
+    @apply hover:bg-white/[0.08] transition;
   }
 
   .btn-outline {
-    @apply border border-accent/50 text-accent font-hud uppercase tracking-[0.25em] text-xs px-6 py-3 rounded-lg transition;
+    @apply inline-flex items-center justify-center gap-2;
+    @apply text-[var(--cyan)] border border-[var(--cyan-dim)] bg-transparent;
+    @apply px-5 py-2.5 text-sm rounded-md;
+    @apply hover:border-[var(--cyan)] transition;
   }
 
+  .btn-ghost {
+    @apply inline-flex items-center justify-center gap-2;
+    @apply text-[var(--text-muted)] bg-transparent border border-transparent;
+    @apply px-4 py-2 text-sm rounded-md;
+    @apply hover:text-[var(--text)] hover:bg-white/[0.04] transition;
+  }
+
+  .btn-danger {
+    @apply inline-flex items-center justify-center gap-2;
+    @apply text-[var(--lose)] bg-transparent border border-[var(--lose)]/40;
+    @apply px-5 py-2.5 text-sm rounded-md;
+    @apply hover:bg-[var(--lose)]/10 transition;
+  }
+
+  /* Input — flat, hairline border, cyan focus */
   .input-field {
-    @apply w-full px-4 py-3 rounded-lg bg-bg-glass border border-accent/20 text-text focus:outline-none focus:border-accent/60 transition;
+    @apply w-full px-4 py-3 rounded-md;
+    @apply bg-white/[0.02] border border-[var(--border)];
+    @apply text-[var(--text)] text-sm;
+    @apply focus:outline-none focus:border-[var(--cyan-dim)];
+    @apply transition;
   }
 }

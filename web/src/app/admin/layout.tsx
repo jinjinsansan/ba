@@ -1,6 +1,6 @@
 import { createClient } from '@/lib/supabase-server'
 import { redirect } from 'next/navigation'
-import AdminShell from './_components/AdminShell'
+import AdminRail from '@/components/ui/AdminRail'
 
 export default async function AdminLayout({ children }: { children: React.ReactNode }) {
   const supabase = await createClient()
@@ -11,8 +11,8 @@ export default async function AdminLayout({ children }: { children: React.ReactN
   if (!profile?.is_admin) redirect('/me')
 
   return (
-    <AdminShell userEmail={profile.email || user.email || ''}>
+    <AdminRail userEmail={profile.email || user.email || ''}>
       {children}
-    </AdminShell>
+    </AdminRail>
   )
 }
