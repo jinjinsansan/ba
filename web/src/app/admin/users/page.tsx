@@ -98,6 +98,28 @@ export default async function AdminUsersPage() {
                       <Link href={`/admin/users/${u.id}`} className="text-cyan hover:underline break-all min-w-0">{u.email}</Link>
                       {u.is_admin && <Pill tone="admin">ADMIN</Pill>}
                     </div>
+                    {(() => {
+                      // フリート監視: 受け子エンジンが session_state.bot_status を60秒ごとに送る。
+                      // 無ければ何も出さない(旧エンジンの受け子は後方互換で空)。
+                      const bs = (b?.session_state as Record<string, any> | undefined)?.bot_status
+                      if (!bs) return null
+                      const moneyTxt = bs.money_mode === 'flat' ? `FLAT $${bs.unit}` : `SEQ ${bs.money_mode}`
+                      const fol = bs.follow ? `追従ON${bs.follow_active ? ` x${bs.follow_chain}` : ''}` : '追従なし'
+                      const over = bs.seq_overshoot
+                      return (
+                        <div className="mt-1.5 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[11px] font-mono">
+                          <span className={bs.mode === 'auto' ? 'text-cyan' : 'text-text-muted'}>{bs.mode === 'auto' ? 'AUTO' : '手動'}</span>
+                          <span className={bs.follow ? 'text-amber-400' : 'text-text-dim'}>{fol}</span>
+                          <span className="text-text-muted">{moneyTxt}</span>
+                          <span className="text-text-muted">NEXT ${bs.next_bet}</span>
+                          {typeof over === 'number' && over > 0 && (
+                            <span className={over >= 6 ? 'text-rose-400 font-semibold' : 'text-text-muted'}>負け越し▼{over}</span>
+                          )}
+                          <span className="text-text-dim">{bs.wins}W/{bs.losses}L{typeof bs.win_rate === 'number' ? ` ${bs.win_rate}%` : ''}</span>
+                          {bs.loss_cut === 0 && bs.money_mode !== 'flat' && <span className="text-rose-400/80">⚠cut無制限</span>}
+                        </div>
+                      )
+                    })()}
                   </td>
                   <td className="px-5 py-3 text-right">
                     {b?.is_free

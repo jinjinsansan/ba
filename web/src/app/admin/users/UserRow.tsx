@@ -58,36 +58,6 @@ export default function UserRow({ user, billing }: { user: any; billing: any }) 
         <td className="py-3">
           <div>{user.email}</div>
           {user.is_admin && <span className="text-xs text-accent bg-accent/10 px-1.5 py-0.5 rounded">管理者</span>}
-          {(() => {
-            // フリート監視: 受け子エンジンが session_state.bot_status を60秒ごとに送る。
-            // 無ければ何も出さない(後方互換・旧エンジンの受け子)。
-            const bs = (billing?.session_state as any)?.bot_status
-            if (!bs) return null
-            const upd = bs.updated_at ? new Date(bs.updated_at).getTime() : NaN
-            const live = Number.isFinite(upd) && (Date.now() - upd < 120000)
-            const moneyTxt = bs.money_mode === 'flat' ? `FLAT $${bs.unit}` : `SEQ ${bs.money_mode}`
-            const over = bs.seq_overshoot
-            return (
-              <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[11px]">
-                <span className={live ? 'text-green-400' : 'text-slate-500'}>{live ? '🟢稼働中' : '⚪停止'}</span>
-                <span className={bs.mode === 'auto' ? 'text-cyan-400' : 'text-slate-400'}>{bs.mode === 'auto' ? 'AUTO' : '手動'}</span>
-                <span className={bs.follow ? 'text-amber-400' : 'text-slate-500'}>
-                  {bs.follow ? `追従ON${bs.follow_active ? `🔗${bs.follow_chain}` : ''}` : '追従なし'}
-                </span>
-                <span className="text-slate-300">{moneyTxt}</span>
-                <span className="text-slate-300">NEXT <b>${bs.next_bet}</b></span>
-                {typeof over === 'number' && over > 0 && (
-                  <span className={over >= 6 ? 'text-red-400 font-bold' : 'text-slate-400'}>負け越し▼{over}</span>
-                )}
-                <span className="text-slate-500">
-                  {bs.wins}W/{bs.losses}L{typeof bs.win_rate === 'number' ? ` (${bs.win_rate}%)` : ''}
-                </span>
-                {bs.loss_cut === 0 && bs.money_mode !== 'flat' && (
-                  <span className="text-red-400/80">⚠cut無制限</span>
-                )}
-              </div>
-            )
-          })()}
         </td>
         <td className="py-3 font-bold">${billing?.balance?.toFixed(2) || '0.00'}</td>
         <td className="py-3 font-bold">
