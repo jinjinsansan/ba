@@ -112,8 +112,8 @@ export default async function AdminUsersPage() {
                           <span className={bs.follow ? 'text-amber-400' : 'text-text-dim'}>{fol}</span>
                           <span className="text-text-muted">{moneyTxt}</span>
                           <span className="text-text-muted">NEXT ${bs.next_bet}</span>
-                          {typeof over === 'number' && over > 0 && (
-                            <span className={over >= 6 ? 'text-rose-400 font-semibold' : 'text-text-muted'}>負け越し▼{over}</span>
+                          {typeof over === 'number' && bs.money_mode !== 'flat' && (
+                            <span className={over >= 6 ? 'text-rose-400 font-semibold' : over > 0 ? 'text-text-muted' : 'text-text-dim'}>負け越し▼{over}</span>
                           )}
                           <span className="text-text-dim">{bs.wins}W/{bs.losses}L{typeof bs.win_rate === 'number' ? ` ${bs.win_rate}%` : ''}</span>
                           {bs.loss_cut === 0 && bs.money_mode !== 'flat' && <span className="text-rose-400/80">⚠cut無制限</span>}
