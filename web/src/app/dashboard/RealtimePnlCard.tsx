@@ -65,11 +65,14 @@ export default function RealtimePnlCard({ initial }: { initial: SessionState | n
   const dbpPrev = typeof ss.prev_daily_bet_pnl === 'number' && ss.prev_daily_bet_pnl_date === today ? ss.prev_daily_bet_pnl : null
   const dbp = dbpToday ?? dbpPrev
   const dpFallback = typeof ss.daily_pnl === 'number' ? ss.daily_pnl : null
-  const pnl = dbp ?? dpFallback
-  const isFromBetPnl = dbp !== null
 
   const balance = typeof ss.current_balance === 'number' ? ss.current_balance : null
   const openBal = typeof ss.daily_open_balance === 'number' ? ss.daily_open_balance : null
+
+  // 残高差分を最優先(daily_bet_pnl はベット履歴DOM誤読で膨張し得る 2026-06-12)
+  const balanceDiff = balance != null && openBal != null ? balance - openBal : null
+  const pnl = balanceDiff ?? dbp ?? dpFallback
+  const isFromBetPnl = balanceDiff == null && dbp !== null
 
   const lastAt = typeof ss.last_balance_at === 'string' ? new Date(ss.last_balance_at).getTime() : NaN
   const ageSec = Number.isFinite(lastAt) ? Math.max(0, Math.floor((now - lastAt) / 1000)) : Infinity

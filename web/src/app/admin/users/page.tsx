@@ -34,11 +34,16 @@ function todayPnl(b: BillingLite | null): number | null {
   if (!b?.session_state || typeof b.session_state !== 'object') return null
   const ss = b.session_state as Record<string, unknown>
   const today = new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Tokyo' })
+  // 残高差分を最優先(エンジンGUIのDAILY TOTALと同一式)。daily_bet_pnl は
+  // ベット履歴DOM誤読(他人のベットフィード混入)で膨張し得るためフォールバック (2026-06-12)
+  const open = ss.daily_open as { date?: string; balance?: number } | undefined
+  const curBal = ss.current_balance
+  if (open && open.date === today && typeof open.balance === 'number' && typeof curBal === 'number') {
+    return curBal - open.balance
+  }
   const dbp = typeof ss.daily_bet_pnl === 'number' && ss.daily_bet_pnl_date === today ? ss.daily_bet_pnl : null
   if (dbp !== null) return dbp
-  const openBal = (ss.daily_open as { balance?: number } | undefined)?.balance
-  const curBal = ss.current_balance
-  if (typeof openBal === 'number' && typeof curBal === 'number') return curBal - openBal
+  if (typeof open?.balance === 'number' && typeof curBal === 'number') return curBal - open.balance
   return null
 }
 
