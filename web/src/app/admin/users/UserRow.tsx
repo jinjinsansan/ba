@@ -19,6 +19,7 @@ export default function UserRow({ user, billing }: { user: any; billing: any }) 
   const [uploading, setUploading] = useState(false)
   const [showUrlInput, setShowUrlInput] = useState(false)
   const [zipUrl, setZipUrl] = useState('')
+  const router = useRouter()
   const isActive = !billing?.suspended
 
   async function sendZipUrl() {
@@ -34,7 +35,6 @@ export default function UserRow({ user, billing }: { user: any; billing: any }) 
     setUploading(false)
   }
   const cfg = { ...DEFAULT_BOT_CONFIG, ...(billing?.bot_config || {}) }
-  const router = useRouter()
 
   async function updateUser(action: string, value?: any) {
     setLoading(true)
@@ -52,24 +52,53 @@ export default function UserRow({ user, billing }: { user: any; billing: any }) 
   const isFree = billing?.is_free
   const isBotPaid = billing?.bot_paid
 
+  // ── フリート監視 + ライブ判定(6/12版の表示を維持) ──
+  const ss = (billing?.session_state || {}) as Record<string, any>
+  const lastAt = typeof ss.last_balance_at === 'string' ? new Date(ss.last_balance_at).getTime() : NaN
+  const live = Number.isFinite(lastAt) && Date.now() - lastAt < 90_000
+  const bs = ss.bot_status as Record<string, any> | undefined
+
+  // Today PnL = 残高差分(ダッシュボードと同式)
+  let pnl: number | null = null
+  {
+    const openBal = ss?.daily_open?.balance
+    const curBal = ss?.current_balance
+    if (typeof openBal === 'number' && typeof curBal === 'number') pnl = curBal - openBal
+  }
+
   return (
     <>
-      <tr className="border-b border-white/5">
-        <td className="py-3">
-          <div>{user.email}</div>
-          {user.is_admin && <span className="text-xs text-accent bg-accent/10 px-1.5 py-0.5 rounded">管理者</span>}
+      <tr className="border-b border-white/5 align-top">
+        <td className="py-3 pr-3">
+          <div className="flex items-center gap-2 min-w-0">
+            <span className={`inline-block w-2 h-2 rounded-full shrink-0 ${live ? 'bg-green-400 animate-pulse' : 'bg-slate-600'}`} />
+            <span className="break-all min-w-0">{user.email}</span>
+            {user.is_admin && <span className="text-xs text-accent bg-accent/10 px-1.5 py-0.5 rounded shrink-0">管理者</span>}
+          </div>
+          {user.referral_code && <div className="mt-0.5 font-mono text-[10px] text-slate-600">{user.referral_code}</div>}
+          {bs && (
+            <div className="mt-1.5 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[11px] font-mono">
+              <span className={bs.mode === 'auto' ? 'text-cyan-400' : 'text-slate-400'}>{bs.mode === 'auto' ? 'AUTO' : '手動'}</span>
+              <span className={bs.follow ? 'text-amber-400' : 'text-slate-600'}>
+                {bs.follow ? `追従ON${bs.follow_active ? ` x${bs.follow_chain}` : ''}` : '追従なし'}
+              </span>
+              <span className="text-slate-400">{bs.money_mode === 'flat' ? `FLAT $${bs.unit}` : `SEQ ${bs.money_mode}`}</span>
+              <span className="text-slate-400">NEXT ${bs.next_bet}</span>
+              {typeof bs.seq_overshoot === 'number' && bs.money_mode !== 'flat' && (
+                <span className={bs.seq_overshoot >= 6 ? 'text-rose-400 font-semibold' : bs.seq_overshoot > 0 ? 'text-slate-400' : 'text-slate-600'}>負け越し▼{bs.seq_overshoot}</span>
+              )}
+              <span className="text-slate-600">{bs.wins}W/{bs.losses}L{typeof bs.win_rate === 'number' ? ` ${bs.win_rate}%` : ''}</span>
+              {bs.loss_cut === 0 && bs.money_mode !== 'flat' && <span className="text-rose-400/80">⚠cut無制限</span>}
+            </div>
+          )}
         </td>
-        <td className="py-3 font-bold">${billing?.balance?.toFixed(2) || '0.00'}</td>
-        <td className="py-3 font-bold">
-          {(() => {
-            const ss = billing?.session_state as any
-            const openBal = ss?.daily_open?.balance
-            const curBal = ss?.current_balance
-            if (typeof openBal !== 'number' || typeof curBal !== 'number') return <span className="text-slate-500">—</span>
-            const pnl = curBal - openBal
-            const sign = pnl >= 0 ? '+' : ''
-            return <span className={pnl >= 0 ? 'text-green-400' : 'text-red-400'}>{sign}${pnl.toFixed(2)}</span>
-          })()}
+        <td className="py-3 font-bold whitespace-nowrap">
+          {isFree ? <span className="font-mono text-cyan-400 text-sm">— FREE</span> : `$${billing?.balance?.toFixed(2) || '0.00'}`}
+        </td>
+        <td className="py-3 font-bold whitespace-nowrap">
+          {pnl === null
+            ? <span className="text-slate-500">—</span>
+            : <span className={pnl >= 0 ? 'text-green-400' : 'text-red-400'}>{pnl >= 0 ? '+' : ''}${pnl.toFixed(2)}</span>}
         </td>
         <td className="py-3">
           <div className="flex items-center gap-2">
@@ -88,7 +117,7 @@ export default function UserRow({ user, billing }: { user: any; billing: any }) 
             </button>
           </div>
         </td>
-        <td className="py-3">
+        <td className="py-3 whitespace-nowrap">
           {isFree ? (
             <span className="px-2 py-0.5 rounded text-xs bg-accent/20 text-accent">無料</span>
           ) : isSuspended ? (
@@ -101,8 +130,7 @@ export default function UserRow({ user, billing }: { user: any; billing: any }) 
             <span className="px-2 py-0.5 rounded text-xs bg-slate-500/20 text-slate-400">未購入</span>
           )}
         </td>
-        <td className="py-3 font-mono text-xs text-slate-500">{user.referral_code}</td>
-        <td className="py-3 text-slate-500">{new Date(user.created_at).toLocaleDateString('ja-JP')}</td>
+        <td className="py-3 text-slate-500 whitespace-nowrap text-xs">{new Date(user.created_at).toLocaleDateString('ja-JP')}</td>
         <td className="py-3">
           <div className="flex gap-2 flex-wrap">
             <button
@@ -153,6 +181,12 @@ export default function UserRow({ user, billing }: { user: any; billing: any }) 
             >
               ZIP送付
             </button>
+            <a
+              href={`/admin/users/${user.id}`}
+              className="px-2 py-1 rounded text-xs bg-white/5 text-slate-400 hover:text-white transition"
+            >
+              詳細→
+            </a>
             <button
               onClick={() => setShowConfig(v => !v)}
               className="px-2 py-1 rounded text-xs bg-white/5 text-slate-400 hover:text-white transition"
@@ -165,7 +199,7 @@ export default function UserRow({ user, billing }: { user: any; billing: any }) 
 
       {showConfig && (
         <tr className="border-b border-white/5 bg-white/[0.02]">
-          <td colSpan={8} className="py-3 px-4">
+          <td colSpan={7} className="py-3 px-4">
             <div className="text-[10px] text-slate-500 mb-2 tracking-widest">TABLE FILTER</div>
             <div className="flex flex-wrap gap-2 text-xs">
               <span className="px-2 py-0.5 rounded bg-white/5 text-slate-300">PRIMARY ≥ <b>{cfg.players_primary}</b>人</span>
@@ -181,7 +215,7 @@ export default function UserRow({ user, billing }: { user: any; billing: any }) 
       )}
       {showUrlInput && (
         <tr className="border-b border-white/5 bg-purple-500/5">
-          <td colSpan={8} className="py-3 px-4">
+          <td colSpan={7} className="py-3 px-4">
             <div className="flex flex-col sm:flex-row gap-2 sm:items-center">
               <input
                 type="url"
