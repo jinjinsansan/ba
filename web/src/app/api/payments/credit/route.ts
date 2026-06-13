@@ -8,6 +8,20 @@ import { NextRequest, NextResponse } from 'next/server'
 // 反映後は既存の停止/復旧ゲートが自動で稼働可否を判定する。
 function r2(n: number) { return Math.round(n * 100) / 100 }
 
+// 入金確認の Telegram 通知(専用Bot宛・共有チャンネルとは別)。失敗しても課金処理に波及させない。
+async function notifyDeposit(text: string) {
+  const token = process.env.PAYMENTS_TELEGRAM_BOT_TOKEN
+  const chatId = process.env.PAYMENTS_TELEGRAM_CHAT_ID
+  if (!token || !chatId) return
+  try {
+    await fetch(`https://api.telegram.org/bot${token}/sendMessage`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ chat_id: chatId, text, parse_mode: 'HTML' }),
+    })
+  } catch { /* ignore */ }
+}
+
 export async function POST(req: NextRequest) {
   const secret = req.headers.get('x-payments-secret') || ''
   if (!process.env.PAYMENTS_WEBHOOK_SECRET || secret !== process.env.PAYMENTS_WEBHOOK_SECRET) {
@@ -73,6 +87,20 @@ export async function POST(req: NextRequest) {
     )
     if (error) return NextResponse.json({ error: 'charge credit failed: ' + error.message }, { status: 500 })
   }
+
+  // 入金確認の Telegram 通知(メール付き)
+  try {
+    const { data: prof } = await admin.from('profiles').select('email').eq('id', order.user_id).maybeSingle()
+    const who = prof?.email || order.user_id
+    const label = order.kind === 'license' ? 'ライセンス ($2000)' : `チャージ $${amount}`
+    await notifyDeposit(
+      `💰 <b>入金確認</b>\n` +
+      `${who}\n` +
+      `${label}\n` +
+      `金額: <b>${amount} USDT</b>\n` +
+      `tx: <code>${txHash}</code>`,
+    )
+  } catch { /* ignore */ }
 
   return NextResponse.json({ ok: true, credited: true, order_id: orderId, kind: order.kind, amount })
 }
