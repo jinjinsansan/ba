@@ -20,6 +20,7 @@ export default function AutoCryptoCharge() {
   const [err, setErr] = useState('')
   const [order, setOrder] = useState<Order | null>(null)
   const [remain, setRemain] = useState('')
+  const [copied, setCopied] = useState('')
 
   async function create(kind: 'license' | 'charge') {
     setErr(''); setLoading(true); setOrder(null)
@@ -87,7 +88,13 @@ export default function AutoCryptoCharge() {
           </div>
           <div className="rounded-lg bg-black/30 border border-white/10 p-3">
             <div className="text-[11px] text-text-muted">この正確な金額を送金 (端数まで一致が必須)</div>
-            <div className="text-2xl font-bold text-cyan font-mono">{order.amount.toFixed(2)} USDT</div>
+            <div className="flex items-center gap-2">
+              <div className="text-2xl font-bold text-cyan font-mono">{order.amount.toFixed(2)} USDT</div>
+              <button onClick={() => { navigator.clipboard?.writeText(order.amount.toFixed(2)); setCopied('amount'); setTimeout(() => setCopied(''), 1500) }}
+                className="px-2 py-1 rounded text-[11px] bg-cyan/20 text-cyan hover:bg-cyan/30 transition">
+                {copied === 'amount' ? 'コピー済' : '金額をコピー'}
+              </button>
+            </div>
             <div className="mt-1 text-[11px] text-text-dim">ネットワーク: {order.network}</div>
           </div>
           <div className="flex gap-3 items-center">
@@ -95,9 +102,9 @@ export default function AutoCryptoCharge() {
             <div className="min-w-0">
               <div className="text-[11px] text-text-muted mb-1">送金先アドレス</div>
               <div className="font-mono text-xs break-all text-text">{order.address}</div>
-              <button onClick={() => navigator.clipboard?.writeText(order.address)}
+              <button onClick={() => { navigator.clipboard?.writeText(order.address); setCopied('address'); setTimeout(() => setCopied(''), 1500) }}
                 className="mt-2 px-2 py-1 rounded text-[11px] bg-white/10 text-text-muted hover:text-white transition">
-                アドレスをコピー
+                {copied === 'address' ? 'コピー済' : 'アドレスをコピー'}
               </button>
             </div>
           </div>
