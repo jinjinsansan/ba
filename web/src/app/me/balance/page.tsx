@@ -11,13 +11,18 @@ export default async function BalancePage() {
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return null
 
-  const [{ data: billing }, { data: charges }] = await Promise.all([
+  const [{ data: billing }, { data: payments }] = await Promise.all([
     supabase.from('billing').select('*').eq('user_id', user.id).single(),
-    supabase.from('charges').select('*').eq('user_id', user.id).order('created_at', { ascending: false }),
+    supabase.from('crypto_payments').select('*').eq('user_id', user.id).order('created_at', { ascending: false }),
   ])
 
-  const pendingCount = (charges || []).filter(c => String(c.status) !== 'confirmed').length
-  const lastConfirmed = (charges || []).find(c => String(c.status) === 'confirmed')
+  const pays = payments || []
+  const nowMs = Date.now()
+  // 期限切れの pending は実質「失効」(statusはpendingのまま残るため expires_at で判定)
+  const isLivePending = (c: { status?: string; expires_at?: string }) =>
+    String(c.status) === 'pending' && new Date(String(c.expires_at)).getTime() > nowMs
+  const pendingCount = pays.filter(isLivePending).length
+  const lastConfirmed = pays.find(c => String(c.status) === 'credited')
 
   return (
     <div>
@@ -101,27 +106,34 @@ export default async function BalancePage() {
       </Card>
 
       <Card padded={false}>
-        <CardHead>チャージ履歴 ({(charges || []).length})</CardHead>
-        {charges?.length ? (
+        <CardHead>チャージ履歴 ({pays.length})</CardHead>
+        {pays.length ? (
           <div className="overflow-x-auto">
-            <table className="min-w-[520px] w-full text-sm">
+            <table className="min-w-[560px] w-full text-sm">
               <thead>
                 <tr className="border-b border-white/[0.07]">
-                  <th className="px-5 py-3 font-mono text-[10px] text-text-dim tracking-[0.15em] uppercase font-normal text-left">日付</th>
+                  <th className="px-5 py-3 font-mono text-[10px] text-text-dim tracking-[0.15em] uppercase font-normal text-left">日時</th>
+                  <th className="px-5 py-3 font-mono text-[10px] text-text-dim tracking-[0.15em] uppercase font-normal text-left">種別</th>
                   <th className="px-5 py-3 font-mono text-[10px] text-text-dim tracking-[0.15em] uppercase font-normal text-right">金額</th>
                   <th className="px-5 py-3 font-mono text-[10px] text-text-dim tracking-[0.15em] uppercase font-normal text-left">ステータス</th>
                 </tr>
               </thead>
               <tbody>
-                {charges.map((c, i) => (
-                  <tr key={c.id} className={i ? 'border-t border-white/[0.07]' : ''}>
-                    <td className="px-5 py-3 text-text-muted font-mono text-xs">{new Date(c.created_at).toLocaleDateString('ja-JP')}</td>
-                    <td className="px-5 py-3 text-right"><Money value={Number(c.amount)} size="md" weight="semibold" /></td>
-                    <td className="px-5 py-3">
-                      <Pill tone={c.status === 'confirmed' ? 'live' : c.status === 'rejected' ? 'danger' : 'warn'}>{c.status}</Pill>
-                    </td>
-                  </tr>
-                ))}
+                {pays.map((c, i) => {
+                  let st = String(c.status)
+                  if (st === 'pending' && new Date(String(c.expires_at)).getTime() <= nowMs) st = 'expired'
+                  const tone = st === 'credited' ? 'live' : st === 'expired' ? 'danger' : 'warn'
+                  const label = st === 'credited' ? '反映済' : st === 'expired' ? '失効' : '保留'
+                  const amt = Number(c.paid_amount ?? c.expected_amount ?? 0)
+                  return (
+                    <tr key={c.id} className={i ? 'border-t border-white/[0.07]' : ''}>
+                      <td className="px-5 py-3 text-text-muted font-mono text-xs">{new Date(c.created_at).toLocaleString('ja-JP')}</td>
+                      <td className="px-5 py-3 text-xs text-text">{c.kind === 'license' ? 'ライセンス' : 'チャージ'}</td>
+                      <td className="px-5 py-3 text-right"><Money value={amt} size="md" weight="semibold" /></td>
+                      <td className="px-5 py-3"><Pill tone={tone}>{label}</Pill></td>
+                    </tr>
+                  )
+                })}
               </tbody>
             </table>
           </div>
