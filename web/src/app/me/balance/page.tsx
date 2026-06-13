@@ -5,6 +5,7 @@ import { PageHeader, Label } from '@/components/ui/PageHeader'
 import { Pill } from '@/components/ui/Pill'
 import { Money } from '@/components/ui/Money'
 import { Button } from '@/components/ui/Button'
+import AutoCryptoCharge from './AutoCryptoCharge'
 
 export default async function BalancePage() {
   const supabase = await createClient()
@@ -68,8 +69,14 @@ export default async function BalancePage() {
         </div>
       </Card>
 
+      {!billing?.is_free && (
+        <div className="mb-4">
+          <AutoCryptoCharge />
+        </div>
+      )}
+
       <Card padded={false} className="mb-4">
-        <CardHead>チャージ手順</CardHead>
+        <CardHead>チャージ手順 (手動・管理承認)</CardHead>
         <div className="px-5 py-5">
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 text-xs mb-4">
             <div className="p-3 rounded border border-white/[0.07] bg-white/[0.02]">
