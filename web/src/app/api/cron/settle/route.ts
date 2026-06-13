@@ -333,6 +333,24 @@ export async function GET(req: NextRequest) {
   const masterPnl = await fetchMasterDailyPnlByEmail(dateStr)
   const pnlSourceCounts: Record<string, number> = {}
 
+  // ── 入金差引(2026-06-13): 残高差分フォールバックで課金する場合に限り、その日に
+  // オペレーターが記録した入金/ボーナス額を差し引く。これにより「daily_bet_pnl が
+  // 取れない日に、顧客が入金した自分の金へ手数料を課す」事故を防ぐ。
+  // daily_bet_pnl(優先度1)はベット記録=入金除外済みなので減算しない。
+  // 純粋な減算のみ(課金が増えることは無い)。deposits テーブル未作成/空なら no-op。
+  const depositsByUser = new Map<string, number>()
+  try {
+    const { data: deps } = await admin
+      .from('deposits')
+      .select('user_id, amount')
+      .eq('date', dateStr)
+    for (const d of (deps || [])) {
+      const uid = String((d as { user_id?: unknown }).user_id || '')
+      const amt = Number((d as { amount?: unknown }).amount) || 0
+      if (uid && amt) depositsByUser.set(uid, roundMoney((depositsByUser.get(uid) || 0) + amt))
+    }
+  } catch { /* deposits テーブルが無い/取得失敗 → 入金なし扱いで安全に続行 */ }
+
   let settled = 0
   let skipped = 0
   const skipReasons: Record<string, number> = {}
@@ -401,6 +419,17 @@ export async function GET(req: NextRequest) {
       }
       dailyProfit = roundMoney(current_balance - daily_open_balance)
       pnlSource = 'session_state'
+    }
+
+    // 残高差分系ソース(master_executor_daily_pnl / session_state)で課金する場合のみ
+    // 当日の記録済み入金を差し引く。daily_bet_pnl は入金を含まないので対象外。
+    if (pnlSource !== 'daily_bet_pnl' && dailyProfit !== null) {
+      const dep = depositsByUser.get(String(b.user_id)) || 0
+      if (dep > 0) {
+        const beforeAdj = dailyProfit
+        dailyProfit = roundMoney(dailyProfit - dep)
+        console.log(`[settle] deposit-adjust user=${b.user_id} src=${pnlSource} ${beforeAdj} - ${dep} = ${dailyProfit}`)
+      }
     }
 
     const result = await settleUser(admin, b.user_id, userEmail, dailyProfit, dateStr, pnlSource)
