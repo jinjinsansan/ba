@@ -69,7 +69,7 @@ export default async function BalancePage() {
 
       {!billing?.is_free && (
         <div className="mb-4">
-          <AutoCryptoCharge />
+          <AutoCryptoCharge mode="charge" />
         </div>
       )}
 
