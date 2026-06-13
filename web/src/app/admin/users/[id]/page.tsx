@@ -129,6 +129,24 @@ export default async function AdminUserDetailPage({
     await a.from('billing').update({ is_free: !cur?.is_free, updated_at: new Date().toISOString() }).eq('user_id', id)
     revalidatePath(`/admin/users/${id}`)
   }
+  // ライセンス(bot_paid)の無料付与 / 解除トグル。$2000ライセンス料を免除する設定。
+  async function toggleBotPaid() {
+    'use server'
+    const a = createAdminClient()
+    const { data: cur } = await a.from('billing').select('bot_paid').eq('user_id', id).single()
+    await a.from('billing').update({ bot_paid: !cur?.bot_paid, suspended: false, updated_at: new Date().toISOString() }).eq('user_id', id)
+    revalidatePath(`/admin/users/${id}`)
+  }
+  // 両方無料: ライセンス(bot_paid)+チャージ(is_free)をまとめて無料にする。
+  async function setFreeBoth() {
+    'use server'
+    const a = createAdminClient()
+    await a.from('billing').upsert(
+      { user_id: id, bot_paid: true, is_free: true, suspended: false, updated_at: new Date().toISOString() },
+      { onConflict: 'user_id' },
+    )
+    revalidatePath(`/admin/users/${id}`)
+  }
   async function updateReferrerShareRate(formData: FormData) {
     'use server'
     const pct = parseFloat(String(formData.get('rate') || '0'))
@@ -265,10 +283,36 @@ export default async function AdminUserDetailPage({
 
               <ConfirmForm
                 action={toggleFree}
-                confirmText={billing?.is_free ? 'FREE モードを解除しますか? (以降は課金対象)' : 'このユーザーを FREE モード (課金免除) にしますか?'}
+                confirmText={billing?.is_free ? 'チャージ無料を解除しますか? (以降は当日PnLのN%を課金)' : 'このユーザーをチャージ無料 (課金免除) にしますか?'}
               >
                 <Button tone={billing?.is_free ? 'secondary' : 'outline'} size="md" type="submit" className="w-full">
-                  {billing?.is_free ? 'FREE モードを解除' : 'FREE モードにする'}
+                  {billing?.is_free ? 'チャージ無料を解除' : 'チャージ無料にする'}
+                </Button>
+              </ConfirmForm>
+
+              {/* ライセンス($2000)の無料付与 / 解除 */}
+              <div className="flex items-center justify-between gap-2 pt-1">
+                <Label>ライセンス</Label>
+                {billing?.bot_paid
+                  ? <Pill tone="live">ライセンス済 (無料/購入)</Pill>
+                  : <Pill tone="info">未購入</Pill>}
+              </div>
+              <ConfirmForm
+                action={toggleBotPaid}
+                confirmText={billing?.bot_paid ? 'ライセンスを解除 (未購入に戻す) しますか?' : 'このユーザーにライセンス ($2000) を無料付与しますか?'}
+              >
+                <Button tone={billing?.bot_paid ? 'secondary' : 'outline'} size="md" type="submit" className="w-full">
+                  {billing?.bot_paid ? 'ライセンスを解除' : 'ライセンス無料にする'}
+                </Button>
+              </ConfirmForm>
+
+              {/* ライセンス+チャージ まとめて無料 */}
+              <ConfirmForm
+                action={setFreeBoth}
+                confirmText="ライセンスとチャージを両方無料にしますか?"
+              >
+                <Button tone="outline" size="md" type="submit" className="w-full">
+                  両方無料にする (ライセンス+チャージ)
                 </Button>
               </ConfirmForm>
             </div>
