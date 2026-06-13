@@ -1,4 +1,3 @@
-import Link from 'next/link'
 import { createClient } from '@/lib/supabase-server'
 import { Card, CardHead } from '@/components/ui/Card'
 import { PageHeader, Label } from '@/components/ui/PageHeader'
@@ -19,7 +18,6 @@ export default async function BalancePage() {
 
   const pendingCount = (charges || []).filter(c => String(c.status) !== 'confirmed').length
   const lastConfirmed = (charges || []).find(c => String(c.status) === 'confirmed')
-  const walletAddress = String(process.env.NEXT_PUBLIC_USDT_TRC20 || '').trim()
 
   return (
     <div>
@@ -29,7 +27,7 @@ export default async function BalancePage() {
         right={
           billing?.is_free
             ? <Button tone="ghost" size="sm" disabled>資金追加 (免除済)</Button>
-            : <Link href="/dashboard/charge"><Button tone="primary" size="sm">今すぐ資金追加</Button></Link>
+            : undefined
         }
       />
 
@@ -76,9 +74,9 @@ export default async function BalancePage() {
       )}
 
       <Card padded={false} className="mb-4">
-        <CardHead>チャージ手順 (手動・管理承認)</CardHead>
+        <CardHead>課金ステータス</CardHead>
         <div className="px-5 py-5">
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 text-xs mb-4">
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 text-xs">
             <div className="p-3 rounded border border-white/[0.07] bg-white/[0.02]">
               <Label>未確認チャージ</Label>
               <div className={`text-base font-semibold mt-1 ${pendingCount > 0 ? 'text-warn' : 'text-win'}`}>{pendingCount} 件</div>
@@ -94,13 +92,10 @@ export default async function BalancePage() {
               </div>
             </div>
           </div>
-          <div className="space-y-2 text-xs text-text-muted">
-            <div className="flex items-start gap-2"><span className="text-cyan font-semibold">1.</span><span>「今すぐ資金追加」から金額を入力して申請</span></div>
-            <div className="flex items-start gap-2"><span className="text-cyan font-semibold">2.</span><span>USDT (TRC-20) を送金</span></div>
-            <div className="flex items-start gap-2"><span className="text-cyan font-semibold">3.</span><span>管理承認後に残高へ反映 (未払いがあれば自動充当)</span></div>
-          </div>
-          {walletAddress && (
-            <div className="mt-3 text-[11px] text-text-dim break-all font-mono">送金先(TRC-20): {walletAddress}</div>
+          {!billing?.is_free && (
+            <div className="mt-3 text-[11px] text-text-muted leading-relaxed">
+              チャージは上の「暗号資産で自動チャージ」から行えます。表示された<strong>正確な金額</strong>を USDT(TRC-20)で送金すると、約1〜2分で<strong>自動反映</strong>されます(手動承認は不要)。
+            </div>
           )}
         </div>
       </Card>
