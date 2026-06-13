@@ -14,7 +14,7 @@ type Order = {
   expires_at: string
 }
 
-export default function AutoCryptoCharge() {
+export default function AutoCryptoCharge({ mode = 'both' }: { mode?: 'both' | 'charge' | 'license' }) {
   const [amount, setAmount] = useState('')
   const [loading, setLoading] = useState(false)
   const [err, setErr] = useState('')
@@ -61,21 +61,25 @@ export default function AutoCryptoCharge() {
 
       {!order && (
         <div className="space-y-3">
-          <div className="flex gap-2">
-            <input
-              type="number" min="1" step="1" inputMode="numeric" placeholder="チャージ額 (USD)"
-              value={amount} onChange={e => setAmount(e.target.value)}
-              className="flex-1 px-3 py-2 rounded bg-white/[0.03] border border-white/10 text-white text-sm"
-            />
-            <button onClick={() => create('charge')} disabled={loading || !(parseInt(amount, 10) > 0)}
-              className="px-4 py-2 rounded text-sm bg-cyan/20 text-cyan hover:bg-cyan/30 transition disabled:opacity-40">
-              {loading ? '作成中…' : 'チャージ注文'}
+          {mode !== 'license' && (
+            <div className="flex gap-2">
+              <input
+                type="number" min="1" step="1" inputMode="numeric" placeholder="チャージ額 (USD)"
+                value={amount} onChange={e => setAmount(e.target.value)}
+                className="flex-1 px-3 py-2 rounded bg-white/[0.03] border border-white/10 text-white text-sm"
+              />
+              <button onClick={() => create('charge')} disabled={loading || !(parseInt(amount, 10) > 0)}
+                className="px-4 py-2 rounded text-sm bg-cyan/20 text-cyan hover:bg-cyan/30 transition disabled:opacity-40">
+                {loading ? '作成中…' : 'チャージ注文'}
+              </button>
+            </div>
+          )}
+          {mode !== 'charge' && (
+            <button onClick={() => create('license')} disabled={loading}
+              className="w-full px-4 py-2 rounded text-sm bg-yellow-500/15 text-yellow-300 hover:bg-yellow-500/25 transition disabled:opacity-40">
+              ライセンス購入 ($2000)
             </button>
-          </div>
-          <button onClick={() => create('license')} disabled={loading}
-            className="w-full px-4 py-2 rounded text-sm bg-yellow-500/15 text-yellow-300 hover:bg-yellow-500/25 transition disabled:opacity-40">
-            ライセンス購入 ($2000)
-          </button>
+          )}
           {err && <div className="text-xs text-red-400">{err}</div>}
         </div>
       )}
