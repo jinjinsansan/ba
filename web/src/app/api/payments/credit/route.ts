@@ -79,10 +79,36 @@ export async function POST(req: NextRequest) {
     )
     if (error) return NextResponse.json({ error: 'license credit failed: ' + error.message }, { status: 500 })
   } else {
-    const newBalance = r2(Number(billing?.balance || 0) + amount)
+    // チャージ: まず未払いの日次手数料(daily_profit_invoices)を古い順に充当 → 残額を balance へ。
+    // これをしないと、未払いがある状態でチャージしても GUI ゲート(unpaid invoice)が
+    // 「支払い保留」で止まったままになり、自動再開しない(GUI連動の要)。
+    let remaining = r2(Number(billing?.balance || 0) + amount)
     const newTotal = r2(Number(billing?.total_charged || 0) + amount)
+    try {
+      const { data: invs } = await admin
+        .from('daily_profit_invoices')
+        .select('id, outstanding_amount, paid_amount')
+        .eq('user_id', order.user_id)
+        .eq('status', 'unpaid')
+        .gt('outstanding_amount', 0)
+        .order('settle_date', { ascending: true })
+      for (const inv of (invs || [])) {
+        if (remaining <= 0) break
+        const out = Number(inv.outstanding_amount) || 0
+        const pay = Math.min(remaining, out)
+        if (pay <= 0) continue
+        const newOut = r2(out - pay)
+        remaining = r2(remaining - pay)
+        await admin.from('daily_profit_invoices').update({
+          paid_amount: r2(Number(inv.paid_amount || 0) + pay),
+          outstanding_amount: newOut,
+          status: newOut <= 0 ? 'paid' : 'unpaid',
+          updated_at: new Date().toISOString(),
+        }).eq('id', inv.id)
+      }
+    } catch { /* daily_profit_invoices が無い環境ではスキップ(安全) */ }
     const { error } = await admin.from('billing').upsert(
-      { user_id: order.user_id, balance: newBalance, total_charged: newTotal, suspended: false, updated_at: new Date().toISOString() },
+      { user_id: order.user_id, balance: r2(remaining), total_charged: newTotal, suspended: false, updated_at: new Date().toISOString() },
       { onConflict: 'user_id' },
     )
     if (error) return NextResponse.json({ error: 'charge credit failed: ' + error.message }, { status: 500 })
