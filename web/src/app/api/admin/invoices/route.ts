@@ -1,5 +1,6 @@
 import { createAdminClient } from '@/lib/supabase-admin'
 import { createClient as createServerSupabase } from '@/lib/supabase-server'
+import { sendCustomerTelegramMessage } from '@/lib/customer-telegram'
 import { NextRequest, NextResponse } from 'next/server'
 
 // 管理者が任意の請求書を発行/取消する。
@@ -50,7 +51,22 @@ export async function POST(req: NextRequest) {
   }).select('id, amount, memo, status, created_at').single()
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
 
-  return NextResponse.json({ ok: true, invoice: data, email: target.email })
+  // 顧客へ Telegram 通知(連携済みの場合のみ)。失敗しても発行は成功扱い。
+  let notified = false
+  try {
+    const { data: b } = await admin.from('billing').select('bot_config').eq('user_id', userId).maybeSingle()
+    const cfg = (b?.bot_config && typeof b.bot_config === 'object') ? b.bot_config as Record<string, unknown> : {}
+    const chatId = String(cfg.customer_telegram_chat_id || '').trim()
+    if (chatId) {
+      const site = (process.env.NEXT_PUBLIC_SITE_URL || 'https://www.bafather.uk').replace(/\/$/, '')
+      notified = await sendCustomerTelegramMessage(chatId,
+        `<b>📩 請求書が届きました</b>\n金額: <b>$${amount.toFixed(2)}</b>` +
+        (memo ? `\n内容: ${memo}` : '') +
+        `\n\nマイページからお支払いください:\n${site}/me`)
+    }
+  } catch { /* ignore */ }
+
+  return NextResponse.json({ ok: true, invoice: data, email: target.email, notified })
 }
 
 // 管理者が特定ユーザーの請求書一覧を取得する(admin/users/[id] 表示用)。

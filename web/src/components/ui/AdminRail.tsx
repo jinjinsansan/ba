@@ -13,6 +13,7 @@ const ADMIN_MENU = [
   { href: '/admin',             label: 'Dashboard', glyph: '◆' },
   { href: '/admin/users',       label: 'Users',     glyph: '◇' },
   { href: '/admin/orders',      label: 'Orders',    glyph: '$' },
+  { href: '/admin/billing',     label: 'Billing',   glyph: '¥' },
   { href: '/admin/promos',      label: 'Promos',    glyph: '%' },
   { href: '/admin/tickets',     label: 'Tickets',   glyph: '?' },
   { href: '/admin/withdrawals', label: 'Withdraw',  glyph: '⤴' },

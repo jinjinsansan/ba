@@ -9,6 +9,7 @@ import { Money } from '@/components/ui/Money'
 import { Button } from '@/components/ui/Button'
 import RealtimePnlCard from '../../../dashboard/RealtimePnlCard'
 import ConfirmForm from './ConfirmForm'
+import { sendCustomerTelegramMessage } from '@/lib/customer-telegram'
 
 export const dynamic = 'force-dynamic'
 
@@ -120,6 +121,19 @@ export default async function AdminUserDetailPage({
     if (!Number.isFinite(amount) || amount <= 0) return
     const a = createAdminClient()
     await a.from('invoices').insert({ user_id: id, amount, memo, status: 'unpaid' })
+    // 顧客へ Telegram 通知(連携済みの場合のみ)。失敗しても発行に影響させない。
+    try {
+      const { data: b } = await a.from('billing').select('bot_config').eq('user_id', id).maybeSingle()
+      const cfg = (b?.bot_config && typeof b.bot_config === 'object') ? b.bot_config as Record<string, unknown> : {}
+      const chatId = String(cfg.customer_telegram_chat_id || '').trim()
+      if (chatId) {
+        const site = (process.env.NEXT_PUBLIC_SITE_URL || 'https://www.bafather.uk').replace(/\/$/, '')
+        await sendCustomerTelegramMessage(chatId,
+          `<b>📩 請求書が届きました</b>\n金額: <b>$${amount.toFixed(2)}</b>` +
+          (memo ? `\n内容: ${memo}` : '') +
+          `\n\nマイページからお支払いください:\n${site}/me`)
+      }
+    } catch { /* ignore */ }
     revalidatePath(`/admin/users/${id}`)
   }
   async function cancelInvoice(formData: FormData) {
