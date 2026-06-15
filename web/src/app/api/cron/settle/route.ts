@@ -357,7 +357,8 @@ export async function GET(req: NextRequest) {
   const errors: Array<{ user_id: string; error: string }> = []
 
   for (const b of billings) {
-    if (b.is_free) { skipped++; skipReasons['free'] = (skipReasons['free'] || 0) + 1; continue }
+    // is_free は週次課金モデル(土曜締切・日曜N%)。日次では PnL を記録するだけで課金しない。
+    // そのため is_free でも下の優先度ロジックで dailyProfit を計算し daily_pnl_log に残す。
     const userEmail = emailByUserId.get(String(b.user_id)) || ''
 
     let dailyProfit: number | null = null
@@ -430,6 +431,29 @@ export async function GET(req: NextRequest) {
         dailyProfit = roundMoney(dailyProfit - dep)
         console.log(`[settle] deposit-adjust user=${b.user_id} src=${pnlSource} ${beforeAdj} - ${dep} = ${dailyProfit}`)
       }
+    }
+
+    // ── 日次PnLログ(全ユーザー・週次ロールアップの元データ) ──────────────────
+    // bet_pnl は入出金を含まない純粋PnL。週次cron(日曜)が月〜土を合算して課金する。
+    if (dailyProfit !== null) {
+      try {
+        const ssBal = (ss && typeof ss === 'object' && typeof ss.current_balance === 'number') ? ss.current_balance : null
+        await admin.from('daily_pnl_log').upsert({
+          user_id: b.user_id,
+          date: dateStr,
+          bet_pnl: roundMoney(dailyProfit),
+          pnl_source: pnlSource,
+          balance: ssBal,
+          updated_at: new Date().toISOString(),
+        }, { onConflict: 'user_id,date' })
+      } catch { /* daily_pnl_log 未作成なら無視(安全) */ }
+    }
+
+    // is_free は日次課金しない(週次モデル)。記録のみで次のユーザーへ。
+    if (b.is_free) {
+      skipped++
+      skipReasons['free_weekly'] = (skipReasons['free_weekly'] || 0) + 1
+      continue
     }
 
     const result = await settleUser(admin, b.user_id, userEmail, dailyProfit, dateStr, pnlSource)

@@ -26,10 +26,12 @@ export default async function SettlementsPage() {
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return null
 
-  const [{ data: invoices }, { data: deductions }] = await Promise.all([
+  const [{ data: invoices }, { data: deductions }, { data: weekly }] = await Promise.all([
     supabase.from('daily_profit_invoices').select('*').eq('user_id', user.id).order('settle_date', { ascending: false }).limit(60),
     supabase.from('deductions').select('*').eq('user_id', user.id).order('date', { ascending: false }).limit(60),
+    supabase.from('weekly_pnl').select('*').eq('user_id', user.id).order('week_start', { ascending: false }).limit(52).then(r => r, () => ({ data: [] as Record<string, unknown>[] })),
   ])
+  const weeklyRows = (weekly as Record<string, unknown>[]) || []
 
   const outstandingTotal = (invoices || []).filter((i: InvoiceRow) => String(i.status) === 'unpaid').reduce((s: number, i: InvoiceRow) => s + Number(i.outstanding_amount || 0), 0)
   const last30Profit = (invoices || []).slice(0, 30).reduce((s: number, i: InvoiceRow) => s + Number(i.daily_profit || 0), 0)
@@ -45,6 +47,42 @@ export default async function SettlementsPage() {
         sub="毎日 JST 00:05 に前日分の損益・手数料が確定します"
         right={outstandingTotal > 0 ? <Pill tone="warn">未払い ${outstandingTotal.toFixed(2)}</Pill> : <Pill tone="paid">未払いなし</Pill>}
       />
+
+      {weeklyRows.length > 0 && (
+        <Card padded={false} className="mb-4">
+          <CardHead>週次精算履歴 (土曜締切・繰越計算)</CardHead>
+          <div className="overflow-x-auto">
+            <table className="min-w-[640px] w-full text-sm">
+              <thead>
+                <tr className="border-b border-white/[0.07]">
+                  {[['週(月〜土)','left'],['純PnL','right'],['繰越','right'],['課金対象','right'],['手数料','right'],['状態','left']].map(([h,a],i) => (
+                    <th key={i} className={['px-5 py-3 font-mono text-[10px] text-text-dim tracking-[0.15em] uppercase font-normal', a === 'right' ? 'text-right' : 'text-left'].join(' ')}>{h}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {weeklyRows.map((w, idx) => {
+                  const gross = Number(w.gross_pnl) || 0
+                  const carryIn = Number(w.carry_in) || 0
+                  const net = Number(w.net_pnl) || 0
+                  const fee = Number(w.fee_amount) || 0
+                  const st = String(w.status)
+                  return (
+                    <tr key={String(w.id)} className={idx ? 'border-t border-white/[0.07]' : ''}>
+                      <td className="px-5 py-3 font-mono text-xs text-text-muted">{String(w.week_start)}〜{String(w.week_end).slice(5)}</td>
+                      <td className="px-5 py-3 text-right"><Money value={gross} sign weight="bold" tone={gross >= 0 ? 'win' : 'lose'} /></td>
+                      <td className="px-5 py-3 text-right"><Money value={carryIn} sign tone={carryIn < 0 ? 'lose' : 'muted'} /></td>
+                      <td className="px-5 py-3 text-right"><Money value={net} sign tone={net >= 0 ? 'win' : 'lose'} /></td>
+                      <td className="px-5 py-3 text-right"><Money value={fee} weight="bold" tone={fee > 0 ? 'amber' : 'muted'} /></td>
+                      <td className="px-5 py-3"><Pill tone={st === 'billed' ? 'live' : 'info'}>{st === 'billed' ? '請求' : '請求なし'}</Pill></td>
+                    </tr>
+                  )
+                })}
+              </tbody>
+            </table>
+          </div>
+        </Card>
+      )}
 
       <Card padded={false} className="mb-4">
         <CardHead>30 Days Summary</CardHead>

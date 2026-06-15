@@ -12,18 +12,24 @@ type Row = Record<string, unknown>
 // 全ユーザー横断の「請求 / 入金」一覧。誰にいくら請求中・誰が入金済みかを一目で。
 export default async function AdminBillingPage() {
   const admin = createAdminClient()
-  const [{ data: invoices }, { data: payments }] = await Promise.all([
+  const [{ data: invoices }, { data: payments }, { data: weekly }] = await Promise.all([
     admin.from('invoices').select('*').order('created_at', { ascending: false }).limit(300)
       .then(r => r, () => ({ data: [] as Row[] })),
     admin.from('crypto_payments').select('*').order('created_at', { ascending: false }).limit(100)
       .then(r => r, () => ({ data: [] as Row[] })),
+    admin.from('weekly_pnl').select('*').order('week_start', { ascending: false }).limit(120)
+      .then(r => r, () => ({ data: [] as Row[] })),
   ])
   const invs = ((invoices as Row[]) || [])
   const pays = ((payments as Row[]) || [])
+  const weeks = ((weekly as Row[]) || [])
+  const latestWeek = weeks.length ? String(weeks[0].week_start) : ''
+  const latestWeekRows = weeks.filter(w => String(w.week_start) === latestWeek)
 
   const ids = Array.from(new Set([
     ...invs.map(i => String(i.user_id)),
     ...pays.map(p => String(p.user_id)),
+    ...weeks.map(w => String(w.user_id)),
   ].filter(Boolean)))
   const emailMap: Record<string, string> = {}
   if (ids.length) {
@@ -63,6 +69,43 @@ export default async function AdminBillingPage() {
           </div>
         </div>
       </Card>
+
+      {/* 直近週の週次精算(全ユーザー) */}
+      {latestWeekRows.length > 0 && (
+        <Card padded={false} className="mb-4">
+          <CardHead right={<span className="text-text-dim text-xs font-mono">{latestWeek}〜</span>}>直近週の週次精算 ({latestWeekRows.length})</CardHead>
+          <div className="overflow-x-auto">
+            <table className="min-w-[760px] w-full text-sm">
+              <thead>
+                <tr className="border-b border-white/[0.07]">
+                  {[['ユーザー','left'],['純PnL','right'],['繰越in','right'],['課金対象','right'],['率','right'],['手数料','right'],['繰越out','right'],['状態','left']].map(([h,a],i) => (
+                    <th key={i} className={['px-4 py-3 font-mono text-[10px] text-text-dim tracking-[0.12em] uppercase font-normal', a === 'right' ? 'text-right' : 'text-left'].join(' ')}>{h}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {latestWeekRows.map((w, idx) => {
+                  const gross = Number(w.gross_pnl) || 0, carryIn = Number(w.carry_in) || 0, net = Number(w.net_pnl) || 0
+                  const fee = Number(w.fee_amount) || 0, carryOut = Number(w.carry_out) || 0, rate = Number(w.fee_rate) || 0
+                  const st = String(w.status)
+                  return (
+                    <tr key={String(w.id)} className={idx ? 'border-t border-white/[0.07]' : ''}>
+                      <td className="px-4 py-3"><Link href={`/admin/users/${String(w.user_id)}?tab=history`} className="text-cyan hover:underline text-xs">{emailOf(w.user_id)}</Link></td>
+                      <td className="px-4 py-3 text-right"><Money value={gross} sign tone={gross >= 0 ? 'win' : 'lose'} /></td>
+                      <td className="px-4 py-3 text-right"><Money value={carryIn} sign tone={carryIn < 0 ? 'lose' : 'muted'} /></td>
+                      <td className="px-4 py-3 text-right"><Money value={net} sign tone={net >= 0 ? 'win' : 'lose'} /></td>
+                      <td className="px-4 py-3 text-right text-xs text-text-muted">{(rate * 100).toFixed(0)}%</td>
+                      <td className="px-4 py-3 text-right"><Money value={fee} weight="bold" tone={fee > 0 ? 'amber' : 'muted'} /></td>
+                      <td className="px-4 py-3 text-right"><Money value={carryOut} sign tone={carryOut < 0 ? 'lose' : 'muted'} /></td>
+                      <td className="px-4 py-3"><Pill tone={st === 'billed' ? 'live' : st === 'review' ? 'danger' : 'info'}>{st === 'billed' ? '課金' : st === 'review' ? '要確認' : '課金無'}</Pill></td>
+                    </tr>
+                  )
+                })}
+              </tbody>
+            </table>
+          </div>
+        </Card>
+      )}
 
       {/* 未払い請求書(全ユーザー) */}
       <Card padded={false} className="mb-4 border-warn/25">

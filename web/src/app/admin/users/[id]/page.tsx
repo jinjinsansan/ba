@@ -73,6 +73,7 @@ export default async function AdminUserDetailPage({
     { data: commissionsAsReferred },
     { data: manualInvoices },
     { data: cryptoPayments },
+    { data: weeklyPnl },
   ] = await Promise.all([
     admin.from('profiles').select('*').eq('id', id).single(),
     admin.from('billing').select('*').eq('user_id', id).single(),
@@ -87,6 +88,8 @@ export default async function AdminUserDetailPage({
     admin.from('invoices').select('*').eq('user_id', id).order('created_at', { ascending: false }).limit(50).then(r => r, () => ({ data: [] as Record<string, unknown>[] })),
     // USDT(TRC-20) 入金履歴(crypto_payments)。
     admin.from('crypto_payments').select('*').eq('user_id', id).order('created_at', { ascending: false }).limit(50).then(r => r, () => ({ data: [] as Record<string, unknown>[] })),
+    // 週次精算履歴(weekly_pnl) — キャリー計算の可視化。
+    admin.from('weekly_pnl').select('*').eq('user_id', id).order('week_start', { ascending: false }).limit(52).then(r => r, () => ({ data: [] as Record<string, unknown>[] })),
   ])
 
   if (!profile) notFound()
@@ -397,6 +400,50 @@ export default async function AdminUserDetailPage({
       {/* ===== 履歴タブ ===== */}
       {tab === 'history' && (
         <>
+          {/* 週次精算履歴 — 純PnL / キャリー計算 / 手数料 を可視化 */}
+          <Card padded={false} className="mb-4">
+            <CardHead>週次精算履歴 ({((weeklyPnl as Record<string, unknown>[]) || []).length})</CardHead>
+            {((weeklyPnl as Record<string, unknown>[]) || []).length ? (
+              <div className="overflow-x-auto">
+                <table className="min-w-[820px] w-full text-sm">
+                  <thead>
+                    <tr className="border-b border-white/[0.07]">
+                      {[['週(月〜土)','left'],['純PnL','right'],['繰越in','right'],['課金対象','right'],['率','right'],['手数料','right'],['繰越out','right'],['状態','left'],['検算','right']].map(([h,a],i) => (
+                        <th key={i} className={['px-4 py-3 font-mono text-[10px] text-text-dim tracking-[0.12em] uppercase font-normal', a === 'right' ? 'text-right' : 'text-left'].join(' ')}>{h}</th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {((weeklyPnl as Record<string, unknown>[]) || []).map((w, idx) => {
+                      const gross = Number(w.gross_pnl) || 0
+                      const carryIn = Number(w.carry_in) || 0
+                      const net = Number(w.net_pnl) || 0
+                      const fee = Number(w.fee_amount) || 0
+                      const carryOut = Number(w.carry_out) || 0
+                      const rate = Number(w.fee_rate) || 0
+                      const st = String(w.status)
+                      const rok = w.reconcile_ok
+                      const rdelta = w.reconcile_delta == null ? null : Number(w.reconcile_delta)
+                      return (
+                        <tr key={String(w.id)} className={idx ? 'border-t border-white/[0.07]' : ''}>
+                          <td className="px-4 py-3 font-mono text-xs text-text-muted">{String(w.week_start)}〜{String(w.week_end).slice(5)}</td>
+                          <td className="px-4 py-3 text-right"><Money value={gross} sign weight="bold" tone={gross >= 0 ? 'win' : 'lose'} /></td>
+                          <td className="px-4 py-3 text-right"><Money value={carryIn} sign tone={carryIn < 0 ? 'lose' : 'muted'} /></td>
+                          <td className="px-4 py-3 text-right"><Money value={net} sign tone={net >= 0 ? 'win' : 'lose'} /></td>
+                          <td className="px-4 py-3 text-right text-xs text-text-muted">{(rate * 100).toFixed(0)}%</td>
+                          <td className="px-4 py-3 text-right"><Money value={fee} weight="bold" tone={fee > 0 ? 'amber' : 'muted'} /></td>
+                          <td className="px-4 py-3 text-right"><Money value={carryOut} sign tone={carryOut < 0 ? 'lose' : 'muted'} /></td>
+                          <td className="px-4 py-3"><Pill tone={st === 'billed' ? 'live' : st === 'review' ? 'danger' : 'info'}>{st === 'billed' ? '課金' : st === 'review' ? '要確認' : '課金無'}</Pill></td>
+                          <td className="px-4 py-3 text-right text-[10px] font-mono">{rdelta == null ? '—' : <span className={rok === false ? 'text-lose' : 'text-text-dim'}>{rdelta >= 0 ? '+' : ''}{rdelta.toFixed(2)}</span>}</td>
+                        </tr>
+                      )
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            ) : <div className="px-5 py-6 text-text-muted text-sm">週次精算履歴はまだありません。(weekly_pnl 未作成の場合は weekly_pnl_migration を実行)</div>}
+          </Card>
+
           {/* 請求書 発行履歴(管理者発行・取消可) */}
           <Card padded={false} className="mb-4">
             <CardHead>請求書 発行履歴 ({((manualInvoices as Record<string, unknown>[]) || []).length})</CardHead>
