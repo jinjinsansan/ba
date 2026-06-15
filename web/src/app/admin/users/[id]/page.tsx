@@ -107,6 +107,15 @@ export default async function AdminUserDetailPage({
     await a.from('billing').update({ balance: newBalance, updated_at: new Date().toISOString() }).eq('user_id', id)
     revalidatePath(`/admin/users/${id}`)
   }
+  async function issueInvoice(formData: FormData) {
+    'use server'
+    const amount = Math.round((parseFloat(String(formData.get('amount') || '0')) || 0) * 100) / 100
+    const memo = String(formData.get('memo') || '').trim() || null
+    if (!Number.isFinite(amount) || amount <= 0) return
+    const a = createAdminClient()
+    await a.from('invoices').insert({ user_id: id, amount, memo, status: 'unpaid' })
+    revalidatePath(`/admin/users/${id}`)
+  }
   async function updateProfitShareRate(formData: FormData) {
     'use server'
     const pct = parseFloat(String(formData.get('rate') || '0'))
@@ -315,6 +324,16 @@ export default async function AdminUserDetailPage({
                   両方無料にする (ライセンス+チャージ)
                 </Button>
               </ConfirmForm>
+
+              {/* 請求書を発行 → ユーザーのダッシュボードに表示・クリックで決済(残高 or USDTチャージ) */}
+              <form action={issueInvoice} className="space-y-2 sm:col-span-2 border-t border-white/[0.07] pt-4">
+                <Label>請求書を発行 (ダッシュボードに表示・クリックで決済)</Label>
+                <div className="flex flex-col sm:flex-row gap-2">
+                  <input name="amount" type="number" step="0.01" min="0" placeholder="金額 ($)" required className="w-full sm:w-40 px-3 py-2 rounded bg-white/[0.02] border border-white/[0.07] text-text text-sm font-mono" />
+                  <input name="memo" type="text" placeholder="メモ (任意・ユーザーに表示)" className="flex-1 px-3 py-2 rounded bg-white/[0.02] border border-white/[0.07] text-text text-sm" />
+                  <Button tone="primary" size="md" type="submit">請求書を発行</Button>
+                </div>
+              </form>
             </div>
           </Card>
 

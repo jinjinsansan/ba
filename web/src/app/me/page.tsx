@@ -6,6 +6,7 @@ import { Pill } from '@/components/ui/Pill'
 import { Money } from '@/components/ui/Money'
 import { Dot } from '@/components/ui/Dot'
 import { Button } from '@/components/ui/Button'
+import InvoicesCard from './InvoicesCard'
 
 export default async function MePage() {
   const supabase = await createClient()
@@ -17,11 +18,13 @@ export default async function MePage() {
     { data: billing },
     { data: latestOrder },
     { data: lastDeduction },
+    { data: unpaidInvoices },
   ] = await Promise.all([
     supabase.from('profiles').select('*').eq('id', user.id).single(),
     supabase.from('billing').select('*').eq('user_id', user.id).single(),
     supabase.from('orders').select('*').eq('user_id', user.id).order('created_at', { ascending: false }).limit(1).maybeSingle(),
     supabase.from('deductions').select('*').eq('user_id', user.id).order('date', { ascending: false }).limit(1).maybeSingle(),
+    supabase.from('invoices').select('id, amount, memo, created_at').eq('user_id', user.id).eq('status', 'unpaid').order('created_at', { ascending: true }).then(r => r, () => ({ data: [] })),
   ])
 
   const hasActiveCharge = billing && billing.balance > 0 && !billing.suspended
@@ -88,6 +91,9 @@ export default async function MePage() {
               : null
         }
       </div>
+
+      {/* 未払い請求書(管理者発行) */}
+      <InvoicesCard invoices={(unpaidInvoices as { id: string; amount: number; memo?: string | null; created_at?: string }[]) || []} />
 
       {/* Today KPIs */}
       <Card padded={false} className="mb-4">

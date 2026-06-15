@@ -107,6 +107,26 @@ export async function POST(req: NextRequest) {
         }).eq('id', inv.id)
       }
     } catch { /* daily_profit_invoices が無い環境ではスキップ(安全) */ }
+    // 管理者発行の請求書(invoices)も古い順に充当(日次手数料の後)。請求書は
+    // 全額単位(部分払いしない)。残額が満たせる請求書だけ paid にする。
+    try {
+      const { data: userInvs } = await admin
+        .from('invoices')
+        .select('id, amount')
+        .eq('user_id', order.user_id)
+        .eq('status', 'unpaid')
+        .order('created_at', { ascending: true })
+      for (const iv of (userInvs || [])) {
+        if (remaining <= 0) break
+        const amt = r2(Number(iv.amount) || 0)
+        if (amt <= 0 || remaining < amt) continue
+        remaining = r2(remaining - amt)
+        await admin.from('invoices').update({
+          status: 'paid', paid_via: 'crypto', crypto_payment_id: orderId,
+          paid_at: new Date().toISOString(), updated_at: new Date().toISOString(),
+        }).eq('id', iv.id).eq('status', 'unpaid')
+      }
+    } catch { /* invoices テーブルが無い環境ではスキップ(安全) */ }
     const { error } = await admin.from('billing').upsert(
       { user_id: order.user_id, balance: r2(remaining), total_charged: newTotal, suspended: false, updated_at: new Date().toISOString() },
       { onConflict: 'user_id' },
