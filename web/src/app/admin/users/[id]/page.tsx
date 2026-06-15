@@ -70,6 +70,8 @@ export default async function AdminUserDetailPage({
     { data: deliverables },
     { data: commissionsAsReferrer },
     { data: commissionsAsReferred },
+    { data: manualInvoices },
+    { data: cryptoPayments },
   ] = await Promise.all([
     admin.from('profiles').select('*').eq('id', id).single(),
     admin.from('billing').select('*').eq('user_id', id).single(),
@@ -80,6 +82,10 @@ export default async function AdminUserDetailPage({
     admin.from('deliverables').select('*').eq('user_id', id).order('created_at', { ascending: false }),
     admin.from('referral_commissions').select('*').eq('referrer_id', id),
     admin.from('referral_commissions').select('*').eq('referred_id', id),
+    // 管理者発行の請求書(invoices) — テーブル未作成でも落ちないようフォールバック。
+    admin.from('invoices').select('*').eq('user_id', id).order('created_at', { ascending: false }).limit(50).then(r => r, () => ({ data: [] as Record<string, unknown>[] })),
+    // USDT(TRC-20) 入金履歴(crypto_payments)。
+    admin.from('crypto_payments').select('*').eq('user_id', id).order('created_at', { ascending: false }).limit(50).then(r => r, () => ({ data: [] as Record<string, unknown>[] })),
   ])
 
   if (!profile) notFound()
@@ -114,6 +120,16 @@ export default async function AdminUserDetailPage({
     if (!Number.isFinite(amount) || amount <= 0) return
     const a = createAdminClient()
     await a.from('invoices').insert({ user_id: id, amount, memo, status: 'unpaid' })
+    revalidatePath(`/admin/users/${id}`)
+  }
+  async function cancelInvoice(formData: FormData) {
+    'use server'
+    const invoiceId = String(formData.get('invoiceId') || '').trim()
+    if (!invoiceId) return
+    const a = createAdminClient()
+    // 未払いの請求書のみ取消可(支払い済みは履歴として残す)。
+    await a.from('invoices').update({ status: 'canceled', updated_at: new Date().toISOString() })
+      .eq('id', invoiceId).eq('user_id', id).eq('status', 'unpaid')
     revalidatePath(`/admin/users/${id}`)
   }
   async function updateProfitShareRate(formData: FormData) {
@@ -367,6 +383,86 @@ export default async function AdminUserDetailPage({
       {/* ===== 履歴タブ ===== */}
       {tab === 'history' && (
         <>
+          {/* 請求書 発行履歴(管理者発行・取消可) */}
+          <Card padded={false} className="mb-4">
+            <CardHead>請求書 発行履歴 ({((manualInvoices as Record<string, unknown>[]) || []).length})</CardHead>
+            {((manualInvoices as Record<string, unknown>[]) || []).length ? (
+              <div className="overflow-x-auto">
+                <table className="min-w-[680px] w-full text-sm">
+                  <thead>
+                    <tr className="border-b border-white/[0.07]">
+                      {[['発行日時','left'],['金額','right'],['メモ','left'],['状態','left'],['決済','left'],['操作','left']].map(([h,a],i) => (
+                        <th key={i} className={['px-5 py-3 font-mono text-[10px] text-text-dim tracking-[0.15em] uppercase font-normal', a === 'right' ? 'text-right' : 'text-left'].join(' ')}>{h}</th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {((manualInvoices as Record<string, unknown>[]) || []).map((iv, idx) => {
+                      const st = String(iv.status)
+                      const tone = st === 'paid' ? 'live' : st === 'canceled' ? 'danger' : 'warn'
+                      const label = st === 'paid' ? '支払済' : st === 'canceled' ? '取消' : '未払い'
+                      return (
+                        <tr key={String(iv.id)} className={idx ? 'border-t border-white/[0.07]' : ''}>
+                          <td className="px-5 py-3 font-mono text-xs text-text-muted">{new Date(String(iv.created_at)).toLocaleString('ja-JP')}</td>
+                          <td className="px-5 py-3 text-right"><Money value={Number(iv.amount)} size="md" weight="bold" /></td>
+                          <td className="px-5 py-3 text-xs text-text-muted break-words max-w-[220px]">{String(iv.memo || '—')}</td>
+                          <td className="px-5 py-3"><Pill tone={tone}>{label}</Pill></td>
+                          <td className="px-5 py-3 text-xs text-text-muted">{iv.paid_via ? (iv.paid_via === 'balance' ? '残高' : 'USDT') : '—'}</td>
+                          <td className="px-5 py-3">
+                            {st === 'unpaid' && (
+                              <ConfirmForm action={cancelInvoice} confirmText={`$${Number(iv.amount)} の請求書を取り消しますか?`}>
+                                <input type="hidden" name="invoiceId" value={String(iv.id)} />
+                                <Button tone="danger" size="sm" type="submit">取消</Button>
+                              </ConfirmForm>
+                            )}
+                          </td>
+                        </tr>
+                      )
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            ) : <div className="px-5 py-6 text-text-muted text-sm">発行した請求書はありません。(請求書テーブル未作成の場合は invoices_migration を実行してください)</div>}
+          </Card>
+
+          {/* USDT(TRC-20) 入金履歴(自動確認済み=承認履歴) */}
+          <Card padded={false} className="mb-4">
+            <CardHead>入金履歴 (USDT) ({((cryptoPayments as Record<string, unknown>[]) || []).length})</CardHead>
+            {((cryptoPayments as Record<string, unknown>[]) || []).length ? (
+              <div className="overflow-x-auto">
+                <table className="min-w-[680px] w-full text-sm">
+                  <thead>
+                    <tr className="border-b border-white/[0.07]">
+                      {[['日時','left'],['種別','left'],['金額','right'],['状態','left'],['tx','left']].map(([h,a],i) => (
+                        <th key={i} className={['px-5 py-3 font-mono text-[10px] text-text-dim tracking-[0.15em] uppercase font-normal', a === 'right' ? 'text-right' : 'text-left'].join(' ')}>{h}</th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {((cryptoPayments as Record<string, unknown>[]) || []).map((p, idx) => {
+                      const st = String(p.status)
+                      const expired = st === 'pending' && p.expires_at && new Date(String(p.expires_at)).getTime() <= Date.now()
+                      const effSt = expired ? 'expired' : st
+                      const tone = effSt === 'credited' ? 'live' : effSt === 'expired' ? 'danger' : 'warn'
+                      const label = effSt === 'credited' ? '入金確認済' : effSt === 'expired' ? '失効' : '保留'
+                      const amt = Number(p.paid_amount ?? p.expected_amount ?? 0)
+                      const tx = String(p.tx_hash || '')
+                      return (
+                        <tr key={String(p.id)} className={idx ? 'border-t border-white/[0.07]' : ''}>
+                          <td className="px-5 py-3 font-mono text-xs text-text-muted">{new Date(String(p.created_at)).toLocaleString('ja-JP')}</td>
+                          <td className="px-5 py-3 text-xs text-text">{p.kind === 'license' ? 'ライセンス' : 'チャージ'}</td>
+                          <td className="px-5 py-3 text-right"><Money value={amt} size="md" weight="semibold" /></td>
+                          <td className="px-5 py-3"><Pill tone={tone}>{label}</Pill></td>
+                          <td className="px-5 py-3 font-mono text-[10px] text-text-dim break-all max-w-[200px]">{tx ? tx.slice(0, 12) + '…' : '—'}</td>
+                        </tr>
+                      )
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            ) : <div className="px-5 py-6 text-text-muted text-sm">USDT入金履歴はありません。</div>}
+          </Card>
+
           <Card padded={false} className="mb-4">
             <CardHead>チャージ履歴 ({(charges || []).length})</CardHead>
             {charges?.length ? (
