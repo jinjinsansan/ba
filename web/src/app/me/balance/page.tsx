@@ -3,7 +3,6 @@ import { Card, CardHead } from '@/components/ui/Card'
 import { PageHeader, Label } from '@/components/ui/PageHeader'
 import { Pill } from '@/components/ui/Pill'
 import { Money } from '@/components/ui/Money'
-import { Button } from '@/components/ui/Button'
 import AutoCryptoCharge from './AutoCryptoCharge'
 
 export default async function BalancePage() {
@@ -29,11 +28,6 @@ export default async function BalancePage() {
       <PageHeader
         kicker="Member · Balance"
         title="残高・チャージ"
-        right={
-          billing?.is_free
-            ? <Button tone="ghost" size="sm" disabled>資金追加 (免除済)</Button>
-            : undefined
-        }
       />
 
       {billing?.is_free && (
@@ -43,7 +37,7 @@ export default async function BalancePage() {
             <div>
               <div className="text-sm font-semibold text-cyan mb-1">課金免除プラン適用中</div>
               <div className="text-xs text-text-muted leading-relaxed">
-                管理者から課金免除を受けているため、ライセンス料・日次手数料・チャージはすべて不要です。残高数値は内部表示で、実際の課金には使用されません。
+                管理者から課金免除を受けているため、ライセンス料・日次手数料は不要です。チャージ(資金追加)は任意で行えます。
               </div>
             </div>
           </div>
@@ -72,11 +66,9 @@ export default async function BalancePage() {
         </div>
       </Card>
 
-      {!billing?.is_free && (
-        <div className="mb-4">
-          <AutoCryptoCharge mode="charge" />
-        </div>
-      )}
+      <div className="mb-4">
+        <AutoCryptoCharge mode="charge" />
+      </div>
 
       <Card padded={false} className="mb-4">
         <CardHead>課金ステータス</CardHead>
@@ -97,11 +89,9 @@ export default async function BalancePage() {
               </div>
             </div>
           </div>
-          {!billing?.is_free && (
-            <div className="mt-3 text-[11px] text-text-muted leading-relaxed">
-              チャージは上の「暗号資産で自動チャージ」から行えます。表示された<strong>正確な金額</strong>を USDT(TRC-20)で送金すると、約1〜2分で<strong>自動反映</strong>されます(手動承認は不要)。
-            </div>
-          )}
+          <div className="mt-3 text-[11px] text-text-muted leading-relaxed">
+            チャージは上の「暗号資産で自動チャージ」から行えます。表示された<strong>正確な金額</strong>を USDT(TRC-20)で送金すると、約1〜2分で<strong>自動反映</strong>されます(手動承認は不要)。
+          </div>
         </div>
       </Card>
 
