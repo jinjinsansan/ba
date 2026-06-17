@@ -50,9 +50,16 @@ function todayPnl(b: BillingLite | null): number | null {
 function isLive(b: BillingLite | null): boolean {
   if (!b?.session_state || typeof b.session_state !== 'object') return false
   const ss = b.session_state as Record<string, unknown>
+  // ① Stake残高WSの鮮度(従来)。hh88はStake残高WSが無く current_balance/last_balance_at を
+  //    送れない(ws-silent)ため、この判定だけだと稼働中でもグレーになる (2026-06-17)。
   const lastAt = typeof ss.last_balance_at === 'string' ? new Date(ss.last_balance_at).getTime() : NaN
-  if (!Number.isFinite(lastAt)) return false
-  return Date.now() - lastAt < 90_000
+  if (Number.isFinite(lastAt) && Date.now() - lastAt < 90_000) return true
+  // ② bot_status.updated_at の鮮度(プラットフォーム非依存)。エンジンは稼働中 60秒ごとに
+  //    bot_status を POST するので、残高WSが無い hh88 でもこれで「オンライン」判定できる。
+  const bs = (ss as Record<string, any>).bot_status as Record<string, any> | undefined
+  const botAt = bs && typeof bs.updated_at === 'string' ? new Date(bs.updated_at).getTime() : NaN
+  if (Number.isFinite(botAt) && Date.now() - botAt < 120_000) return true
+  return false
 }
 
 export default async function AdminUsersPage() {
@@ -111,8 +118,24 @@ export default async function AdminUsersPage() {
                       const moneyTxt = bs.money_mode === 'flat' ? `FLAT $${bs.unit}` : `SEQ ${bs.money_mode}`
                       const fol = bs.follow ? `追従ON${bs.follow_active ? ` x${bs.follow_chain}` : ''}` : '追従なし'
                       const over = bs.seq_overshoot
+                      // プラットフォーム / パターン数 / ターン制 / SEQ型 (2026-06-17)
+                      const isHh88 = String(bs.platform || 'stake').toLowerCase() === 'hh88'
+                      const patTxt = bs.dual_mode === 'v4' ? '10パターン' : '6パターン'
+                      const turns = bs.seq_turns
+                      const shape = String(bs.seq_shape || 'attack').toLowerCase()
+                      const shapeTxt = shape === 'defense' ? '守備型' : shape === 'balance' ? 'バランス型' : '攻撃型'
+                      const shapeCls = shape === 'defense' ? 'bg-emerald-500/15 text-emerald-300'
+                        : shape === 'balance' ? 'bg-amber-500/15 text-amber-300'
+                        : 'bg-rose-500/15 text-rose-300'
                       return (
-                        <div className="mt-1.5 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[11px] font-mono">
+                        <>
+                        <div className="mt-1.5 flex flex-wrap items-center gap-1 text-[10px] font-mono">
+                          <span className={`px-1.5 py-0.5 rounded ${isHh88 ? 'bg-violet-500/20 text-violet-300' : 'bg-cyan/15 text-cyan'}`}>{isHh88 ? 'hh88' : 'Stake'}</span>
+                          <span className="px-1.5 py-0.5 rounded bg-white/5 text-text-muted">{patTxt}</span>
+                          {typeof turns === 'number' && <span className="px-1.5 py-0.5 rounded bg-white/5 text-text-muted">{turns}ターン制</span>}
+                          {bs.money_mode !== 'flat' && <span className={`px-1.5 py-0.5 rounded ${shapeCls}`}>{shapeTxt}</span>}
+                        </div>
+                        <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[11px] font-mono">
                           <span className={bs.mode === 'auto' ? 'text-cyan' : 'text-text-muted'}>{bs.mode === 'auto' ? 'AUTO' : '手動'}</span>
                           <span className={bs.follow ? 'text-amber-400' : 'text-text-dim'}>{fol}</span>
                           <span className="text-text-muted">{moneyTxt}</span>
@@ -123,6 +146,7 @@ export default async function AdminUsersPage() {
                           <span className="text-text-dim">{bs.wins}W/{bs.losses}L{typeof bs.win_rate === 'number' ? ` ${bs.win_rate}%` : ''}</span>
                           {bs.loss_cut === 0 && bs.money_mode !== 'flat' && <span className="text-rose-400/80">⚠cut無制限</span>}
                         </div>
+                        </>
                       )
                     })()}
                   </td>
