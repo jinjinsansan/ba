@@ -8,6 +8,7 @@ type SessionState = {
   prev_daily_bet_pnl?: number
   prev_daily_bet_pnl_date?: string
   current_balance?: number
+  daily_open?: { date?: string; balance?: number }
   daily_open_balance?: number
   daily_open_date?: string
   last_balance_at?: string
@@ -67,7 +68,15 @@ export default function RealtimePnlCard({ initial }: { initial: SessionState | n
   const dpFallback = typeof ss.daily_pnl === 'number' ? ss.daily_pnl : null
 
   const balance = typeof ss.current_balance === 'number' ? ss.current_balance : null
-  const openBal = typeof ss.daily_open_balance === 'number' ? ss.daily_open_balance : null
+  // ★エンジンが書くのは daily_open={date,balance} オブジェクト。旧コードが読んでいた
+  // フラット daily_open_balance は session_state に存在せず常に null→daily_bet_pnl に
+  // 誤フォールバックし、一覧(admin/users)の残高差分PnLと食い違っていた (2026-06-19 修正)。
+  // 一覧と同じく「当日の daily_open.balance」を最優先。フラットは後方互換フォールバック。
+  const dailyOpen = (ss.daily_open && typeof ss.daily_open === 'object')
+    ? (ss.daily_open as { date?: string; balance?: number }) : null
+  const openBal = (dailyOpen && dailyOpen.date === today && typeof dailyOpen.balance === 'number')
+    ? dailyOpen.balance
+    : (typeof ss.daily_open_balance === 'number' && (ss.daily_open_date ?? today) === today ? ss.daily_open_balance : null)
 
   // 残高差分を最優先(daily_bet_pnl はベット履歴DOM誤読で膨張し得る 2026-06-12)
   const balanceDiff = balance != null && openBal != null ? balance - openBal : null
