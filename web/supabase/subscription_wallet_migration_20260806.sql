@@ -29,10 +29,12 @@ create table if not exists public.wallets (
   recon_status  text not null default 'checking' check (recon_status in ('checking', 'matched', 'mismatched')),
   last_checked_at timestamptz,
   created_at    timestamptz not null default now(),
-  updated_at    timestamptz not null default now(),
-  unique (user_id),
-  unique (address)
+  updated_at    timestamptz not null default now()
 );
+-- 1ユーザー1アドレス+アドレスの重複禁止(inline unique はエディタ貼り付けで
+-- 壊れやすかったため独立文に分離 — ON CONFLICT / 23505 判定はどちらでも動く)
+create unique index if not exists wallets_user_uniq on public.wallets (user_id);
+create unique index if not exists wallets_address_uniq on public.wallets (address);
 alter table public.wallets enable row level security;
 drop policy if exists wallets_admin_all on public.wallets;
 create policy wallets_admin_all on public.wallets for all to service_role using (true) with check (true);
@@ -56,9 +58,10 @@ create table if not exists public.chain_transfers (
   -- stake_withdrawal: Stake → ユーザーウォレット(=カジノからの出金)
   -- other: それ以外(取引所・個人間送金など)
   classified    text not null default 'other' check (classified in ('stake_deposit', 'stake_withdrawal', 'other')),
-  created_at    timestamptz not null default now(),
-  unique (network, tx_hash, direction, counterparty)
+  created_at    timestamptz not null default now()
 );
+create unique index if not exists chain_transfers_tx_uniq
+  on public.chain_transfers (network, tx_hash, direction, counterparty);
 create index if not exists chain_transfers_user_idx on public.chain_transfers (user_id, occurred_at desc);
 alter table public.chain_transfers enable row level security;
 drop policy if exists chain_transfers_admin_all on public.chain_transfers;
