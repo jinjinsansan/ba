@@ -1,27 +1,34 @@
-'use client'
+// app/purchase/page.tsx — サブスクの更新(2026-08 新料金モデル・実データ)
+// billing.expires_at から期限・更新後の有効期間を計算して表示。
+// 決済は AutoCryptoCharge の subscription モード($200・金額マッチング自動有効化)。
 
-// app/purchase/page.tsx — サブスクの更新(リデザイン 2026-08)
-// 新料金モデル: $200 / 30日(登録日起算)。期限が近い場合は警告カードを最上部に(説明書3.6)。
-//
-// TODO: wire real data — サブスク$200の注文APIは未実装。下の AutoCryptoCharge は
-// 旧ライセンス($2000)モードのまま動いている。バックエンド(subscriptions +
-// payments/create の kind='subscription')実装までこのページを本番反映しないこと。
-// 期限・日数もモック値。
-
-import { useTranslations } from 'next-intl'
+import { redirect } from 'next/navigation'
+import { getTranslations } from 'next-intl/server'
+import { createClient } from '@/lib/supabase-server'
 import AutoCryptoCharge from '@/app/me/balance/AutoCryptoCharge'
 
-export default function PurchasePage() {
-  const t = useTranslations('purchaseV2')
+export default async function PurchasePage() {
+  const supabase = await createClient()
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) redirect('/login')
 
-  // TODO: wire real data — モックの期限情報
-  const mock = {
-    daysLeft: 3,
-    expiresOn: '2026-08-09',
-    periodFrom: '8月9日',
-    periodTo: '9月8日',
-  }
-  const nearExpiry = mock.daysLeft <= 7
+  const t = await getTranslations('purchaseV2')
+
+  const { data: billing } = await supabase.from('billing')
+    .select('expires_at, is_free')
+    .eq('user_id', user.id)
+    .maybeSingle()
+
+  const now = Date.now()
+  const expTs = billing?.expires_at ? new Date(String(billing.expires_at)).getTime() : null
+  const daysLeft = expTs != null ? Math.ceil((expTs - now) / 86_400_000) : null
+  const nearExpiry = daysLeft != null && daysLeft <= 7
+
+  // 更新後の有効期間: max(now, 現期限) から +30日(payments/credit と同じ計算)
+  const baseTs = Math.max(now, expTs ?? 0)
+  const fmt = (ts: number) => new Date(ts).toLocaleDateString('ja-JP', { timeZone: 'Asia/Tokyo', month: 'numeric', day: 'numeric' })
+  const periodFrom = fmt(baseTs)
+  const periodTo = fmt(baseTs + 30 * 86_400_000)
 
   return (
     <div className="min-h-screen flex items-center justify-center px-4 py-10">
@@ -31,11 +38,11 @@ export default function PurchasePage() {
           <h1 className="text-2xl font-bold text-text mt-1">{t('title')}</h1>
         </div>
 
-        {nearExpiry && (
+        {nearExpiry && daysLeft != null && (
           <div className="bg-surface border border-warn/25 rounded-2xl p-5 flex flex-col gap-2">
-            <div className="text-sm text-warn font-semibold">{t('warnTitle', { days: mock.daysLeft })}</div>
+            <div className="text-sm text-warn font-semibold">{t('warnTitle', { days: Math.max(0, daysLeft) })}</div>
             <div className="text-[15px] leading-[1.8] text-text-muted">
-              {t('warnBody', { date: mock.expiresOn })}
+              {t('warnBody', { date: expTs != null ? fmt(expTs) : '' })}
             </div>
           </div>
         )}
@@ -52,11 +59,11 @@ export default function PurchasePage() {
           </div>
           <div className="flex justify-between text-[15px]">
             <span className="text-text-muted">{t('period')}</span>
-            <span className="font-mono tabular-nums">{mock.periodFrom} → {mock.periodTo}</span>
+            <span className="font-mono tabular-nums">{periodFrom} → {periodTo}</span>
           </div>
         </div>
 
-        <AutoCryptoCharge mode="license" />
+        <AutoCryptoCharge mode="subscription" />
 
         <p className="text-[13px] leading-[1.85] text-text-dim text-center m-0">{t('note')}</p>
       </div>

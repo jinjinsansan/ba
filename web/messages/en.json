@@ -456,7 +456,14 @@
       "expired": "Expired",
       "expiredBody": "Your subscription has expired. Renew to unlock the GUI for another 30 days.",
       "renewCta": "Renew subscription",
-      "nearExpiry": "Expiring soon — renew now →"
+      "nearExpiry": "Expiring soon — renew now →",
+      "freePlan": "Fee-exempt plan",
+      "freePlanBody": "This account can use the GUI without a subscription.",
+      "legacy": "No expiry set",
+      "legacyBody": "Grandfathered period. An expiry will be set when the new model is applied.",
+      "none": "No subscription",
+      "noneBody": "Start the $200 / 30-day subscription to unlock the GUI.",
+      "subscribeCta": "Start subscription"
     },
     "chargeMeter": {
       "title": "Estimated charge this week",

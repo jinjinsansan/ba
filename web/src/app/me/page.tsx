@@ -21,17 +21,31 @@ export default async function MePage() {
   if (!user) return null
 
   const t = await getTranslations('dashboardV2')
+  const tSub = await getTranslations('widgets.subscription')
+
+  // 今週(JST・月〜土)の日付レンジ
+  const jstNow = new Date(Date.now() + 9 * 3600_000)
+  const dow = jstNow.getUTCDay() // JST の曜日 (0=日)
+  const monday = new Date(jstNow)
+  monday.setUTCDate(jstNow.getUTCDate() + (dow === 0 ? -6 : 1 - dow))
+  const saturday = new Date(monday)
+  saturday.setUTCDate(monday.getUTCDate() + 5)
+  const isoDate = (d: Date) => d.toISOString().slice(0, 10)
 
   const [
     { data: profile },
     { data: billing },
     { data: lastDeduction },
     { data: unpaidInvoices },
+    { data: wallet },
+    { data: weekRows },
   ] = await Promise.all([
     supabase.from('profiles').select('*').eq('id', user.id).single(),
     supabase.from('billing').select('*').eq('user_id', user.id).single(),
     supabase.from('deductions').select('*').eq('user_id', user.id).order('date', { ascending: false }).limit(1).maybeSingle(),
     supabase.from('invoices').select('id, amount, memo, created_at').eq('user_id', user.id).eq('status', 'unpaid').order('created_at', { ascending: true }).then(r => r, () => ({ data: [] })),
+    supabase.from('wallets').select('network, address, status, recon_status, last_checked_at').eq('user_id', user.id).maybeSingle().then(r => r, () => ({ data: null })),
+    supabase.from('daily_pnl_log').select('date, bet_pnl').eq('user_id', user.id).gte('date', isoDate(monday)).lte('date', isoDate(saturday)).then(r => r, () => ({ data: [] as { date: string; bet_pnl: number }[] })),
   ])
 
   const email = profile?.email || user.email || ''
@@ -42,34 +56,35 @@ export default async function MePage() {
   const ss = (billing?.session_state || {}) as Record<string, unknown>
   const lastBalanceAt = typeof ss.last_balance_at === 'string' ? new Date(ss.last_balance_at).getTime() : NaN
   const guiLive = Number.isFinite(lastBalanceAt) && Date.now() - lastBalanceAt < 90_000
+  const guiEverConnected = Number.isFinite(lastBalanceAt)
 
   const lastPnl = lastDeduction?.daily_profit != null ? Number(lastDeduction.daily_profit) : null
   const carryLoss = Math.max(0, Number(billing?.carry_loss ?? 0))
 
-  // TODO: wire real data — サブスク期限(subscriptions テーブル未実装)。
-  // 現状はモック値。バックエンド実装後に expiresAt / daysLeft を実値へ差し替える。
-  const mockSubscription = { expiresAt: '2026-08-28T14:59:00Z', daysLeft: 22, totalDays: 30 }
+  // サブスク(実データ): billing.expires_at。null = 課金免除 or 経過措置 or 未加入
+  const expiresAt = billing?.expires_at ? String(billing.expires_at) : null
+  const daysLeft = expiresAt ? Math.ceil((new Date(expiresAt).getTime() - Date.now()) / 86_400_000) : null
+  const subActive = !!billing?.is_free || !!billing?.bot_paid
 
-  // TODO: wire real data — 今週の純利益と日別バー(weekly_pnl の当該週 + daily_pnl_log)。
-  const mockWeek = {
-    weeklyNetProfit: 1240,
-    daily: [
-      { day: 'mon' as const, pnl: 420 },
-      { day: 'tue' as const, pnl: -180 },
-      { day: 'wed' as const, pnl: 640 },
-      { day: 'thu' as const, pnl: 360 },
-    ],
-  }
+  // 今週の純利益と日別バー(実データ: daily_pnl_log)
+  const DAY_KEYS = ['sun', 'mon', 'tue', 'wed', 'thu', 'fri', 'sat'] as const
+  const daily = ((weekRows as { date: string; bet_pnl: number }[]) || [])
+    .map(r => {
+      const d = new Date(`${r.date}T00:00:00Z`).getUTCDay()
+      return { day: DAY_KEYS[d], pnl: Number(r.bet_pnl) || 0 }
+    })
+    .filter((r): r is { day: 'mon' | 'tue' | 'wed' | 'thu' | 'fri' | 'sat'; pnl: number } => r.day !== 'sun')
+  const weeklyNetProfit = daily.reduce((s, r) => s + r.pnl, 0)
+  const weekEndsAt = `${isoDate(saturday)}T14:59:00Z` // 土曜 23:59 JST
 
-  // TODO: wire real data — ウォレット登録・オンチェーン突合(wallets / chain_transfers 未実装)。
-  const mockWallet = { status: 'unregistered' as const }
+  // ウォレット突合(実データ)
+  const walletRow = wallet as { network: 'tron' | 'bsc'; address: string; status: string; recon_status: 'checking' | 'matched' | 'mismatched'; last_checked_at?: string | null } | null
 
-  // TODO: wire real data — オンボーディング実状態(サブスク支払い / ウォレット登録)。
-  // GUI 接続のみ実データ(guiLive)を使用。
+  // オンボーディング(実データ)
   const onboardingSteps = [
-    { id: 'subscription' as const, done: true, href: '/purchase' },
-    { id: 'wallet' as const, done: false, href: '/me/wallet' },
-    { id: 'gui' as const, done: guiLive, href: '/me/download' },
+    { id: 'subscription' as const, done: subActive, href: '/purchase' },
+    { id: 'wallet' as const, done: !!walletRow, href: '/me/wallet' },
+    { id: 'gui' as const, done: guiEverConnected, href: '/me/download' },
   ]
 
   const today = new Date().toLocaleDateString('ja-JP', {
@@ -131,20 +146,49 @@ export default async function MePage() {
             <div className="text-lg text-text-dim py-4">{t('todayEmpty')}</div>
           )}
         </div>
-        <SubscriptionCard {...mockSubscription} />
+        {expiresAt && daysLeft != null ? (
+          <SubscriptionCard expiresAt={expiresAt} daysLeft={daysLeft} totalDays={30} />
+        ) : (
+          <div className="bg-surface border border-white/[0.07] rounded-2xl p-6 flex flex-col gap-3.5">
+            <span className="text-[15px] text-text-muted">{tSub('title')}</span>
+            <div className="text-[24px] font-bold leading-tight">
+              {billing?.is_free ? tSub('freePlan') : subActive ? tSub('legacy') : tSub('none')}
+            </div>
+            <p className="text-sm text-text-muted leading-relaxed m-0">
+              {billing?.is_free ? tSub('freePlanBody') : subActive ? tSub('legacyBody') : tSub('noneBody')}
+            </p>
+            {!subActive && (
+              <Link
+                href="/purchase"
+                className="self-start bg-cyan text-[#001721] font-bold text-[15px] rounded-xl px-6 py-3.5 hover:brightness-110 transition"
+              >
+                {tSub('subscribeCta')}
+              </Link>
+            )}
+          </div>
+        )}
       </div>
 
-      {/* 今週のチャージ見込み(carryLoss のみ実データ) */}
+      {/* 今週のチャージ見込み(実データ: daily_pnl_log + billing.carry_loss) */}
       <ChargeMeter
-        weeklyNetProfit={mockWeek.weeklyNetProfit}
-        shareRate={0.30}
+        weeklyNetProfit={weeklyNetProfit}
+        shareRate={Number(billing?.profit_share_rate ?? 0.30) || 0.30}
         carryLoss={carryLoss}
-        weekEndsAt="2026-08-08T14:59:00Z"
-        daily={mockWeek.daily}
+        weekEndsAt={weekEndsAt}
+        daily={daily}
       />
 
-      {/* ウォレット突合 */}
-      <WalletStatus {...mockWallet} />
+      {/* ウォレット突合(実データ) */}
+      {walletRow ? (
+        <WalletStatus
+          status={walletRow.recon_status}
+          address={walletRow.address}
+          network={walletRow.network}
+          lastCheckedAt={walletRow.last_checked_at || undefined}
+        />
+      ) : (
+        <WalletStatus status="unregistered" />
+      )}
 
       {/* 詳細への折りたたみリンク */}
       <div className="flex flex-col gap-0.5 bg-white/[0.06] rounded-[14px] overflow-hidden">

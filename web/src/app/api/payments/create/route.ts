@@ -2,10 +2,12 @@ import { createAdminClient } from '@/lib/supabase-admin'
 import { createClient as createServerSupabase } from '@/lib/supabase-server'
 import { NextRequest, NextResponse } from 'next/server'
 
-// ユーザーが「ライセンス($2000) / チャージ($X)」の暗号決済注文を作成する。
+// ユーザーが「ライセンス($2000) / チャージ($X) / サブスク($200)」の暗号決済注文を作成する。
 // USDT(TRC-20) を「ユニークな端数つき金額」で送ってもらい、VPSポーラーが着金を
 // 金額照合で本人の注文に紐付ける(2026-06-13)。プロセッサ不要・鍵不要。
+// 2026-08-06: 新料金モデルの kind='subscription'($200/30日)を追加。
 const LICENSE_PRICE = Number(process.env.LICENSE_PRICE_USDT || '2000')
+const SUBSCRIPTION_PRICE = Number(process.env.SUBSCRIPTION_PRICE_USDT || '200')
 const PAY_ADDRESS = process.env.PAYMENT_USDT_TRC20_ADDRESS || ''
 const ORDER_TTL_MIN = Number(process.env.PAYMENT_ORDER_TTL_MIN || '60')
 
@@ -17,10 +19,12 @@ export async function POST(req: NextRequest) {
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
   const body = await req.json().catch(() => ({})) as { kind?: string; amount?: number }
-  const kind = body.kind === 'license' ? 'license' : 'charge'
+  const kind = body.kind === 'license' ? 'license' : body.kind === 'subscription' ? 'subscription' : 'charge'
   let base: number
   if (kind === 'license') {
     base = Math.floor(LICENSE_PRICE)
+  } else if (kind === 'subscription') {
+    base = Math.floor(SUBSCRIPTION_PRICE)
   } else {
     base = Math.floor(Number(body.amount) || 0)
     if (!Number.isFinite(base) || base <= 0) {

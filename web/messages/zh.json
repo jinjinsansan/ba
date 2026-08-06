@@ -456,7 +456,14 @@
       "expired": "已到期",
       "expiredBody": "订阅已到期。续订后可再使用 GUI 30天。",
       "renewCta": "续订",
-      "nearExpiry": "即将到期。立即续订 →"
+      "nearExpiry": "即将到期。立即续订 →",
+      "freePlan": "免除收费方案",
+      "freePlanBody": "此账户无需订阅即可使用 GUI。",
+      "legacy": "未设置到期日",
+      "legacyBody": "过渡措施期间。切换到新模式时将设置到期日。",
+      "none": "未订阅",
+      "noneBody": "开始 $200 / 30天 的订阅即可使用 GUI。",
+      "subscribeCta": "开始订阅"
     },
     "chargeMeter": {
       "title": "本周预计费用",

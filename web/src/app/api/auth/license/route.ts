@@ -57,21 +57,19 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ ok: false, reason: 'No subscription found. Please purchase a plan at bafather.uk' })
   }
 
+  // 新料金モデル (2026-08-06): ロック条件は「サブスク期限」と「手動停止」のみ。
+  // チャージ残高によるゲートは廃止(利益シェアは週次請求・未払い時はオーナーが手動停止)。
   if (billing.expires_at && new Date(billing.expires_at) < new Date()) {
     return NextResponse.json({ ok: false, reason: 'Your subscription has expired. Please renew at bafather.uk' })
   }
 
   if (!billing.bot_paid) {
-    return NextResponse.json({ ok: false, reason: 'License not active. Please complete your purchase.' })
+    return NextResponse.json({ ok: false, reason: 'No active subscription. Please subscribe at bafather.uk' })
   }
 
-  if (!billing.is_free) {
-    if (billing.suspended) {
-      return NextResponse.json({ ok: false, reason: 'Your account is suspended. Please contact admin.' })
-    }
-    if ((billing.balance || 0) <= 0) {
-      return NextResponse.json({ ok: false, reason: 'Balance is empty. Please charge to enable live betting.' })
-    }
+  // 手動停止は is_free に関係なく全員に適用(新モデルでは全員 is_free になるため)
+  if (billing.suspended) {
+    return NextResponse.json({ ok: false, reason: 'Your account is suspended. Please contact admin.' })
   }
   const { data: deliverables } = await admin
     .from('deliverables')

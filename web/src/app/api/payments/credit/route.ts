@@ -3,8 +3,11 @@ import { NextRequest, NextResponse } from 'next/server'
 
 // VPSポーラーが着金を検知したら呼ぶ。共有シークレット認証。
 // tx_hash で冪等(同一送金で二重計上しない)・金額一致を検証してから反映:
-//   kind=charge   -> billing.balance += amount (total_charged += amount), suspended=false
-//   kind=license  -> billing.bot_paid = true, suspended=false
+//   kind=charge       -> billing.balance += amount (total_charged += amount), suspended=false
+//   kind=license      -> billing.bot_paid = true, suspended=false
+//   kind=subscription -> billing.expires_at を max(now, 現期限) + 30日へ延長 + bot_paid=true
+//                        (2026-08-06 新料金モデル。suspended はオーナーの手動停止権限を
+//                         尊重するため触らない — チャージ未払い時の停止は手動運用)
 // 反映後は既存の停止/復旧ゲートが自動で稼働可否を判定する。
 function r2(n: number) { return Math.round(n * 100) / 100 }
 
@@ -78,6 +81,18 @@ export async function POST(req: NextRequest) {
       { onConflict: 'user_id' },
     )
     if (error) return NextResponse.json({ error: 'license credit failed: ' + error.message }, { status: 500 })
+  } else if (order.kind === 'subscription') {
+    // 期限が残っていれば残日数を無駄にしない(現期限から+30日)。切れていれば今から+30日。
+    const { data: cur } = await admin.from('billing').select('expires_at').eq('user_id', order.user_id).maybeSingle()
+    const now = Date.now()
+    const curExp = cur?.expires_at ? new Date(cur.expires_at).getTime() : 0
+    const baseTs = Math.max(now, curExp)
+    const newExpiry = new Date(baseTs + 30 * 86_400_000).toISOString()
+    const { error } = await admin.from('billing').upsert(
+      { user_id: order.user_id, bot_paid: true, expires_at: newExpiry, updated_at: new Date().toISOString() },
+      { onConflict: 'user_id' },
+    )
+    if (error) return NextResponse.json({ error: 'subscription credit failed: ' + error.message }, { status: 500 })
   } else {
     // チャージ: まず未払いの日次手数料(daily_profit_invoices)を古い順に充当 → 残額を balance へ。
     // これをしないと、未払いがある状態でチャージしても GUI ゲート(unpaid invoice)が
@@ -138,7 +153,9 @@ export async function POST(req: NextRequest) {
   try {
     const { data: prof } = await admin.from('profiles').select('email').eq('id', order.user_id).maybeSingle()
     const who = prof?.email || order.user_id
-    const label = order.kind === 'license' ? 'ライセンス ($2000)' : `チャージ $${amount}`
+    const label = order.kind === 'license' ? 'ライセンス ($2000)'
+      : order.kind === 'subscription' ? `サブスク更新 ($${Math.floor(amount)} / 30日)`
+      : `チャージ $${amount}`
     await notifyDeposit(
       `💰 <b>入金確認</b>\n` +
       `${who}\n` +
