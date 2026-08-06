@@ -27,12 +27,30 @@
     "titleLine1": "为精度",
     "titleLine2": "而生。",
     "items": [
-      { "title": "模式识别", "desc": "独创的〇×策略。覆盖整个 shoe 历史的多层序列分析。" },
-      { "title": "零接触执行", "desc": "桌台选择、投注金额、结果记录。从进入到退出完全自动化。" },
-      { "title": "风险架构", "desc": "硬性盈利目标。硬性亏损上限。自动会话终止。无法覆盖。" },
-      { "title": "实时智能", "desc": "胜率、盈亏曲线、逐局分解。每一手都有记录。" },
-      { "title": "云端逻辑引擎", "desc": "预测在服务器端计算。本地设备仅负责执行。低延迟设计。" },
-      { "title": "绑定分发", "desc": "每个二进制文件均以加密方式绑定许可证。结构上无法再分发。" }
+      {
+        "title": "模式识别",
+        "desc": "独创的〇×策略。覆盖整个 shoe 历史的多层序列分析。"
+      },
+      {
+        "title": "零接触执行",
+        "desc": "桌台选择、投注金额、结果记录。从进入到退出完全自动化。"
+      },
+      {
+        "title": "风险架构",
+        "desc": "硬性盈利目标。硬性亏损上限。自动会话终止。无法覆盖。"
+      },
+      {
+        "title": "实时智能",
+        "desc": "胜率、盈亏曲线、逐局分解。每一手都有记录。"
+      },
+      {
+        "title": "云端逻辑引擎",
+        "desc": "预测在服务器端计算。本地设备仅负责执行。低延迟设计。"
+      },
+      {
+        "title": "绑定分发",
+        "desc": "每个二进制文件均以加密方式绑定许可证。结构上无法再分发。"
+      }
     ]
   },
   "pricing": {
@@ -56,10 +74,22 @@
     "titleLine1": "四个步骤。",
     "titleLine2": "之后全自动。",
     "steps": [
-      { "title": "支付", "desc": "使用 USDT 购买授权。TRC-20 或 ERC-20。30 分钟内确认。" },
-      { "title": "下载", "desc": "获得您专属的 Bafather.exe。与授权密钥绑定。" },
-      { "title": "连接", "desc": "在内置浏览器中登录 Stake 一次。凭证仅保留在本地。" },
-      { "title": "运行", "desc": "按下 START。系统自主运行。无需进一步操作。" }
+      {
+        "title": "支付",
+        "desc": "使用 USDT 购买授权。TRC-20 或 ERC-20。30 分钟内确认。"
+      },
+      {
+        "title": "下载",
+        "desc": "获得您专属的 Bafather.exe。与授权密钥绑定。"
+      },
+      {
+        "title": "连接",
+        "desc": "在内置浏览器中登录 Stake 一次。凭证仅保留在本地。"
+      },
+      {
+        "title": "运行",
+        "desc": "按下 START。系统自主运行。无需进一步操作。"
+      }
     ]
   },
   "faq": {
@@ -67,11 +97,26 @@
     "titleLine1": "常见",
     "titleLine2": "问题。",
     "items": [
-      { "q": "利润分成如何运作?", "a": "每个会话日结束时计算净利润,按比例从余额中扣除。亏损日结转——在先前的亏损被回收之前不产生费用。" },
-      { "q": "余额归零后会怎样?", "a": "激活 24 小时宽限期,机器人暂停。随时充值即可恢复。无惩罚,不删账户。" },
-      { "q": "授权费用如何收取?", "a": "从首次充值中自动扣除。支付 $2,000 授权 + $3,000 充值 = $3,000 运营余额。" },
-      { "q": "支持哪些支付方式?", "a": "仅 USDT。TRC-20 (TRON) 或 ERC-20 (Ethereum)。人工确认,通常 30 分钟内完成。" },
-      { "q": "可以在云主机上运行吗?", "a": "可以。任何 Windows 10/11 环境——本地或云端均可。AWS WorkSpaces、Paperspace、Shadow PC 均已确认。" }
+      {
+        "q": "利润分成如何运作?",
+        "a": "每个会话日结束时计算净利润,按比例从余额中扣除。亏损日结转——在先前的亏损被回收之前不产生费用。"
+      },
+      {
+        "q": "余额归零后会怎样?",
+        "a": "激活 24 小时宽限期,机器人暂停。随时充值即可恢复。无惩罚,不删账户。"
+      },
+      {
+        "q": "授权费用如何收取?",
+        "a": "从首次充值中自动扣除。支付 $2,000 授权 + $3,000 充值 = $3,000 运营余额。"
+      },
+      {
+        "q": "支持哪些支付方式?",
+        "a": "仅 USDT。TRC-20 (TRON) 或 ERC-20 (Ethereum)。人工确认,通常 30 分钟内完成。"
+      },
+      {
+        "q": "可以在云主机上运行吗?",
+        "a": "可以。任何 Windows 10/11 环境——本地或云端均可。AWS WorkSpaces、Paperspace、Shadow PC 均已确认。"
+      }
     ]
   },
   "finalCta": {
@@ -93,7 +138,7 @@
     "loading": "加载中...",
     "login": {
       "title": "欢迎回来",
-      "subtitle": "登录 Bafather 仪表板",
+      "subtitle": "登录后可一览订阅剩余天数、本周成绩和钱包核对状态。",
       "email": "邮箱",
       "password": "密码",
       "emailPlaceholder": "you@example.com",
@@ -105,7 +150,7 @@
     },
     "signup": {
       "title": "创建账户",
-      "subtitle": "加入 Bafather 开始赢取",
+      "subtitle": "注册免费。费用只有30天 $200 的订阅和盈利周净利润的30%。",
       "confirmSent": "请查看邮箱并点击确认链接。",
       "email": "邮箱",
       "password": "密码",
@@ -310,5 +355,241 @@
       "invalidPassword": "密码错误",
       "loadFail": "文件加载失败"
     }
+  },
+  "landingV2": {
+    "nav": {
+      "how": "运作方式",
+      "pricing": "费用",
+      "faq": "常见问题",
+      "login": "登录",
+      "signup": "免费注册"
+    },
+    "hero": {
+      "badge": "费用只有月费和利润分成两项",
+      "title": "百家乐跟单交易桌面 GUI 会员网站",
+      "body": "通过 GUI 接收引擎的判断,在您自己的账户中执行。使用费为每30天 $200;此外,仅在 GUI 成绩为正的周,支付该周净利润的30%。",
+      "ctaPrimary": "3步开始",
+      "ctaSecondary": "了解运作方式",
+      "paymentNote": "使用 USDT(TRC-20)支付。无需注册信用卡。"
+    },
+    "example": {
+      "kicker": "this week",
+      "label": "显示示例",
+      "weeklyProfit": "本周净利润",
+      "sundayBill": "周日账单(30%)",
+      "zeroNote": "亏损的一周账单为 $0。在收回该损失之前,之后的周也不会产生费用。"
+    },
+    "steps": {
+      "title": "3步开始",
+      "sub": "从注册到运行,最快当天完成。",
+      "s1": {
+        "title": "注册并支付 $200 订阅",
+        "body": "用邮箱注册,以 USDT(TRC-20)汇款 $200,即可使用 GUI 30天。"
+      },
+      "s2": {
+        "title": "登记钱包",
+        "body": "登记一个 TRON 或 BNB Chain 的 USDT 地址。出入金仅限该地址,系统自动核对与成绩的一致性。"
+      },
+      "s3": {
+        "title": "下载并连接 GUI",
+        "body": "启动桌面应用并登录,当天起投注记录即反映在仪表板上。"
+      }
+    },
+    "pricing": {
+      "title": "费用只有两项",
+      "subscription": {
+        "kicker": "subscription",
+        "price": "$200",
+        "unit": "/ 30天",
+        "body": "使用 GUI 的唯一条件。自付款日起30天有效,到期后 GUI 停止。"
+      },
+      "profitShare": {
+        "kicker": "profit share",
+        "price": "30%",
+        "unit": "/ 周净利润",
+        "body": "仅针对通过 GUI 的投注(手动·自动均含)的净利润。周六截止,周日开票。",
+        "highlightStrong": "亏损的周为 $0。",
+        "highlightBody": "损失结转至下周以后,收回之前不产生费用。"
+      },
+      "note": "除上述外没有其他费用。已废除按充值余额限制使用的机制。"
+    },
+    "how": {
+      "title": "运作方式",
+      "copyTrade": {
+        "title": "什么是跟单交易",
+        "body": "引擎读取牌局,将投注判断发送到您的 GUI。资金始终在您自己的账户中,我们不代管。可全自动运行,也可仅接收判断后手动下注。"
+      },
+      "weekly": {
+        "title": "什么是周结算",
+        "body": "汇总周一至周六的投注,净利润为正时于周日请求其30%。为负时该周不收费,金额作为结转显示在仪表板上。"
+      }
+    },
+    "faq": {
+      "title": "常见问题",
+      "q1": "亏损的周也需要 $200 吗?",
+      "a1": "是的。$200 是使用 GUI 的订阅费,与成绩无关。而利润分成只在盈利的周产生。",
+      "q2": "结转损失何时消失?",
+      "a2": "与之后各周的利润相抵,累计损失全部收回时消失。超出部分的30%起再次产生账单。",
+      "q3": "需要把资金托管给你们吗?",
+      "a3": "不需要。资金始终在您自己的赌场账户和钱包中,我们绝不代管。",
+      "q4": "为什么需要登记钱包?",
+      "a4": "将出入金限定在登记地址,可将链上记录与投注成绩核对,使结算金额的依据随时可查。",
+      "q5": "可以中途停止吗?",
+      "a5": "可以。不续订的话,到期日之后不会产生费用。仅需结清未支付的利润分成。"
+    },
+    "risk": {
+      "label": "risk disclosure",
+      "body": "百家乐是运气成分很大的游戏,不保证未来收益。过去的成绩不代表将来的结果。产生损失时责任由本人承担。请在闲余资金范围内使用,勿使用生活资金或借款。未满18岁或居住地法律禁止者不可使用。若感到有赌博问题,请联系专业咨询窗口。"
+    },
+    "footer": {
+      "terms": "服务条款",
+      "privacy": "隐私政策",
+      "tokushoho": "法律声明",
+      "support": "支持"
+    }
+  },
+  "widgets": {
+    "subscription": {
+      "title": "订阅剩余",
+      "until": "至{date}",
+      "daysUnit": "天",
+      "expired": "已到期",
+      "expiredBody": "订阅已到期。续订后可再使用 GUI 30天。",
+      "renewCta": "续订",
+      "nearExpiry": "即将到期。立即续订 →",
+      "freePlan": "免除收费方案",
+      "freePlanBody": "此账户无需订阅即可使用 GUI。",
+      "legacy": "未设置到期日",
+      "legacyBody": "过渡措施期间。切换到新模式时将设置到期日。",
+      "none": "未订阅",
+      "noneBody": "开始 $200 / 30天 的订阅即可使用 GUI。",
+      "subscribeCta": "开始订阅"
+    },
+    "chargeMeter": {
+      "title": "本周预计费用",
+      "tooltip": "GUI 投注净利润 × 30%,每周日开票。亏损的周账单为 $0。",
+      "noChargeThisWeek": "本周没有账单",
+      "billedSunday": "周日开票",
+      "carryBody": "在收回结转损失 <carry>{carryValue}</carry> 之前不产生费用。再获利 <remain>{remainValue}</remain> 后恢复。",
+      "formula": "本周净利润 <profit>{profitValue}</profit> × {rate}% · {deadline}(六) 23:59 截止",
+      "days": {
+        "mon": "一",
+        "tue": "二",
+        "wed": "三",
+        "thu": "四",
+        "fri": "五",
+        "sat": "六"
+      },
+      "footerWithCarry": "先抵消结转损失再计算账单。",
+      "footerNoCarry": "无结转损失。若本周为负,账单为 $0。"
+    },
+    "walletStatus": {
+      "matched": {
+        "title": "钱包核对: 一致",
+        "body": "链上出入金与投注成绩没有差异。"
+      },
+      "checking": {
+        "title": "钱包核对: 确认中",
+        "body": "正在区块链上核对最近的转账(通常10分钟内)。"
+      },
+      "mismatched": {
+        "title": "钱包核对: 不一致",
+        "body": "检测到来自未登记地址的出入金。请联系支持。"
+      },
+      "unregistered": {
+        "title": "未登记钱包",
+        "body": "登记钱包后开始核对。"
+      },
+      "lastChecked": "最后确认 {time}",
+      "registerCta": "登记"
+    },
+    "onboarding": {
+      "title": "初始设置",
+      "remaining": "还差{count}项即可开始运用",
+      "steps": {
+        "subscription": {
+          "done": "订阅已支付",
+          "todo": "支付订阅",
+          "cta": "支付"
+        },
+        "wallet": {
+          "done": "钱包已登记",
+          "todo": "登记钱包",
+          "cta": "登记"
+        },
+        "gui": {
+          "done": "GUI 已连接",
+          "todo": "连接 GUI",
+          "cta": "连接"
+        }
+      }
+    }
+  },
+  "dashboardV2": {
+    "greeting": "您好,{name}",
+    "statusRunning": "GUI 运行中",
+    "statusIdle": "GUI 未连接",
+    "statusSuspended": "账户已停用 — 请联系支持",
+    "todayTitle": "今日净损益",
+    "todayMeta": "{date} 结算",
+    "todayEmpty": "暂无记录",
+    "details": {
+      "weekly": "周结算历史",
+      "realtime": "实时运用状况",
+      "download": "GUI 下载",
+      "referral": "推荐计划",
+      "support": "支持"
+    }
+  },
+  "walletPage": {
+    "kicker": "Member · Wallet",
+    "title": "登记钱包",
+    "intro": "对 Stake 的入金和出金将限定在此登记的地址。通过自动核对链上动向与投注成绩,使结算金额的依据随时可查。",
+    "network": "网络",
+    "tron": "TRON",
+    "tronSub": "USDT (TRC-20) · 手续费低",
+    "bsc": "BNB Chain",
+    "bscSub": "USDT (BEP-20)",
+    "addressLabel": "USDT 地址",
+    "addressPlaceholderTron": "以 T 开头的34位地址",
+    "addressPlaceholderBsc": "以 0x 开头的42位地址",
+    "validTron": "有效的 TRON 地址",
+    "validBsc": "有效的 BNB Chain 地址",
+    "invalid": "地址格式不正确",
+    "warnStrong": "仅可登记1个地址。",
+    "warnBody": "变更需经支持进行本人确认。请登记您本人管理的钱包,而非交易所共享地址。",
+    "submit": "登记此地址",
+    "later": "稍后登记",
+    "registeredAddr": "登记地址",
+    "recentTitle": "最近核对",
+    "recentEmpty": "暂无核对历史。检测到首笔出入金后将显示在此处。",
+    "pendingNote": "登记已受理。首笔转账在链上确认后,核对将自动开始。"
+  },
+  "settlementsV2": {
+    "kicker": "Member · Settlements",
+    "title": "结算历史",
+    "sub": "周成绩(一~六)周六截止,周日开票",
+    "billedOn": "{date}(日)开票",
+    "statusPaid": "已支付",
+    "statusBilled": "已开票",
+    "statusZero": "账单 $0",
+    "zeroSub": "以亏损结束 · 无账单",
+    "cellNet": "周净利润",
+    "cellFee": "账单(30%)",
+    "cellCarry": "结转额",
+    "carryNote": "本周损失 <c>{amount}</c> 已结转至下周。",
+    "empty": "暂无结算历史。记录到 GUI 投注后,将按周添加到此处。",
+    "dailyDetails": "显示每日明细"
+  },
+  "purchaseV2": {
+    "kicker": "Subscription",
+    "title": "续订",
+    "warnTitle": "{days}天后到期",
+    "warnBody": "超过 {date} 后 GUI 将停止。续订后从该日起延长30天。",
+    "amount": "支付金额",
+    "currency": "货币",
+    "currencyValue": "USDT (TRC-20)",
+    "period": "有效期间",
+    "note": "汇出显示的准确金额后,1~2分钟内自动生效。"
   }
 }

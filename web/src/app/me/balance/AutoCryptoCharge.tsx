@@ -6,7 +6,7 @@ import { useEffect, useState } from 'react'
 // その正確な額を受取アドレスへ送ってもらう → VPSポーラーが着金照合して自動反映。
 type Order = {
   order_id: string
-  kind: 'license' | 'charge'
+  kind: 'license' | 'charge' | 'subscription'
   amount: number
   token: string
   network: string
@@ -14,7 +14,7 @@ type Order = {
   expires_at: string
 }
 
-export default function AutoCryptoCharge({ mode = 'both' }: { mode?: 'both' | 'charge' | 'license' }) {
+export default function AutoCryptoCharge({ mode = 'both' }: { mode?: 'both' | 'charge' | 'license' | 'subscription' }) {
   const [amount, setAmount] = useState('')
   const [loading, setLoading] = useState(false)
   const [err, setErr] = useState('')
@@ -22,7 +22,7 @@ export default function AutoCryptoCharge({ mode = 'both' }: { mode?: 'both' | 'c
   const [remain, setRemain] = useState('')
   const [copied, setCopied] = useState('')
 
-  async function create(kind: 'license' | 'charge') {
+  async function create(kind: 'license' | 'charge' | 'subscription') {
     setErr(''); setLoading(true); setOrder(null)
     try {
       const body = kind === 'license' ? { kind } : { kind, amount: parseInt(amount, 10) }
@@ -61,7 +61,13 @@ export default function AutoCryptoCharge({ mode = 'both' }: { mode?: 'both' | 'c
 
       {!order && (
         <div className="space-y-3">
-          {mode !== 'license' && (
+          {mode === 'subscription' && (
+            <button onClick={() => create('subscription')} disabled={loading}
+              className="w-full px-4 py-3 rounded text-sm font-bold bg-cyan/20 text-cyan hover:bg-cyan/30 transition disabled:opacity-40">
+              {loading ? '作成中…' : 'サブスク更新の送金アドレスを表示 ($200 / 30日)'}
+            </button>
+          )}
+          {mode !== 'license' && mode !== 'subscription' && (
             <div className="flex gap-2">
               <input
                 type="number" min="1" step="1" inputMode="numeric" placeholder="チャージ額 (USD)"
@@ -74,7 +80,7 @@ export default function AutoCryptoCharge({ mode = 'both' }: { mode?: 'both' | 'c
               </button>
             </div>
           )}
-          {mode !== 'charge' && (
+          {mode !== 'charge' && mode !== 'subscription' && (
             <button onClick={() => create('license')} disabled={loading}
               className="w-full px-4 py-2 rounded text-sm bg-yellow-500/15 text-yellow-300 hover:bg-yellow-500/25 transition disabled:opacity-40">
               ライセンス購入 ($2000)
@@ -87,7 +93,7 @@ export default function AutoCryptoCharge({ mode = 'both' }: { mode?: 'both' | 'c
       {order && (
         <div className="space-y-3">
           <div className="flex items-center justify-between text-xs">
-            <span className="text-text-muted">{order.kind === 'license' ? 'ライセンス' : 'チャージ'}注文</span>
+            <span className="text-text-muted">{order.kind === 'license' ? 'ライセンス' : order.kind === 'subscription' ? 'サブスク更新' : 'チャージ'}注文</span>
             <span className="text-text-dim">期限まで {remain}</span>
           </div>
           <div className="rounded-lg bg-black/30 border border-white/10 p-3">
