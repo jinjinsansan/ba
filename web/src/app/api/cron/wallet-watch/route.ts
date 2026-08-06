@@ -5,8 +5,10 @@ import { NextRequest, NextResponse } from 'next/server'
 // 登録ウォレットの USDT 転送を観測して chain_transfers に蓄積し、
 // wallets.status(pending→verified)と recon_status を更新する。
 //
-// 実行方法: Vercel cron ではなく VPS の cron から叩く(Vercel cron 枠温存):
-//   */10 * * * * curl -s -H "Authorization: Bearer $CRON_SECRET" https://www.bafather.uk/api/cron/wallet-watch
+// 実行方法: Vercel cron ではなく VPS の cron から叩く(Vercel cron 枠温存)。
+// 認証は CRON_SECRET(Bearer)または PAYMENTS_WEBHOOK_SECRET(x-payments-secret)の
+// どちらでも通る — VPS 決済ポーラーが既に後者を持っているため、秘密の追加配布が不要:
+//   */10 * * * * curl -s -H "x-payments-secret: $PAYMENTS_WEBHOOK_SECRET" https://www.bafather.uk/api/cron/wallet-watch
 //
 // Phase 1 の突合ルール(単純化・TODO 参照):
 //   転送の観測なし → recon_status='checking' / 観測あり → 'matched'
@@ -51,7 +53,10 @@ async function fetchTronTransfers(address: string): Promise<TronTransfer[]> {
 
 export async function GET(req: NextRequest) {
   const authHeader = req.headers.get('authorization')
-  if (!process.env.CRON_SECRET || authHeader !== `Bearer ${process.env.CRON_SECRET}`) {
+  const paySecret = req.headers.get('x-payments-secret') || ''
+  const cronOk = !!process.env.CRON_SECRET && authHeader === `Bearer ${process.env.CRON_SECRET}`
+  const payOk = !!process.env.PAYMENTS_WEBHOOK_SECRET && paySecret === process.env.PAYMENTS_WEBHOOK_SECRET
+  if (!cronOk && !payOk) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }
 
