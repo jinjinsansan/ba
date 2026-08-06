@@ -1,173 +1,164 @@
+// app/me/page.tsx — 会員ホーム(リデザイン 2026-08 / ダッシュボード案1a: 縦一列・数字主役)
+//
+// 並び(ハンドオフ説明書3.2 案1a):
+//   オンボーディング → 今日の純損益 / サブスク残り(2列) → チャージ見込み → 突合ステータス → 詳細リンク
+// 旧「チャージしないと使えない」系の文言・状態は廃止(新料金モデル)。
+// データ取得は既存のまま。新ウィジェットのうち未配線のものはモックデータ + TODO。
+
 import Link from 'next/link'
+import { getTranslations } from 'next-intl/server'
 import { createClient } from '@/lib/supabase-server'
-import { Card, CardHead } from '@/components/ui/Card'
-import { PageHeader, Label } from '@/components/ui/PageHeader'
-import { Pill } from '@/components/ui/Pill'
 import { Money } from '@/components/ui/Money'
-import { Dot } from '@/components/ui/Dot'
-import { Button } from '@/components/ui/Button'
 import InvoicesCard from './InvoicesCard'
+import OnboardingChecklist from '@/components/dashboard/OnboardingChecklist'
+import SubscriptionCard from '@/components/dashboard/SubscriptionCard'
+import ChargeMeter from '@/components/dashboard/ChargeMeter'
+import WalletStatus from '@/components/dashboard/WalletStatus'
 
 export default async function MePage() {
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return null
 
+  const t = await getTranslations('dashboardV2')
+
   const [
     { data: profile },
     { data: billing },
-    { data: latestOrder },
     { data: lastDeduction },
     { data: unpaidInvoices },
   ] = await Promise.all([
     supabase.from('profiles').select('*').eq('id', user.id).single(),
     supabase.from('billing').select('*').eq('user_id', user.id).single(),
-    supabase.from('orders').select('*').eq('user_id', user.id).order('created_at', { ascending: false }).limit(1).maybeSingle(),
     supabase.from('deductions').select('*').eq('user_id', user.id).order('date', { ascending: false }).limit(1).maybeSingle(),
     supabase.from('invoices').select('id, amount, memo, created_at').eq('user_id', user.id).eq('status', 'unpaid').order('created_at', { ascending: true }).then(r => r, () => ({ data: [] })),
   ])
 
-  const hasActiveCharge = billing && billing.balance > 0 && !billing.suspended
+  const email = profile?.email || user.email || ''
+  const name = email.split('@')[0] || 'member'
+  const suspended = !!billing?.suspended
 
-  type StatusTone = 'live' | 'warn' | 'danger' | 'info'
-  let statusLabel = 'No License — Purchase to start'
-  let statusTone: StatusTone = 'info'
+  // GUI 稼働判定(実データ): session_state.last_balance_at が 90 秒以内なら稼働中
+  const ss = (billing?.session_state || {}) as Record<string, unknown>
+  const lastBalanceAt = typeof ss.last_balance_at === 'string' ? new Date(ss.last_balance_at).getTime() : NaN
+  const guiLive = Number.isFinite(lastBalanceAt) && Date.now() - lastBalanceAt < 90_000
 
-  if (billing?.is_free && !billing?.suspended) {
-    statusLabel = '課金免除プラン — Live Betting Enabled'
-    statusTone = 'live'
-  } else if (!latestOrder) {
-    statusLabel = 'No License — Purchase to start'
-    statusTone = 'info'
-  } else if (latestOrder.status === 'pending' || latestOrder.status === 'sent') {
-    statusLabel = 'PENDING — Awaiting payment'
-    statusTone = 'warn'
-  } else if (billing?.suspended) {
-    statusLabel = 'SUSPENDED — Contact support'
-    statusTone = 'danger'
-  } else if (!hasActiveCharge) {
-    statusLabel = 'DRY RUN — Charge to enable live bets'
-    statusTone = 'warn'
-  } else {
-    statusLabel = 'ACTIVE — Live Betting Enabled'
-    statusTone = 'live'
+  const lastPnl = lastDeduction?.daily_profit != null ? Number(lastDeduction.daily_profit) : null
+  const carryLoss = Math.max(0, Number(billing?.carry_loss ?? 0))
+
+  // TODO: wire real data — サブスク期限(subscriptions テーブル未実装)。
+  // 現状はモック値。バックエンド実装後に expiresAt / daysLeft を実値へ差し替える。
+  const mockSubscription = { expiresAt: '2026-08-28T14:59:00Z', daysLeft: 22, totalDays: 30 }
+
+  // TODO: wire real data — 今週の純利益と日別バー(weekly_pnl の当該週 + daily_pnl_log)。
+  const mockWeek = {
+    weeklyNetProfit: 1240,
+    daily: [
+      { day: 'mon' as const, pnl: 420 },
+      { day: 'tue' as const, pnl: -180 },
+      { day: 'wed' as const, pnl: 640 },
+      { day: 'thu' as const, pnl: 360 },
+    ],
   }
 
-  return (
-    <div>
-      <PageHeader
-        kicker="Member · Home"
-        title="マイページ"
-        sub={profile?.email || user.email || undefined}
-        right={
-          billing?.is_free
-            ? <Pill tone="free">課金免除プラン</Pill>
-            : statusTone === 'live'
-              ? <Pill tone="live" dot>LIVE 稼働中</Pill>
-              : <Pill tone={statusTone}>{statusLabel.split(' —')[0]}</Pill>
-        }
-      />
+  // TODO: wire real data — ウォレット登録・オンチェーン突合(wallets / chain_transfers 未実装)。
+  const mockWallet = { status: 'unregistered' as const }
 
-      {/* Status banner */}
-      <div
-        className={[
-          'flex items-center gap-3 p-4 rounded-lg border mb-4',
-          statusTone === 'live'   && 'bg-win/5 border-win/20',
-          statusTone === 'warn'   && 'bg-warn/5 border-warn/22',
-          statusTone === 'danger' && 'bg-lose/5 border-lose/22',
-          statusTone === 'info'   && 'bg-cyan/5 border-cyan/22',
-        ].filter(Boolean).join(' ')}
-      >
-        <Dot tone={statusTone === 'live' ? 'win' : statusTone === 'warn' ? 'warn' : statusTone === 'danger' ? 'lose' : 'cyan'} pulse={statusTone === 'live'} />
-        <div className="flex-1 min-w-0">
-          <div className="font-mono text-[10px] text-text-muted tracking-[0.15em] uppercase">Account Status</div>
-          <div className="text-[15px] font-semibold mt-0.5">{statusLabel}</div>
+  // TODO: wire real data — オンボーディング実状態(サブスク支払い / ウォレット登録)。
+  // GUI 接続のみ実データ(guiLive)を使用。
+  const onboardingSteps = [
+    { id: 'subscription' as const, done: true, href: '/purchase' },
+    { id: 'wallet' as const, done: false, href: '/me/wallet' },
+    { id: 'gui' as const, done: guiLive, href: '/me/download' },
+  ]
+
+  const today = new Date().toLocaleDateString('ja-JP', {
+    timeZone: 'Asia/Tokyo', year: 'numeric', month: 'long', day: 'numeric', weekday: 'short',
+  })
+
+  const detailLinks = [
+    { href: '/me/settlements', key: 'weekly' },
+    { href: '/me/realtime', key: 'realtime' },
+    { href: '/me/download', key: 'download' },
+    { href: '/me/referral', key: 'referral' },
+    { href: '/me/support', key: 'support' },
+  ] as const
+
+  return (
+    <div className="flex flex-col gap-5">
+      {/* Header: greeting + GUI status */}
+      <div className="flex justify-between items-end flex-wrap gap-3">
+        <div>
+          <div className="text-[22px] sm:text-[28px] font-bold tracking-tight">{t('greeting', { name })}</div>
+          <div className="text-[15px] text-text-muted mt-1.5">{today} · JST</div>
         </div>
-        {billing?.is_free ? null
-          : !latestOrder
-            ? <Link href="/purchase"><Button tone="primary" size="sm">ライセンス購入</Button></Link>
-            : !hasActiveCharge
-              ? <Link href="/me/balance"><Button tone="primary" size="sm">残高をチャージ</Button></Link>
-              : null
-        }
+        {suspended ? (
+          <div className="flex items-center gap-2 bg-lose/[0.08] border border-lose/[0.22] text-lose rounded-full px-4 py-2 text-sm font-semibold">
+            <span className="w-2 h-2 rounded-full bg-lose" />
+            {t('statusSuspended')}
+          </div>
+        ) : guiLive ? (
+          <div className="flex items-center gap-2 bg-win/[0.08] border border-win/[0.22] text-win rounded-full px-4 py-2 text-sm font-semibold">
+            <span className="w-2 h-2 rounded-full bg-win animate-pulse" />
+            {t('statusRunning')}
+          </div>
+        ) : (
+          <div className="flex items-center gap-2 bg-white/[0.03] border border-white/[0.1] text-text-muted rounded-full px-4 py-2 text-sm font-semibold">
+            <span className="w-2 h-2 rounded-full bg-text-dim" />
+            {t('statusIdle')}
+          </div>
+        )}
       </div>
 
-      {/* 未払い請求書(管理者発行) */}
+      {/* 未払い請求書(管理者発行) — 実データ */}
       <InvoicesCard invoices={(unpaidInvoices as { id: string; amount: number; memo?: string | null; created_at?: string }[]) || []} />
 
-      {/* Today KPIs */}
-      <Card padded={false} className="mb-4">
-        <CardHead right={<span className="font-mono text-[11px] text-text-dim">JST</span>}>
-          Today · Live Operation
-        </CardHead>
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-6 px-5 py-6">
-          <div>
-            <Label>Last Settled PnL</Label>
-            <div className="mt-1.5">
-              <Money value={lastDeduction?.daily_profit ?? null} sign size="3xl" weight="bold"
-                tone={Number(lastDeduction?.daily_profit ?? 0) >= 0 ? 'win' : 'lose'} />
-            </div>
-          </div>
-          <div>
-            <Label>Balance</Label>
-            <div className="mt-1.5">
-              {billing?.is_free
-                ? <span className="text-xl font-semibold text-cyan">課金免除</span>
-                : <Money value={Number(billing?.balance ?? 0)} size="2xl" weight="semibold" />}
-            </div>
-          </div>
-          <div>
-            <Label>Carry Loss</Label>
-            <div className="mt-1.5">
-              <Money value={Number(billing?.carry_loss ?? 0)} size="2xl" weight="semibold"
-                tone={Number(billing?.carry_loss ?? 0) > 0 ? 'lose' : 'muted'} />
-            </div>
-          </div>
-        </div>
-      </Card>
+      {/* オンボーディング(全完了なら自動非表示) */}
+      <OnboardingChecklist steps={onboardingSteps} />
 
-      {/* Billing summary */}
-      <Card padded={false} className="mb-4">
-        <CardHead>Billing Summary</CardHead>
-        <div className="grid grid-cols-2 sm:grid-cols-4 px-5 py-4">
-          {[
-            { label: 'Profit Share', value: billing ? `${(Number(billing.profit_share_rate) * 100).toFixed(0)}%` : '—' },
-            { label: 'Total Charged', value: `$${Number(billing?.total_charged || 0).toFixed(2)}` },
-            { label: 'Plan', value: billing?.is_free ? 'FREE' : 'Standard' },
-            { label: 'Last Settled', value: lastDeduction?.date || '—' },
-          ].map((it, i) => (
-            <div key={it.label} className={i ? 'pl-4 border-l border-white/[0.07]' : ''}>
-              <Label>{it.label}</Label>
-              <div className="mt-1.5">
-                <Money>{it.value}</Money>
+      {/* 今日の純損益 / サブスク残り */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+        <div className="bg-surface border border-white/[0.07] rounded-2xl p-6 flex flex-col gap-3">
+          <div className="text-[15px] text-text-muted">{t('todayTitle')}</div>
+          {lastPnl != null ? (
+            <>
+              <div className="leading-none">
+                <Money value={lastPnl} sign size="3xl" weight="bold" tone={lastPnl >= 0 ? 'win' : 'lose'} />
               </div>
-            </div>
-          ))}
+              <div className="text-sm text-text-dim">{t('todayMeta', { date: String(lastDeduction?.date || '') })}</div>
+            </>
+          ) : (
+            <div className="text-lg text-text-dim py-4">{t('todayEmpty')}</div>
+          )}
         </div>
-      </Card>
+        <SubscriptionCard {...mockSubscription} />
+      </div>
 
-      {/* Quick nav */}
-      <Card padded={false}>
-        <CardHead>Quick Navigation</CardHead>
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-px bg-white/[0.05]">
-          {[
-            { href: '/me/realtime', title: 'ライブ運用状況', desc: '30 秒更新の PnL / 残高 / BET' },
-            { href: '/me/balance', title: '残高・チャージ', desc: billing?.is_free ? '課金免除プラン適用中' : `現在 $${Number(billing?.balance || 0).toFixed(2)}` },
-            { href: '/me/settlements', title: '日次精算履歴', desc: lastDeduction ? `最終: ${lastDeduction.date}` : '履歴なし' },
-            { href: '/me/telegram', title: 'Telegram 連携', desc: '日次精算通知の受信' },
-            { href: '/me/referral', title: '紹介プログラム', desc: '紹介 URL / 報酬の引出' },
-            { href: '/me/support', title: 'サポート', desc: 'お問い合わせ' },
-          ].map(c => (
-            <Link key={c.href} href={c.href} className="bg-surface hover:bg-white/[0.03] px-5 py-4 transition group">
-              <div className="flex items-start justify-between mb-1">
-                <h3 className="text-sm font-semibold text-text">{c.title}</h3>
-                <span className="text-text-dim group-hover:text-cyan transition text-xs">→</span>
-              </div>
-              <p className="text-xs text-text-muted leading-relaxed">{c.desc}</p>
-            </Link>
-          ))}
-        </div>
-      </Card>
+      {/* 今週のチャージ見込み(carryLoss のみ実データ) */}
+      <ChargeMeter
+        weeklyNetProfit={mockWeek.weeklyNetProfit}
+        shareRate={0.30}
+        carryLoss={carryLoss}
+        weekEndsAt="2026-08-08T14:59:00Z"
+        daily={mockWeek.daily}
+      />
+
+      {/* ウォレット突合 */}
+      <WalletStatus {...mockWallet} />
+
+      {/* 詳細への折りたたみリンク */}
+      <div className="flex flex-col gap-0.5 bg-white/[0.06] rounded-[14px] overflow-hidden">
+        {detailLinks.map(l => (
+          <Link
+            key={l.href}
+            href={l.href}
+            className="bg-surface hover:bg-white/[0.03] px-6 py-5 flex justify-between items-center transition group"
+          >
+            <span className="text-base text-text-muted group-hover:text-text transition">{t(`details.${l.key}`)}</span>
+            <span className="text-text-dim group-hover:text-cyan transition">→</span>
+          </Link>
+        ))}
+      </div>
     </div>
   )
 }

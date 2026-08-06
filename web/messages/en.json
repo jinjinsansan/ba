@@ -27,12 +27,30 @@
     "titleLine1": "Built for",
     "titleLine2": "precision.",
     "items": [
-      { "title": "Pattern Recognition", "desc": "Proprietary Maru-Batsu strategy. Multi-layer sequence analysis across full shoe history." },
-      { "title": "Zero Touch Execution", "desc": "Table selection, bet sizing, result logging. Fully automated from entry to exit." },
-      { "title": "Risk Architecture", "desc": "Hard profit targets. Hard loss limits. Automatic session termination. No overrides." },
-      { "title": "Live Intelligence", "desc": "Win rate, P&L curve, set-by-set breakdown. Every hand accounted for." },
-      { "title": "Cloud Logic Engine", "desc": "Prediction computed server-side. Your machine handles execution only. Low latency." },
-      { "title": "Bound Distribution", "desc": "Each binary is cryptographically tied to your license. Redistribution is structurally impossible." }
+      {
+        "title": "Pattern Recognition",
+        "desc": "Proprietary Maru-Batsu strategy. Multi-layer sequence analysis across full shoe history."
+      },
+      {
+        "title": "Zero Touch Execution",
+        "desc": "Table selection, bet sizing, result logging. Fully automated from entry to exit."
+      },
+      {
+        "title": "Risk Architecture",
+        "desc": "Hard profit targets. Hard loss limits. Automatic session termination. No overrides."
+      },
+      {
+        "title": "Live Intelligence",
+        "desc": "Win rate, P&L curve, set-by-set breakdown. Every hand accounted for."
+      },
+      {
+        "title": "Cloud Logic Engine",
+        "desc": "Prediction computed server-side. Your machine handles execution only. Low latency."
+      },
+      {
+        "title": "Bound Distribution",
+        "desc": "Each binary is cryptographically tied to your license. Redistribution is structurally impossible."
+      }
     ]
   },
   "pricing": {
@@ -56,10 +74,22 @@
     "titleLine1": "Four steps.",
     "titleLine2": "Then nothing.",
     "steps": [
-      { "title": "Pay", "desc": "Purchase license with USDT. TRC-20 or ERC-20. Confirmed within 30 minutes." },
-      { "title": "Download", "desc": "Receive your personalized Bafather.exe. Bound to your license key." },
-      { "title": "Connect", "desc": "Sign into Stake once inside the built-in browser. Credentials stay local." },
-      { "title": "Run", "desc": "Press START. The system operates autonomously. No further input required." }
+      {
+        "title": "Pay",
+        "desc": "Purchase license with USDT. TRC-20 or ERC-20. Confirmed within 30 minutes."
+      },
+      {
+        "title": "Download",
+        "desc": "Receive your personalized Bafather.exe. Bound to your license key."
+      },
+      {
+        "title": "Connect",
+        "desc": "Sign into Stake once inside the built-in browser. Credentials stay local."
+      },
+      {
+        "title": "Run",
+        "desc": "Press START. The system operates autonomously. No further input required."
+      }
     ]
   },
   "faq": {
@@ -67,11 +97,26 @@
     "titleLine1": "Questions",
     "titleLine2": "answered.",
     "items": [
-      { "q": "How does the profit share work?", "a": "At end of each session day, net profit is calculated. A percentage is deducted from your balance. Losing days carry forward — no fees until prior losses are recovered." },
-      { "q": "What happens when the balance hits zero?", "a": "A 24-hour grace period activates. Bot pauses. Recharge at any time to resume. No penalties, no account loss." },
-      { "q": "How is the license fee charged?", "a": "Deducted automatically from your first charge. Pay $2,000 license + $3,000 charge = $3,000 operational balance." },
-      { "q": "What payment methods are accepted?", "a": "USDT only. TRC-20 (TRON) or ERC-20 (Ethereum). Manual confirmation, typically under 30 minutes." },
-      { "q": "Can this run on a cloud machine?", "a": "Yes. Any Windows 10/11 environment — local or cloud. AWS WorkSpaces, Paperspace, Shadow PC all confirmed." }
+      {
+        "q": "How does the profit share work?",
+        "a": "At end of each session day, net profit is calculated. A percentage is deducted from your balance. Losing days carry forward — no fees until prior losses are recovered."
+      },
+      {
+        "q": "What happens when the balance hits zero?",
+        "a": "A 24-hour grace period activates. Bot pauses. Recharge at any time to resume. No penalties, no account loss."
+      },
+      {
+        "q": "How is the license fee charged?",
+        "a": "Deducted automatically from your first charge. Pay $2,000 license + $3,000 charge = $3,000 operational balance."
+      },
+      {
+        "q": "What payment methods are accepted?",
+        "a": "USDT only. TRC-20 (TRON) or ERC-20 (Ethereum). Manual confirmation, typically under 30 minutes."
+      },
+      {
+        "q": "Can this run on a cloud machine?",
+        "a": "Yes. Any Windows 10/11 environment — local or cloud. AWS WorkSpaces, Paperspace, Shadow PC all confirmed."
+      }
     ]
   },
   "finalCta": {
@@ -93,7 +138,7 @@
     "loading": "Loading...",
     "login": {
       "title": "Welcome Back",
-      "subtitle": "Login to your Bafather dashboard",
+      "subtitle": "Log in to see your subscription days left, this week's results, and wallet reconciliation status at a glance.",
       "email": "Email",
       "password": "Password",
       "emailPlaceholder": "you@example.com",
@@ -105,7 +150,7 @@
     },
     "signup": {
       "title": "Create Account",
-      "subtitle": "Join Bafather and start winning",
+      "subtitle": "Signing up is free. The only fees are the $200 / 30-day subscription and 30% of net profit on winning weeks.",
       "confirmSent": "Check your email for a confirmation link.",
       "email": "Email",
       "password": "Password",
@@ -310,5 +355,234 @@
       "invalidPassword": "Invalid password",
       "loadFail": "Failed to load file"
     }
+  },
+  "landingV2": {
+    "nav": {
+      "how": "How it works",
+      "pricing": "Pricing",
+      "faq": "FAQ",
+      "login": "Log in",
+      "signup": "Sign up free"
+    },
+    "hero": {
+      "badge": "Just two fees: monthly + profit share",
+      "title": "The member site for our baccarat copy-trade desktop GUI",
+      "body": "Receive the engine's decisions in the GUI and execute them in your own account. The fee is $200 per 30 days, plus 30% of net profit — only for weeks the GUI finishes in the black.",
+      "ctaPrimary": "Start in 3 steps",
+      "ctaSecondary": "See how it works",
+      "paymentNote": "Payment in USDT (TRC-20). No credit card required."
+    },
+    "example": {
+      "kicker": "this week",
+      "label": "Example",
+      "weeklyProfit": "Net profit this week",
+      "sundayBill": "Sunday invoice (30%)",
+      "zeroNote": "A losing week is billed $0, and no fees accrue until that loss is fully recovered."
+    },
+    "steps": {
+      "title": "Start in 3 steps",
+      "sub": "From sign-up to live operation, often within the same day.",
+      "s1": {
+        "title": "Sign up & pay the $200 subscription",
+        "body": "Register with your email and send $200 in USDT (TRC-20). The GUI unlocks for 30 days."
+      },
+      "s2": {
+        "title": "Register your wallet",
+        "body": "Register one USDT address on TRON or BNB Chain. Deposits and withdrawals are limited to it, so results can be verified automatically."
+      },
+      "s3": {
+        "title": "Download & connect the GUI",
+        "body": "Launch the desktop app and log in — your bets start appearing on the dashboard the same day."
+      }
+    },
+    "pricing": {
+      "title": "Only two fees",
+      "subscription": {
+        "kicker": "subscription",
+        "price": "$200",
+        "unit": "/ 30 days",
+        "body": "The only requirement to use the GUI. Valid 30 days from payment; the GUI stops when it expires."
+      },
+      "profitShare": {
+        "kicker": "profit share",
+        "price": "30%",
+        "unit": "/ weekly net profit",
+        "body": "Applies only to net profit from bets placed through the GUI (manual or auto). Weeks close Saturday, invoiced Sunday.",
+        "highlightStrong": "Losing weeks cost $0.",
+        "highlightBody": "Losses carry forward and nothing is billed until they are recovered."
+      },
+      "note": "There are no other fees. Charge-balance restrictions have been abolished."
+    },
+    "how": {
+      "title": "How it works",
+      "copyTrade": {
+        "title": "What is copy-trading?",
+        "body": "The engine reads the table and sends bet decisions to your GUI. Your funds stay in your own account — we never hold them. Run fully automatic, or receive the calls and bet manually."
+      },
+      "weekly": {
+        "title": "How weekly settlement works",
+        "body": "Bets from Monday to Saturday are totalled. If net profit is positive, 30% is invoiced on Sunday. If negative, nothing is billed and the loss shows as a carry-over on your dashboard."
+      }
+    },
+    "faq": {
+      "title": "FAQ",
+      "q1": "Do I still pay $200 on losing weeks?",
+      "a1": "Yes. The $200 is the subscription for using the GUI and is independent of results. The profit share, however, is only charged on winning weeks.",
+      "q2": "When does the carried loss disappear?",
+      "a2": "It is offset against future profits and disappears once the cumulative loss is fully recovered. Billing resumes at 30% of profit beyond that point.",
+      "q3": "Do I need to deposit funds with you?",
+      "a3": "No. Your funds always stay in your own casino account and wallet. We never take custody.",
+      "q4": "Why do I need to register a wallet?",
+      "a4": "By limiting deposits and withdrawals to one registered address, on-chain records can be reconciled with bet results, so the basis of every invoice can be verified at any time.",
+      "q5": "Can I stop at any time?",
+      "a5": "Yes. If you don't renew the subscription, nothing is billed after the expiry date. Only outstanding profit-share invoices need to be settled."
+    },
+    "risk": {
+      "label": "risk disclosure",
+      "body": "Baccarat involves a large element of luck and no future profit is guaranteed. Past results do not predict future outcomes. Any losses are your own responsibility. Use only surplus funds — never living expenses or borrowed money. Not available to anyone under 18 or where prohibited by local law. If you feel you may have a gambling problem, please contact a professional helpline."
+    },
+    "footer": {
+      "terms": "Terms of Service",
+      "privacy": "Privacy Policy",
+      "tokushoho": "Legal Notice",
+      "support": "Support"
+    }
+  },
+  "widgets": {
+    "subscription": {
+      "title": "Subscription",
+      "until": "until {date}",
+      "daysUnit": "days",
+      "expired": "Expired",
+      "expiredBody": "Your subscription has expired. Renew to unlock the GUI for another 30 days.",
+      "renewCta": "Renew subscription",
+      "nearExpiry": "Expiring soon — renew now →"
+    },
+    "chargeMeter": {
+      "title": "Estimated charge this week",
+      "tooltip": "30% of net profit from GUI bets, invoiced every Sunday. Losing weeks are billed $0.",
+      "noChargeThisWeek": "No invoice this week",
+      "billedSunday": "invoiced Sunday",
+      "carryBody": "No fees accrue until the carried loss of <carry>{carryValue}</carry> is recovered. <remain>{remainValue}</remain> more profit to resume.",
+      "formula": "Net profit this week <profit>{profitValue}</profit> × {rate}% · closes Sat {deadline} 23:59",
+      "days": {
+        "mon": "Mon",
+        "tue": "Tue",
+        "wed": "Wed",
+        "thu": "Thu",
+        "fri": "Fri",
+        "sat": "Sat"
+      },
+      "footerWithCarry": "The carried loss is offset before the invoice is calculated.",
+      "footerNoCarry": "No carried loss. If the week ends negative, the invoice is $0."
+    },
+    "walletStatus": {
+      "matched": {
+        "title": "Wallet check: matched",
+        "body": "On-chain transfers and bet results show no discrepancy."
+      },
+      "checking": {
+        "title": "Wallet check: verifying",
+        "body": "Recent transfers are being verified on-chain (usually within 10 minutes)."
+      },
+      "mismatched": {
+        "title": "Wallet check: mismatch",
+        "body": "Transfers from an unregistered address were detected. Please contact support."
+      },
+      "unregistered": {
+        "title": "No wallet registered",
+        "body": "Register a wallet to start reconciliation."
+      },
+      "lastChecked": "Last checked {time}",
+      "registerCta": "Register"
+    },
+    "onboarding": {
+      "title": "Getting started",
+      "remaining": "{count} step(s) left to go live",
+      "steps": {
+        "subscription": {
+          "done": "Subscription paid",
+          "todo": "Pay subscription",
+          "cta": "Pay"
+        },
+        "wallet": {
+          "done": "Wallet registered",
+          "todo": "Register wallet",
+          "cta": "Register"
+        },
+        "gui": {
+          "done": "GUI connected",
+          "todo": "Connect the GUI",
+          "cta": "Connect"
+        }
+      }
+    }
+  },
+  "dashboardV2": {
+    "greeting": "Hello, {name}",
+    "statusRunning": "GUI running",
+    "statusIdle": "GUI not connected",
+    "statusSuspended": "Account suspended — please contact support",
+    "todayTitle": "Today's net PnL",
+    "todayMeta": "settled {date}",
+    "todayEmpty": "No records yet",
+    "details": {
+      "weekly": "Weekly settlements",
+      "realtime": "Live operation",
+      "download": "Download GUI",
+      "referral": "Referral program",
+      "support": "Support"
+    }
+  },
+  "walletPage": {
+    "kicker": "Member · Wallet",
+    "title": "Register your wallet",
+    "intro": "Deposits to and withdrawals from Stake are limited to the address you register here. By automatically reconciling on-chain movements with bet results, the basis of every settlement can be verified at any time.",
+    "network": "Network",
+    "tron": "TRON",
+    "tronSub": "USDT (TRC-20) · low fees",
+    "bsc": "BNB Chain",
+    "bscSub": "USDT (BEP-20)",
+    "addressLabel": "USDT address",
+    "addressPlaceholderTron": "34-character address starting with T",
+    "addressPlaceholderBsc": "42-character address starting with 0x",
+    "validTron": "Valid TRON address",
+    "validBsc": "Valid BNB Chain address",
+    "invalid": "Invalid address format",
+    "warnStrong": "One address only.",
+    "warnBody": "Changing it requires identity verification with support. Register a wallet you control — not a shared exchange address.",
+    "submit": "Register this address",
+    "later": "Register later",
+    "registeredAddr": "Registered address",
+    "recentTitle": "Recent reconciliation",
+    "recentEmpty": "No reconciliation history yet. The first detected transfer will appear here.",
+    "pendingNote": "Registration received. Reconciliation starts automatically once the first transfer is confirmed on-chain."
+  },
+  "settlementsV2": {
+    "kicker": "Member · Settlements",
+    "title": "Settlements",
+    "sub": "Weekly results (Mon–Sat) close Saturday and are invoiced Sunday",
+    "billedOn": "Invoiced Sun {date}",
+    "statusPaid": "Paid",
+    "statusBilled": "Invoiced",
+    "statusZero": "Billed $0",
+    "zeroSub": "Negative week · no invoice",
+    "cellNet": "Weekly net profit",
+    "cellFee": "Invoice (30%)",
+    "cellCarry": "Carry-over",
+    "carryNote": "This week's loss of <c>{amount}</c> was carried over to the next week.",
+    "empty": "No settlements yet. Once GUI bets are recorded, weekly rows will appear here.",
+    "dailyDetails": "Show daily breakdown"
+  },
+  "purchaseV2": {
+    "kicker": "Subscription",
+    "title": "Renew subscription",
+    "warnTitle": "Expires in {days} day(s)",
+    "warnBody": "The GUI stops after {date}. Renewing extends it by 30 days from there.",
+    "amount": "Amount due",
+    "currency": "Currency",
+    "currencyValue": "USDT (TRC-20)",
+    "period": "Valid period",
+    "note": "Send the exact amount shown and your subscription activates automatically within 1–2 minutes."
   }
 }

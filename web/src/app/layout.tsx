@@ -5,8 +5,8 @@ import { FloatingLanguageSwitcher } from './_components/FloatingLanguageSwitcher
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "Bafather - AI Baccarat Prediction Engine",
-  description: "AI-powered baccarat prediction with automated bet execution",
+  title: "bafather — バカラ コピートレードGUI 会員サイト",
+  description: "エンジンの判断をGUIで受け取り、自分の口座で実行するコピートレードサービス。料金は30日 $200 のサブスクと、プラスで終わった週の純利益の30%のみ。",
 };
 
 export default async function RootLayout({ children }: { children: React.ReactNode }) {
