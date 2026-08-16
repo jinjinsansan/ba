@@ -162,7 +162,14 @@
       "submitting": "Creating...",
       "submit": "Create Account",
       "hasAccount": "Already have an account?",
-      "loginLink": "Login"
+      "loginLink": "Login",
+      "inviteCode": "Invite Code",
+      "required": "(required)",
+      "invitePlaceholder": "BAF-XXXXXXXX",
+      "inviteHint": "Registration is invite-only. Enter the code you received from the operator.",
+      "inviteRequired": "Please enter your invite code.",
+      "inviteInvalid": "Invalid invite code. Please contact the operator.",
+      "inviteUnavailable": "Sign-ups are temporarily unavailable. Please try again later."
     }
   },
   "dashboard": {

@@ -162,7 +162,14 @@
       "submitting": "생성 중...",
       "submit": "계정 생성",
       "hasAccount": "이미 계정이 있으신가요?",
-      "loginLink": "로그인"
+      "loginLink": "로그인",
+      "inviteCode": "초대 코드",
+      "required": "(필수)",
+      "invitePlaceholder": "BAF-XXXXXXXX",
+      "inviteHint": "본 서비스는 초대제입니다. 운영자에게 받은 코드를 입력하세요.",
+      "inviteRequired": "초대 코드를 입력하세요.",
+      "inviteInvalid": "초대 코드가 유효하지 않습니다. 운영자에게 문의하세요.",
+      "inviteUnavailable": "현재 신규 가입을 받지 않습니다. 잠시 후 다시 시도하세요."
     }
   },
   "dashboard": {
