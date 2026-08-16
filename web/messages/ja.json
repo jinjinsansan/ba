@@ -162,7 +162,14 @@
       "submitting": "作成中...",
       "submit": "アカウント作成",
       "hasAccount": "既にアカウントをお持ちですか?",
-      "loginLink": "ログイン"
+      "loginLink": "ログイン",
+      "inviteCode": "招待コード",
+      "required": "(必須)",
+      "invitePlaceholder": "BAF-XXXXXXXX",
+      "inviteHint": "本サービスは招待制です。運営から受け取ったコードを入力してください。",
+      "inviteRequired": "招待コードを入力してください。",
+      "inviteInvalid": "招待コードが無効です。運営にお問い合わせください。",
+      "inviteUnavailable": "現在新規登録を受け付けていません。時間をおいて再度お試しください。"
     }
   },
   "dashboard": {

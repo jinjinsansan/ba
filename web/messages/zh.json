@@ -162,7 +162,14 @@
       "submitting": "创建中...",
       "submit": "创建账户",
       "hasAccount": "已有账户?",
-      "loginLink": "登录"
+      "loginLink": "登录",
+      "inviteCode": "邀请码",
+      "required": "(必填)",
+      "invitePlaceholder": "BAF-XXXXXXXX",
+      "inviteHint": "本服务为邀请制。请输入运营方提供的邀请码。",
+      "inviteRequired": "请输入邀请码。",
+      "inviteInvalid": "邀请码无效。请联系运营方。",
+      "inviteUnavailable": "目前暂不接受新注册。请稍后再试。"
     }
   },
   "dashboard": {

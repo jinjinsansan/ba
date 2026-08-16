@@ -11,12 +11,14 @@ function SignupForm() {
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [referralCode, setReferralCode] = useState('')
+  const [inviteCode, setInviteCode] = useState('')
   const [loading, setLoading] = useState(false)
   const [message, setMessage] = useState('')
   const [error, setError] = useState('')
   const searchParams = useSearchParams()
   const plan = searchParams.get('plan')
   const ref = searchParams.get('ref')
+  const invite = searchParams.get('invite')
 
   useEffect(() => {
     if (ref && !referralCode) {
@@ -24,11 +26,42 @@ function SignupForm() {
     }
   }, [ref, referralCode])
 
+  useEffect(() => {
+    if (invite && !inviteCode) {
+      setInviteCode(invite)
+    }
+  }, [invite, inviteCode])
+
   async function handleSignup(e: React.FormEvent) {
     e.preventDefault()
     setLoading(true)
     setError('')
     setMessage('')
+
+    // 招待制(2026-08-17): 有効な招待コードがないと signUp を呼ばない。
+    // DB トリガー側でも同じ検証をしているので、ここを飛ばしても登録はできない。
+    const code = inviteCode.trim().toUpperCase()
+    if (!code) {
+      setError(t('signup.inviteRequired'))
+      setLoading(false)
+      return
+    }
+    try {
+      const res = await fetch('/api/auth/invite-check', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ code }),
+      })
+      if (!res.ok) {
+        setError(res.status === 503 ? t('signup.inviteUnavailable') : t('signup.inviteInvalid'))
+        setLoading(false)
+        return
+      }
+    } catch {
+      setError(t('signup.inviteUnavailable'))
+      setLoading(false)
+      return
+    }
 
     const supabase = createClient()
     const { error: signupError } = await supabase.auth.signUp({
@@ -36,9 +69,15 @@ function SignupForm() {
       password,
       options: {
         emailRedirectTo: `${window.location.origin}/auth/callback?next=${plan ? `/purchase?plan=${plan}` : '/dashboard'}`,
-        data: { referred_by: referralCode || null },
+        data: { referred_by: referralCode || null, invite_code: code },
       },
     })
+
+    if (signupError && /invite code/i.test(signupError.message)) {
+      setError(t('signup.inviteInvalid'))
+      setLoading(false)
+      return
+    }
 
     if (signupError) {
       setError(signupError.message)
@@ -81,6 +120,16 @@ function SignupForm() {
             className="input-field"
             placeholder={t('signup.passwordPlaceholder')}
           />
+        </div>
+        <div>
+          <label className="block text-sm text-text-muted mb-1">{t('signup.inviteCode')} <span className="text-text-dim">{t('signup.required')}</span></label>
+          <input
+            type="text" required value={inviteCode} onChange={e => setInviteCode(e.target.value)}
+            className="input-field font-mono tracking-wider"
+            placeholder={t('signup.invitePlaceholder')}
+            autoComplete="off"
+          />
+          <p className="text-xs text-text-dim mt-1">{t('signup.inviteHint')}</p>
         </div>
         <div>
           <label className="block text-sm text-text-muted mb-1">{t('signup.referralCode')} <span className="text-text-dim">{t('signup.optional')}</span></label>
