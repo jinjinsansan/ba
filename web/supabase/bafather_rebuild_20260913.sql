@@ -79,3 +79,101 @@ begin
   return new;
 end;
 $function$;
+
+-- ---------- 4. 管理者判定ポリシーの無限再帰を解消 ----------
+-- 旧 schema.sql の管理者ポリシーは profiles の中で profiles を参照しており、新プロジェクトでは
+-- 'infinite recursion detected in policy for relation "profiles"' (42P17) で全て失敗した。
+-- ログイン中の利用者が自分の profiles/billing すら読めず、管理者ページが /me に戻され、
+-- 画面遷移のたびにログアウトしたように見えた (2026-09-13 実機)。
+-- RLS を通らない security definer の public.is_admin() で判定し、20 個のポリシーを作り直す。
+
+create or replace function public.is_admin(uid uuid default auth.uid())
+returns boolean
+language sql
+stable
+security definer
+set search_path = public
+as $$
+  select coalesce((select is_admin from public.profiles where id = uid), false)
+$$;
+grant execute on function public.is_admin(uuid) to anon, authenticated;
+
+drop policy if exists "Admins can do anything on billing" on public.billing;
+create policy "Admins can do anything on billing" on public.billing as permissive for all to public
+  using (public.is_admin());
+
+drop policy if exists "Admins can do anything on charges" on public.charges;
+create policy "Admins can do anything on charges" on public.charges as permissive for all to public
+  using (public.is_admin());
+
+drop policy if exists "dpi_admin_all" on public.daily_profit_invoices;
+create policy "dpi_admin_all" on public.daily_profit_invoices as permissive for all to public
+  using (public.is_admin());
+
+drop policy if exists "Admins can do anything on deductions" on public.deductions;
+create policy "Admins can do anything on deductions" on public.deductions as permissive for all to public
+  using (public.is_admin());
+
+drop policy if exists "Admins can do anything on deliverables" on public.deliverables;
+create policy "Admins can do anything on deliverables" on public.deliverables as permissive for all to public
+  using (public.is_admin());
+
+drop policy if exists "ledger_acc1_admin_all" on public.ledger_account1_daily;
+create policy "ledger_acc1_admin_all" on public.ledger_account1_daily as permissive for all to public
+  using (public.is_admin());
+
+drop policy if exists "ledger_acc2_admin_all" on public.ledger_account2_daily;
+create policy "ledger_acc2_admin_all" on public.ledger_account2_daily as permissive for all to public
+  using (public.is_admin());
+
+drop policy if exists "lab_admin_all" on public.ledger_actual_balances;
+create policy "lab_admin_all" on public.ledger_actual_balances as permissive for all to public
+  using (public.is_admin());
+
+drop policy if exists "lceb_admin_all" on public.ledger_company_expense_breakdown;
+create policy "lceb_admin_all" on public.ledger_company_expense_breakdown as permissive for all to public
+  using (public.is_admin());
+
+drop policy if exists "ledger_dist_rules_admin_all" on public.ledger_distribution_rules;
+create policy "ledger_dist_rules_admin_all" on public.ledger_distribution_rules as permissive for all to public
+  using (public.is_admin());
+
+drop policy if exists "ledger_expense_admin_all" on public.ledger_expense_withdrawals;
+create policy "ledger_expense_admin_all" on public.ledger_expense_withdrawals as permissive for all to public
+  using (public.is_admin());
+
+drop policy if exists "ledger_investors_admin_all" on public.ledger_investors;
+create policy "ledger_investors_admin_all" on public.ledger_investors as permissive for all to public
+  using (public.is_admin());
+
+drop policy if exists "ledger_reserve_funds_admin_all" on public.ledger_reserve_funds;
+create policy "ledger_reserve_funds_admin_all" on public.ledger_reserve_funds as permissive for all to public
+  using (public.is_admin());
+
+drop policy if exists "Admins can do anything on orders" on public.orders;
+create policy "Admins can do anything on orders" on public.orders as permissive for all to public
+  using (public.is_admin());
+
+drop policy if exists "Admins can update all profiles" on public.profiles;
+create policy "Admins can update all profiles" on public.profiles as permissive for update to public
+  using (public.is_admin());
+
+drop policy if exists "Admins can view all profiles" on public.profiles;
+create policy "Admins can view all profiles" on public.profiles as permissive for select to public
+  using (public.is_admin());
+
+drop policy if exists "Admins can do anything on promos" on public.promo_codes;
+create policy "Admins can do anything on promos" on public.promo_codes as permissive for all to public
+  using (public.is_admin());
+
+drop policy if exists "Admins can do anything on commissions" on public.referral_commissions;
+create policy "Admins can do anything on commissions" on public.referral_commissions as permissive for all to public
+  using (public.is_admin());
+
+drop policy if exists "Admins can do anything on withdrawals" on public.referral_withdrawals;
+create policy "Admins can do anything on withdrawals" on public.referral_withdrawals as permissive for all to public
+  using (public.is_admin());
+
+drop policy if exists "Admins can do anything on tickets" on public.support_tickets;
+create policy "Admins can do anything on tickets" on public.support_tickets as permissive for all to public
+  using (public.is_admin());
