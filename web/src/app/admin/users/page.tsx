@@ -14,6 +14,7 @@ type BillingLite = {
   is_free?: boolean
   suspended?: boolean
   session_state?: Record<string, unknown> | null
+  product?: string | null
 }
 
 type ProfileWithBilling = {
@@ -66,7 +67,7 @@ export default async function AdminUsersPage() {
   const admin = createAdminClient()
   const { data: users } = await admin
     .from('profiles')
-    .select('id, email, is_admin, referral_code, created_at, billing(balance, profit_share_rate, is_free, suspended, session_state)')
+    .select('id, email, is_admin, referral_code, created_at, billing(balance, profit_share_rate, is_free, suspended, session_state, product)')
     .order('created_at', { ascending: false })
 
   const rows = (users || []) as ProfileWithBilling[]
@@ -109,6 +110,16 @@ export default async function AdminUsersPage() {
                       <Dot tone={live ? 'win' : 'dim'} pulse={live} />
                       <Link href={`/admin/users/${u.id}`} className="text-cyan hover:underline break-all min-w-0">{u.email}</Link>
                       {u.is_admin && <Pill tone="admin">ADMIN</Pill>}
+                      {(() => {
+                        // どの版の受け子を使っているか (受け子アプリのログイン時に記録・2026-09-13)
+                        const p = String(b?.product || '')
+                        const label = p === 'bacopy' ? 'BACOPY' : p === 'kbjapan' ? 'KBJAPAN' : p === 'kbkorea' ? 'KBKOREA' : ''
+                        if (!label) return null
+                        const cls = p === 'bacopy' ? 'bg-amber-500/15 text-amber-300'
+                          : p === 'kbjapan' ? 'bg-rose-500/15 text-rose-300'
+                          : 'bg-sky-500/15 text-sky-300'
+                        return <span className={`px-1.5 py-0.5 rounded text-[10px] font-mono ${cls}`}>{label}</span>
+                      })()}
                     </div>
                     {(() => {
                       // フリート監視: 受け子エンジンが session_state.bot_status を60秒ごとに送る。
