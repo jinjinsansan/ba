@@ -19,6 +19,7 @@ const USER_MENU: Item[] = [
   { href: '/me/wallet',      label: 'Wallet',   glyph: '◇' },
   { href: '/me/telegram',    label: 'Telegram', glyph: '✦' },
   { href: '/me/referral',    label: 'Referral', glyph: '+' },
+  { href: '/me/manual',      label: 'Manual',   glyph: '▤' },
   { href: '/me/support',     label: 'Support',  glyph: '?' },
 ]
 
