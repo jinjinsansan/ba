@@ -13,7 +13,7 @@ export async function POST(req: NextRequest) {
   const admin = createAdminClient()
   const { data, error } = await admin
     .from('profiles')
-    .select('id, email, is_admin, created_at, billing(bot_paid, is_free, suspended, balance, grace_deadline, updated_at)')
+    .select('id, email, is_admin, created_at, billing(bot_paid, is_free, suspended, balance, grace_deadline, expires_at, product, updated_at)')
     .order('created_at', { ascending: false })
 
   if (error) {
@@ -23,19 +23,21 @@ export async function POST(req: NextRequest) {
   const now = new Date()
   const users = (data || []).map((u: any) => {
     const b = Array.isArray(u.billing) ? u.billing[0] : u.billing
-    // ステータス計算: GUI 側 /api/auth/license のロジックと合わせる
+    // ステータス計算 (2026-09-23): 受け子アプリが実際に使う /api/receiver/checkin と同じ判定にそろえる。
+    //   新料金モデル (2026-08-06): 管理者は常に可 / 期限 (expires_at) 切れ・未購入・停止は不可 / 残高は見ない。
+    //   旧判定 (grace_deadline・残高0で empty_balance) のままだと、マスター画面の表示が GUI の実際の可否と食い違った。
     let status = 'not_approved'
-    const expired = b?.grace_deadline && new Date(b.grace_deadline) < now
+    const expired = b?.expires_at && new Date(b.expires_at) < now
     if (u.is_admin) {
       status = 'admin'
-    } else if (!b || !b.bot_paid) {
+    } else if (!b) {
       status = 'not_approved'
     } else if (expired) {
       status = 'expired'
+    } else if (!b.bot_paid) {
+      status = 'not_approved'
     } else if (b.suspended) {
       status = 'suspended'
-    } else if (!b.is_free && (b.balance || 0) <= 0) {
-      status = 'empty_balance'
     } else {
       status = 'approved'
     }
@@ -49,6 +51,8 @@ export async function POST(req: NextRequest) {
       suspended: !!b?.suspended,
       balance: b?.balance || 0,
       grace_deadline: b?.grace_deadline || null,
+      expires_at: b?.expires_at || null,
+      product: b?.product || null,
       created_at: u.created_at,
       billing_updated_at: b?.updated_at || null,
     }

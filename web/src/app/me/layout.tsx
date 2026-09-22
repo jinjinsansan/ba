@@ -9,7 +9,7 @@ export default async function MeLayout({ children }: { children: React.ReactNode
 
   const [{ data: profile }, { data: billing }] = await Promise.all([
     supabase.from('profiles').select('email, is_admin').eq('id', user.id).single(),
-    supabase.from('billing').select('is_free, suspended').eq('user_id', user.id).single(),
+    supabase.from('billing').select('is_free, suspended, product').eq('user_id', user.id).single(),
   ])
 
   return (
@@ -18,6 +18,7 @@ export default async function MeLayout({ children }: { children: React.ReactNode
       isAdmin={!!profile?.is_admin}
       isSuspended={!!billing?.suspended}
       isFree={!!billing?.is_free}
+      showManual={!!profile?.is_admin || billing?.product === 'kbkorea'}
     >
       {children}
     </Rail>

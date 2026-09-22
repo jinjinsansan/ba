@@ -288,7 +288,7 @@ export default async function AdminUserDetailPage({
           <Card padded={false}>
             <CardHead>ライブ運用状況 (session_state)</CardHead>
             <div className="px-5 py-5">
-              <RealtimePnlCard initial={sessionState} />
+              <RealtimePnlCard initial={sessionState} poll={false} />
             </div>
           </Card>
         </>

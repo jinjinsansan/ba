@@ -23,14 +23,17 @@ function jstDateStr() {
   return new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Tokyo' })
 }
 
-export default function RealtimePnlCard({ initial }: { initial: SessionState | null }) {
+// poll=false: 管理画面のユーザー詳細など「他人の」データを表示するとき。
+//   /api/user/session-state はログイン中の本人の値を返すので、管理者が他人のページで取り直すと
+//   30秒後に管理者自身のデータに入れ替わっていた (2026-09-23 修正)。
+export default function RealtimePnlCard({ initial, poll = true }: { initial: SessionState | null; poll?: boolean }) {
   const t = useTranslations('realtimePnl')
   const [ss, setSs] = useState<SessionState | null>(initial)
   const [now, setNow] = useState(Date.now())
   const inflightRef = useRef(false)
 
   useEffect(() => {
-    async function poll() {
+    async function refresh() {
       if (inflightRef.current) return
       inflightRef.current = true
       try {
@@ -44,13 +47,13 @@ export default function RealtimePnlCard({ initial }: { initial: SessionState | n
         inflightRef.current = false
       }
     }
-    const pollTimer = setInterval(poll, 30_000)
+    const pollTimer = poll ? setInterval(refresh, 30_000) : null
     const tickTimer = setInterval(() => setNow(Date.now()), 1_000)
     return () => {
-      clearInterval(pollTimer)
+      if (pollTimer) clearInterval(pollTimer)
       clearInterval(tickTimer)
     }
-  }, [])
+  }, [poll])
 
   if (!ss) {
     return (

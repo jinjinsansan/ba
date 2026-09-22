@@ -29,14 +29,18 @@ export default function Rail({
   isAdmin,
   isSuspended,
   isFree,
+  showManual = true,
   children,
 }: {
   userEmail: string
   isAdmin: boolean
   isSuspended: boolean
   isFree: boolean
+  showManual?: boolean
   children: ReactNode
 }) {
+  // ★2026-09-23: /me/manual は韓国版 (KBKOREA) の利用マニュアル。韓国版の利用者と管理者にだけ出す。
+  const menu = showManual ? USER_MENU : USER_MENU.filter(it => it.href !== '/me/manual')
   const pathname = usePathname()
   const router = useRouter()
   const [open, setOpen] = useState(false)
@@ -82,7 +86,7 @@ export default function Rail({
         BF
       </Link>
 
-      {USER_MENU.map(it => {
+      {menu.map(it => {
         const active = isActive(it.href)
         return (
           <Link
