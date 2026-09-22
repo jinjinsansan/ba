@@ -221,9 +221,36 @@
     "support": {
       "title": "지원",
       "sent": "전송되었습니다! 곧 답변드리겠습니다.",
-      "placeholder": "문제를 입력...",
+      "placeholder": "예: 9월 22일 23시쯤 수신기 앱에서 START를 누르자 브라우저가 로딩 상태로 멈췄습니다.",
       "send": "전송",
-      "sending": "..."
+      "sending": "...",
+      "pageTitle": "문의하기",
+      "pageSub": "사용 방법 질문, 수신기 앱 문제, 결제 등 곤란한 일이 있으면 여기로 연락해 주세요. 관리자가 확인한 뒤 이 페이지에서 답변합니다.",
+      "category": "문의 종류",
+      "categories": {
+        "usage": "사용 방법 질문",
+        "bug": "수신기 앱 문제",
+        "billing": "결제·잔액",
+        "account": "계정",
+        "other": "기타"
+      },
+      "messageLabel": "내용",
+      "hintTitle": "아래 내용을 적어 주시면 빨리 해결할 수 있습니다",
+      "hints": [
+        "언제 일어났는지 (날짜·시간)",
+        "어느 수신기 앱인지 (다나베판·가지와라판·한국판)",
+        "무엇을 했더니 무엇이 일어났는지",
+        "화면에 표시된 메시지 (있다면 그대로)"
+      ],
+      "sentTitle": "접수되었습니다",
+      "sentBody": "관리자가 확인한 뒤 이 페이지의 「지금까지의 문의」에 답변합니다.",
+      "historyTitle": "지금까지의 문의",
+      "historyNone": "아직 문의가 없습니다.",
+      "statusOpen": "확인 중",
+      "statusReplied": "답변 있음",
+      "statusClosed": "완료",
+      "reply": "관리자 답변",
+      "newAnother": "다른 문의 보내기"
     }
   },
   "charge": {
@@ -537,7 +564,7 @@
     "statusRunning": "GUI 가동 중",
     "statusIdle": "GUI 미연결",
     "statusSuspended": "계정 정지 중 — 지원팀에 문의하십시오",
-    "todayTitle": "오늘의 순손익",
+    "todayTitle": "최근 정산 (하루 순손익)",
     "todayMeta": "{date} 정산분",
     "todayEmpty": "아직 기록이 없습니다",
     "details": {
@@ -545,7 +572,8 @@
       "realtime": "라이브 운용 현황",
       "download": "GUI 다운로드",
       "referral": "추천 프로그램",
-      "support": "지원"
+      "support": "지원",
+      "bets": "BET 기록"
     },
     "receivers": {
       "title": "내 수신기",
@@ -557,7 +585,16 @@
       "record": "승-패-타이",
       "lastSeen": "마지막 보고",
       "none": "아직 보고가 없습니다. 수신기 앱에 로그인해 실행하면 여기에 표시됩니다."
-    }
+    },
+    "pageTitle": "마이페이지",
+    "pageSub": "수신기 앱 상태, 오늘의 성적, 요금 현황을 한눈에 확인할 수 있습니다.",
+    "todayResultTitle": "오늘의 성적 (일본 시간)",
+    "todayBets": "BET 횟수",
+    "todayRecord": "승-패-무",
+    "todayPnl": "손익",
+    "todayNoBets": "오늘은 아직 BET가 없습니다",
+    "receiversSub": "수신기 앱이 1분마다 보내는 상태입니다",
+    "betsLink": "BET 기록"
   },
   "walletPage": {
     "kicker": "Member · Wallet",

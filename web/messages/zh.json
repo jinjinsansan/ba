@@ -221,9 +221,36 @@
     "support": {
       "title": "支持",
       "sent": "已发送! 我们会尽快回复您。",
-      "placeholder": "描述您的问题...",
+      "placeholder": "例：9月22日23点左右，在接收端应用按下 START 后，浏览器一直停在加载中。",
       "send": "发送",
-      "sending": "..."
+      "sending": "...",
+      "pageTitle": "联系我们",
+      "pageSub": "使用问题、接收端应用故障、付款等，遇到困难请在此联系。管理员确认后会在本页面回复。",
+      "category": "咨询类型",
+      "categories": {
+        "usage": "使用方法",
+        "bug": "接收端应用故障",
+        "billing": "付款・余额",
+        "account": "账户",
+        "other": "其他"
+      },
+      "messageLabel": "内容",
+      "hintTitle": "写明以下内容可更快解决",
+      "hints": [
+        "发生时间（日期・时间）",
+        "哪个接收端应用（田边版・梶原版・韩国版）",
+        "做了什么，发生了什么",
+        "屏幕上显示的信息（如有请原样填写）"
+      ],
+      "sentTitle": "已受理",
+      "sentBody": "管理员确认后，会在本页面的「过往咨询」中回复。",
+      "historyTitle": "过往咨询",
+      "historyNone": "还没有咨询记录。",
+      "statusOpen": "确认中",
+      "statusReplied": "已回复",
+      "statusClosed": "已完成",
+      "reply": "管理员回复",
+      "newAnother": "再发送一条咨询"
     }
   },
   "charge": {
@@ -537,7 +564,7 @@
     "statusRunning": "GUI 运行中",
     "statusIdle": "GUI 未连接",
     "statusSuspended": "账户已停用 — 请联系支持",
-    "todayTitle": "今日净损益",
+    "todayTitle": "最近结算（一天的净盈亏）",
     "todayMeta": "{date} 结算",
     "todayEmpty": "暂无记录",
     "details": {
@@ -545,7 +572,8 @@
       "realtime": "实时运用状况",
       "download": "GUI 下载",
       "referral": "推荐计划",
-      "support": "支持"
+      "support": "支持",
+      "bets": "下注记录"
     },
     "receivers": {
       "title": "你的接收端",
@@ -557,7 +585,16 @@
       "record": "胜-负-和",
       "lastSeen": "最后报告",
       "none": "尚无报告。登录接收端应用并启动后会显示在这里。"
-    }
+    },
+    "pageTitle": "我的页面",
+    "pageSub": "在一处查看接收端应用状态、今日成绩和费用情况。",
+    "todayResultTitle": "今日成绩（日本时间）",
+    "todayBets": "下注次数",
+    "todayRecord": "胜-负-和",
+    "todayPnl": "盈亏",
+    "todayNoBets": "今天还没有下注",
+    "receiversSub": "接收端应用每分钟发送的状态",
+    "betsLink": "下注记录"
   },
   "walletPage": {
     "kicker": "Member · Wallet",

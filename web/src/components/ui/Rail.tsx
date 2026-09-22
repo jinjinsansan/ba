@@ -13,12 +13,10 @@ type Item = { href: string; label: string; glyph: string }
 
 const USER_MENU: Item[] = [
   { href: '/me',             label: 'Home',     glyph: '◆' },
-  { href: '/me/realtime',    label: 'Live',     glyph: '▲' },
   { href: '/me/balance',     label: 'Balance',  glyph: '$' },
   { href: '/me/bets',        label: 'Bets',     glyph: '▦' },
   { href: '/me/settlements', label: 'Settle',   glyph: '≡' },
   { href: '/me/wallet',      label: 'Wallet',   glyph: '◇' },
-  { href: '/me/telegram',    label: 'Telegram', glyph: '✦' },
   { href: '/me/referral',    label: 'Referral', glyph: '+' },
   { href: '/me/manual',      label: 'Manual',   glyph: '▤' },
   { href: '/me/support',     label: 'Support',  glyph: '?' },

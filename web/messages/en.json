@@ -221,9 +221,36 @@
     "support": {
       "title": "Support",
       "sent": "Message sent! We'll get back to you soon.",
-      "placeholder": "Describe your issue...",
+      "placeholder": "e.g. Around 23:00 on Sep 22, after pressing START in the receiver app, the browser kept loading.",
       "send": "Send",
-      "sending": "..."
+      "sending": "...",
+      "pageTitle": "Contact us",
+      "pageSub": "Questions about usage, receiver app problems, billing — contact us here. An admin will review and reply on this page.",
+      "category": "Topic",
+      "categories": {
+        "usage": "How to use",
+        "bug": "Receiver app problem",
+        "billing": "Billing / balance",
+        "account": "Account",
+        "other": "Other"
+      },
+      "messageLabel": "Message",
+      "hintTitle": "Including these helps us solve it faster",
+      "hints": [
+        "When it happened (date/time)",
+        "Which receiver app (Tanabe / Kajiwara / Korea)",
+        "What you did and what happened",
+        "Any message shown on screen (as is)"
+      ],
+      "sentTitle": "Received",
+      "sentBody": "An admin will review it and reply under “Your inquiries” on this page.",
+      "historyTitle": "Your inquiries",
+      "historyNone": "No inquiries yet.",
+      "statusOpen": "Reviewing",
+      "statusReplied": "Replied",
+      "statusClosed": "Closed",
+      "reply": "Reply from admin",
+      "newAnother": "Send another inquiry"
     }
   },
   "charge": {
@@ -537,7 +564,7 @@
     "statusRunning": "GUI running",
     "statusIdle": "GUI not connected",
     "statusSuspended": "Account suspended — please contact support",
-    "todayTitle": "Today's net PnL",
+    "todayTitle": "Latest settlement (one day's net P&L)",
     "todayMeta": "settled {date}",
     "todayEmpty": "No records yet",
     "details": {
@@ -545,7 +572,8 @@
       "realtime": "Live operation",
       "download": "Download GUI",
       "referral": "Referral program",
-      "support": "Support"
+      "support": "Support",
+      "bets": "Bet history"
     },
     "receivers": {
       "title": "Your receivers",
@@ -557,7 +585,16 @@
       "record": "W-L-T",
       "lastSeen": "Last report",
       "none": "No reports yet. Sign in to the receiver app and start it to see it here."
-    }
+    },
+    "pageTitle": "My page",
+    "pageSub": "See your receiver app status, today's results, and billing in one place.",
+    "todayResultTitle": "Today's results (JST)",
+    "todayBets": "Bets",
+    "todayRecord": "W-L-P",
+    "todayPnl": "P&L",
+    "todayNoBets": "No bets yet today",
+    "receiversSub": "Status sent by the receiver app every minute",
+    "betsLink": "Bet history"
   },
   "walletPage": {
     "kicker": "Member · Wallet",

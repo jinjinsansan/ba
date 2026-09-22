@@ -12,7 +12,9 @@ export default async function MeLayout({ children }: { children: React.ReactNode
     supabase.from('billing').select('is_free, suspended, product').eq('user_id', user.id).single(),
   ])
 
+  // ★2026-09-23: 会員ページだけ明るめの配色 (globals.css の .me-theme)
   return (
+    <div className="me-theme">
     <Rail
       userEmail={profile?.email || user.email || ''}
       isAdmin={!!profile?.is_admin}
@@ -22,5 +24,6 @@ export default async function MeLayout({ children }: { children: React.ReactNode
     >
       {children}
     </Rail>
+    </div>
   )
 }

@@ -8,15 +8,23 @@ import { PageHeader } from '@/components/ui/PageHeader'
 
 const MANUAL_CSS = `
 .manual-root{
-  --m-surface:#10141c; --m-surface2:#161b25; --m-surface3:#1c2230;
-  --m-text:#e6ecf3; --m-muted:#8b97a9; --m-dim:#6b7d97;
+  --m-surface:#1e2635; --m-surface2:#263042; --m-surface3:#2e3a4e;
+  --m-text:#f4f7fb; --m-muted:#b8c4d4; --m-dim:#92a0b6;
   --m-cyan:#5cdfff; --m-cyan-dim:#3a8fa5; --m-amber:#ffb547; --m-amber-dim:#a37130;
-  --m-win:#3fd49a; --m-border:#232b38;
-  color:var(--m-text); font-size:15px; line-height:1.75;
+  --m-win:#3fd49a; --m-border:#34405a;
+  color:var(--m-text); font-size:16px; line-height:1.85; max-width:860px;
 }
 .manual-root .flow{background:var(--m-surface); border:1px solid var(--m-border); border-radius:12px; padding:18px 20px; margin:18px 0; font-family:ui-monospace,Consolas,monospace; color:var(--m-cyan); font-size:14px; line-height:2; white-space:pre; overflow-x:auto;}
-.manual-root h2{font-size:21px; margin:44px 0 14px; padding-top:16px; border-top:1px solid var(--m-border); display:flex; align-items:center; gap:10px;}
-.manual-root h2 .num{display:inline-flex; align-items:center; justify-content:center; min-width:30px; height:30px; padding:0 6px; border-radius:8px; background:var(--m-cyan); color:#04121a; font-size:15px; font-weight:800;}
+.manual-root h2{font-size:22px; margin:48px 0 16px; padding:14px 18px; background:var(--m-surface2); border:1px solid var(--m-border); border-left:5px solid var(--m-cyan); border-radius:12px; display:flex; align-items:center; gap:12px; scroll-margin-top:16px;}
+.manual-root h2 .num{display:inline-flex; align-items:center; justify-content:center; min-width:40px; height:40px; padding:0 8px; border-radius:10px; background:var(--m-cyan); color:#04121a; font-size:20px; font-weight:800;}
+.manual-root .steps{list-style:none; padding:0; margin:18px 0 8px; display:grid; grid-template-columns:repeat(5,minmax(0,1fr)); gap:10px;}
+@media (max-width:760px){ .manual-root .steps{grid-template-columns:1fr;} }
+.manual-root .steps li{margin:0;}
+.manual-root .steps a{display:flex; flex-direction:column; gap:6px; height:100%; text-decoration:none; color:var(--m-text); background:var(--m-surface); border:1px solid var(--m-border); border-radius:12px; padding:14px; transition:border-color .15s, transform .15s;}
+.manual-root .steps a:hover{border-color:var(--m-cyan); transform:translateY(-2px);}
+.manual-root .steps .n{display:inline-flex; align-items:center; justify-content:center; width:34px; height:34px; border-radius:9px; background:var(--m-cyan); color:#04121a; font-weight:800; font-size:17px;}
+.manual-root .steps .t{font-weight:700; font-size:15px; line-height:1.45;}
+.manual-root .steps .d{font-size:13px; color:var(--m-muted); line-height:1.5;}
 .manual-root h3{font-size:16px; margin:26px 0 8px; color:var(--m-text);}
 .manual-root h3 .lbl{display:inline-block; background:var(--m-surface3); color:var(--m-cyan); border:1px solid var(--m-border); border-radius:6px; padding:1px 8px; font-size:13px; font-family:ui-monospace,Consolas,monospace; margin-right:6px;}
 .manual-root p{margin:10px 0;}
@@ -53,26 +61,22 @@ const MANUAL_CSS = `
 `
 
 const MANUAL_BODY = `
-<div data-lang="ja"><div class="flow">①  インストール（管理者が代行）
-        ↓
-②  bafather.uk に登録
-        ↓
-③  GUI 起動 → Chrome が自動で開く → Stake にログイン
-        ↓
-④  設定する → SAVE → START
-        ↓
-⑤  監視（不具合は「⑤ 不具合集」へ）</div></div>
-<div data-lang="ko"><div class="flow">①  설치（관리자가 대행）
-        ↓
-②  bafather.uk 회원가입
-        ↓
-③  GUI 실행 → Chrome 자동 실행 → Stake 로그인
-        ↓
-④  설정 → SAVE → START
-        ↓
-⑤  모니터링（문제는 「⑤ 문제 해결」로）</div></div>
+<div data-lang="ja"><ol class="steps">
+  <li><a href="#m-1"><span class="n">1</span><span class="t">インストール</span><span class="d">管理者が代行します</span></a></li>
+  <li><a href="#m-2"><span class="n">2</span><span class="t">bafather.uk に登録</span><span class="d">アカウントを作る</span></a></li>
+  <li><a href="#m-3"><span class="n">3</span><span class="t">GUI 起動・Stake ログイン</span><span class="d">Chrome が自動で開きます</span></a></li>
+  <li><a href="#m-4"><span class="n">4</span><span class="t">設定 → SAVE → START</span><span class="d">一番大事な章です</span></a></li>
+  <li><a href="#m-5"><span class="n">5</span><span class="t">動かしながら見守る</span><span class="d">困ったら不具合集へ</span></a></li>
+</ol></div>
+<div data-lang="ko"><ol class="steps">
+  <li><a href="#m-1"><span class="n">1</span><span class="t">설치</span><span class="d">관리자가 대행합니다</span></a></li>
+  <li><a href="#m-2"><span class="n">2</span><span class="t">bafather.uk 회원가입</span><span class="d">계정 만들기</span></a></li>
+  <li><a href="#m-3"><span class="n">3</span><span class="t">GUI 실행・Stake 로그인</span><span class="d">Chrome 이 자동으로 열립니다</span></a></li>
+  <li><a href="#m-4"><span class="n">4</span><span class="t">설정 → SAVE → START</span><span class="d">가장 중요한 장입니다</span></a></li>
+  <li><a href="#m-5"><span class="n">5</span><span class="t">운용하며 지켜보기</span><span class="d">문제가 생기면 문제 해결로</span></a></li>
+</ol></div>
 
-<h2><span class="num">①</span><span data-lang="ja">インストール（管理者が代行）</span><span data-lang="ko">설치（관리자가 대행）</span></h2>
+<h2 id="m-1"><span class="num">1</span><span data-lang="ja">インストール（管理者が代行）</span><span data-lang="ko">설치（관리자가 대행）</span></h2>
 <div data-lang="ja">
   <p>インストールは<b>管理者が代行</b>します。利用者は次をするだけです。</p>
   <ol>
@@ -96,7 +100,7 @@ const MANUAL_BODY = `
   <div class="callout tip"><span class="ic">💡</span> 데스크톱 클라우드 1대당 GUI는 1개. 여러 개를 동시에 실행하지 마세요.</div>
 </div>
 
-<h2><span class="num">②</span><span data-lang="ja">bafather.uk に登録</span><span data-lang="ko">bafather.uk 회원가입</span></h2>
+<h2 id="m-2"><span class="num">2</span><span data-lang="ja">bafather.uk に登録</span><span data-lang="ko">bafather.uk 회원가입</span></h2>
 <div data-lang="ja">
   <p>GUI を使うには <b>bafather.uk のアカウント</b>が必要です（ライセンス認証に使います）。</p>
   <ol>
@@ -120,7 +124,7 @@ const MANUAL_BODY = `
   <div class="callout tip"><span class="ic">💡</span> 메일이 안 올 때: 스팸함 확인 → 없으면 관리자에게 「재발송」 요청.</div>
 </div>
 
-<h2><span class="num">③</span><span data-lang="ja">GUI 起動 → Chrome → Stake ログイン</span><span data-lang="ko">GUI 실행 → Chrome → Stake 로그인</span></h2>
+<h2 id="m-3"><span class="num">3</span><span data-lang="ja">GUI 起動 → Chrome → Stake ログイン</span><span data-lang="ko">GUI 실행 → Chrome → Stake 로그인</span></h2>
 <div data-lang="ja">
   <ol>
     <li>デスクトップの <b>KBKOREA</b> をダブルクリックで起動。</li>
@@ -146,7 +150,7 @@ const MANUAL_BODY = `
   </ol>
 </div>
 
-<h2><span class="num">④</span><span data-lang="ja">設定について（重要・詳しく）</span><span data-lang="ko">설정（중요·자세히）</span></h2>
+<h2 id="m-4"><span class="num">4</span><span data-lang="ja">設定について（重要・詳しく）</span><span data-lang="ko">설정（중요·자세히）</span></h2>
 <div data-lang="ja">
   <p>歯車の <b>SETTINGS</b> で設定画面を開きます。変更したら<b>必ず SAVE</b>（押さないとサーバーに反映されません）。その後 <b>START</b> で稼働。</p>
   <div class="callout tip"><span class="ic">🔒</span> <b>KBKOREA版のポイント</b><br>・賭け金額（SEQの階段）は<b>サーバーが計算</b>します。受け子機はその額を賭けるだけ。だから資金管理は「SAVEでサーバーへ送信 → サーバーが計算」の流れです。<br>・パターン名は伏せてあり画面は <b>Set A / Set B</b> 表示。<br>・開発用の <b>SIGNAL PANEL は非表示</b>（韓国版では出ません。正常です）。</div>
@@ -223,7 +227,7 @@ const MANUAL_BODY = `
 <div class="card" data-lang="ja"><b style="color:#5cdfff">設定が終わったら</b><ol><li><b>SAVE</b>（サーバーへ送信）。</li><li><b>START</b> を押す。</li><li>Stakeが<b>マルチエリア表示</b>か確認。</li><li>上部が <b class="tag ok">ONLINE</b> → しばらくで<b>黄色枠</b>が付きBETが入る。</li></ol><div class="callout tip"><span class="ic">💡</span> 設定を変えたら<b>必ずSAVE</b>。</div></div>
 <div class="card" data-lang="ko"><b style="color:#5cdfff">설정이 끝나면</b><ol><li><b>SAVE</b>（서버로 전송）.</li><li><b>START</b> 를 누릅니다.</li><li>Stake가 <b>멀티에어리어 표시</b>인지 확인.</li><li>상단이 <b class="tag ok">ONLINE</b> → 잠시 후 <b>노란 테두리</b>가 붙고 BET이 들어옴.</li></ol><div class="callout tip"><span class="ic">💡</span> 설정을 바꾸면 <b>반드시 SAVE</b>.</div></div>
 
-<h2><span class="num">⑤</span><span data-lang="ja">不具合集（症状と対処）</span><span data-lang="ko">문제 해결（증상과 대처）</span></h2>
+<h2 id="m-5"><span class="num">5</span><span data-lang="ja">不具合集（症状と対処）</span><span data-lang="ko">문제 해결（증상과 대처）</span></h2>
 
 <h3><span data-lang="ja">1. BETしない</span><span data-lang="ko">1. BET이 안 됨</span></h3>
 <div data-lang="ja"><ol><li><b>START・SAVEを押したか？</b></li><li>上部が <b class="tag ok">ONLINE</b> か？<code>OFFLINE</code>なら<b>GUI再起動</b>。</li><li>Stakeに<b>ログイン済</b>か？<b>マルチエリア表示</b>か？</li><li><b>まだ高確度の信号が来ていないだけ</b>かも（BETは強い信号時のみ・数分に1回程度）。</li><li>全台「ログインしていない」＝Stake障害 → <b>GUI再起動</b>で回復。</li></ol></div>

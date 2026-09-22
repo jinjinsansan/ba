@@ -21,19 +21,21 @@ export default {
     extend: {
       colors: {
         // Surfaces
-        bg:          "#0a0d12",
-        "bg-rail":   "#0c1017",
-        surface:     "#10141c",
-        "surface-2": "#161b25",
-        "surface-3": "#1c2230",
+        // ★2026-09-23: 会員ページ (/me) だけ明るめにするため、面と文字の色は CSS 変数経由にした。
+        //   既定値は globals.css の :root (従来と同じ色)。.me-theme の中だけ上書きされる。
+        bg:          "rgb(var(--c-bg) / <alpha-value>)",
+        "bg-rail":   "rgb(var(--c-bg-rail) / <alpha-value>)",
+        surface:     "rgb(var(--c-surface) / <alpha-value>)",
+        "surface-2": "rgb(var(--c-surface-2) / <alpha-value>)",
+        "surface-3": "rgb(var(--c-surface-3) / <alpha-value>)",
 
         // Borders (used as border-[color])
         // Prefer border-white/[0.07] for hairlines; keep token for parity.
 
         // Text
-        text:         "#e6ecf3",
-        "text-muted": "#8b97a9",
-        "text-dim":   "#6b7d97",
+        text:         "rgb(var(--c-text) / <alpha-value>)",
+        "text-muted": "rgb(var(--c-text-muted) / <alpha-value>)",
+        "text-dim":   "rgb(var(--c-text-dim) / <alpha-value>)",
 
         // UI semantic
         cyan: {

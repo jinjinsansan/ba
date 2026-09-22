@@ -12,6 +12,48 @@
    Tokens
    =========================================================== */
 :root {
+  /* ★2026-09-23: Tailwind の面・文字色の実体 (RGB の数値のみ)。値は従来の色と同じ。 */
+  --c-bg: 10 13 18;          /* #0a0d12 */
+  --c-bg-rail: 12 16 23;     /* #0c1017 */
+  --c-surface: 16 20 28;     /* #10141c */
+  --c-surface-2: 22 27 37;   /* #161b25 */
+  --c-surface-3: 28 34 48;   /* #1c2230 */
+  --c-text: 230 236 243;     /* #e6ecf3 */
+  --c-text-muted: 139 151 169; /* #8b97a9 */
+  --c-text-dim: 107 125 151;   /* #6b7d97 */
+}
+
+/* ★2026-09-23 会員ページ (/me) だけ「暗いまま、明るく見やすく」(オーナー判断)。
+   背景・カードを一段明るく、文字のコントラストと大きさを上げる。管理画面・LP は従来のまま。 */
+.me-theme {
+  --c-bg: 20 26 37;          /* #141a25 */
+  --c-bg-rail: 24 31 44;     /* #181f2c */
+  --c-surface: 30 38 53;     /* #1e2635 */
+  --c-surface-2: 38 48 66;   /* #263042 */
+  --c-surface-3: 46 58 78;   /* #2e3a4e */
+  --c-text: 244 247 251;     /* #f4f7fb */
+  --c-text-muted: 184 196 212; /* #b8c4d4 */
+  --c-text-dim: 146 160 182;   /* #92a0b6 */
+  --bg: #141a25;
+  --bg-rail: #181f2c;
+  --surface: #1e2635;
+  --text: #f4f7fb;
+  --text-muted: #b8c4d4;
+  --text-dim: #92a0b6;
+  background: rgb(var(--c-bg));
+  color: rgb(var(--c-text));
+  font-size: 16px;
+  min-height: 100vh;
+}
+/* 細い区切り線 (border-white/[0.07] 等) を会員ページでは少し見えるように */
+.me-theme [class*="border-white/[0.07]"],
+.me-theme [class*="border-white/[0.08]"],
+.me-theme [class*="border-white/[0.06]"] { border-color: rgba(255,255,255,0.13); }
+/* 薄すぎる面 (bg-white/[0.02] 等) を会員ページでは少し明るく */
+.me-theme [class*="bg-white/[0.02]"],
+.me-theme [class*="bg-white/[0.03]"] { background-color: rgba(255,255,255,0.05); }
+
+:root {
   /* surfaces */
   --bg:        #0a0d12;          /* page background */
   --bg-rail:   #0c1017;          /* sidebar background */

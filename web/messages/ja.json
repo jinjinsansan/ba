@@ -221,9 +221,36 @@
     "support": {
       "title": "サポート",
       "sent": "送信しました! 近日中にご連絡します。",
-      "placeholder": "お困りの内容を入力...",
+      "placeholder": "例: 9月22日 23時ごろ、受け子アプリで START を押したらブラウザが読み込み中のまま止まりました。",
       "send": "送信",
-      "sending": "..."
+      "sending": "...",
+      "pageTitle": "お問い合わせ",
+      "pageSub": "使い方の質問、受け子アプリの不具合、支払いのことなど、困ったときはこちらから連絡してください。管理者が確認して、このページで返信します。",
+      "category": "お問い合わせの種類",
+      "categories": {
+        "usage": "使い方の質問",
+        "bug": "受け子アプリの不具合",
+        "billing": "支払い・残高",
+        "account": "アカウント",
+        "other": "その他"
+      },
+      "messageLabel": "内容",
+      "hintTitle": "書いていただくと早く解決できます",
+      "hints": [
+        "いつ起きたか (日時)",
+        "どの受け子アプリか (田辺版・梶原版・韓国版)",
+        "何をしたら、何が起きたか",
+        "画面に出たメッセージ (あればそのまま)"
+      ],
+      "sentTitle": "受け付けました",
+      "sentBody": "管理者が確認して、このページの「これまでのお問い合わせ」に返信します。",
+      "historyTitle": "これまでのお問い合わせ",
+      "historyNone": "まだお問い合わせはありません。",
+      "statusOpen": "確認中",
+      "statusReplied": "返信あり",
+      "statusClosed": "完了",
+      "reply": "管理者からの返信",
+      "newAnother": "別の問い合わせを送る"
     }
   },
   "charge": {
@@ -537,7 +564,7 @@
     "statusRunning": "GUI 稼働中",
     "statusIdle": "GUI 未接続",
     "statusSuspended": "アカウント停止中 — サポートへご連絡ください",
-    "todayTitle": "今日の純損益",
+    "todayTitle": "直近の精算 (1日分の純損益)",
     "todayMeta": "{date} 精算分",
     "todayEmpty": "まだ記録がありません",
     "details": {
@@ -545,7 +572,8 @@
       "realtime": "ライブ運用状況",
       "download": "GUI ダウンロード",
       "referral": "紹介プログラム",
-      "support": "サポート"
+      "support": "サポート",
+      "bets": "BET 履歴"
     },
     "receivers": {
       "title": "あなたの受け子",
@@ -557,7 +585,16 @@
       "record": "勝-負-タイ",
       "lastSeen": "最終報告",
       "none": "まだ報告がありません。受け子アプリにログインして起動すると表示されます。"
-    }
+    },
+    "pageTitle": "マイページ",
+    "pageSub": "受け子アプリの状態、今日の成績、料金の状況をまとめて確認できます。",
+    "todayResultTitle": "今日の成績 (日本時間)",
+    "todayBets": "BET 回数",
+    "todayRecord": "勝-負-引分",
+    "todayPnl": "損益",
+    "todayNoBets": "今日はまだ BET がありません",
+    "receiversSub": "受け子アプリが1分ごとに送る状態です",
+    "betsLink": "BET 履歴"
   },
   "walletPage": {
     "kicker": "Member · Wallet",

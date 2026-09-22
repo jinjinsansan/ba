@@ -67,6 +67,17 @@ export default async function MePage() {
     || myReceivers.some(r => receiverState(r) === 'running')
   const guiEverConnected = Number.isFinite(lastBalanceAt) || myReceivers.length > 0
 
+  // ★2026-09-23: 「今日の成績」= 受け子アプリが送った今日 (日本時間) の BET。
+  //   以前の「今日の純損益」は前日までに精算された1日分 (deductions) で、今日の数字ではなかった。
+  const jstMidnightUtc = new Date(Math.floor((Date.now() + 9 * 3600_000) / 86_400_000) * 86_400_000 - 9 * 3600_000).toISOString()
+  const { data: todayBetRows } = await createAdminClient()
+    .from('receiver_bets').select('outcome, pnl').eq('user_id', user.id).gte('occurred_at', jstMidnightUtc).limit(5000)
+  const todayBets = (todayBetRows || []) as { outcome: string; pnl: number | null }[]
+  const todayW = todayBets.filter(b => b.outcome === 'win').length
+  const todayL = todayBets.filter(b => b.outcome === 'lose').length
+  const todayP = todayBets.filter(b => b.outcome === 'push').length
+  const todayPnl = todayBets.reduce((a, b) => a + Number(b.pnl || 0), 0)
+
   const lastPnl = lastDeduction?.daily_profit != null ? Number(lastDeduction.daily_profit) : null
   const carryLoss = Math.max(0, Number(billing?.carry_loss ?? 0))
 
@@ -102,7 +113,7 @@ export default async function MePage() {
 
   const detailLinks = [
     { href: '/me/settlements', key: 'weekly' },
-    { href: '/me/realtime', key: 'realtime' },
+    { href: '/me/bets', key: 'bets' },
     { href: '/me/download', key: 'download' },
     { href: '/me/referral', key: 'referral' },
     { href: '/me/support', key: 'support' },
@@ -113,8 +124,10 @@ export default async function MePage() {
       {/* Header: greeting + GUI status */}
       <div className="flex justify-between items-end flex-wrap gap-3">
         <div>
-          <div className="text-[22px] sm:text-[28px] font-bold tracking-tight">{t('greeting', { name })}</div>
-          <div className="text-[15px] text-text-muted mt-1.5">{today} · JST</div>
+          <div className="text-[13px] text-cyan font-semibold tracking-wide">{t('pageTitle')}</div>
+          <div className="text-[24px] sm:text-[30px] font-bold tracking-tight mt-0.5">{t('greeting', { name })}</div>
+          <div className="text-[15px] text-text-muted mt-1.5">{t('pageSub')}</div>
+          <div className="text-[13px] text-text-dim mt-1">{today} · JST</div>
         </div>
         {suspended ? (
           <div className="flex items-center gap-2 bg-lose/[0.08] border border-lose/[0.22] text-lose rounded-full px-4 py-2 text-sm font-semibold">
@@ -134,32 +147,66 @@ export default async function MePage() {
         )}
       </div>
 
-      {/* あなたの受け子 (受け子 GUI の生存報告・2026-09-22) */}
-      <div className="rounded-2xl border border-white/[0.08] bg-white/[0.02] p-4 sm:p-5">
-        <div className="flex justify-between items-center mb-3">
-          <div className="text-[13px] text-text-muted">{t('receivers.title')}</div>
-          <Link href="/me/bets" className="text-[13px] text-cyan hover:underline">{tBets('link')} →</Link>
+      {/* あなたの受け子 (受け子 GUI の生存報告・2026-09-22 / 2026-09-23 見やすく) */}
+      <div className="bg-surface border border-white/[0.07] rounded-2xl p-5 sm:p-6">
+        <div className="flex justify-between items-start mb-4 gap-3">
+          <div>
+            <div className="text-[17px] font-semibold">{t('receivers.title')}</div>
+            <div className="text-[13px] text-text-dim mt-0.5">{t('receiversSub')}</div>
+          </div>
+          <Link href="/me/bets" className="text-[14px] text-cyan hover:underline whitespace-nowrap">{tBets('link')} →</Link>
         </div>
         {myReceivers.length === 0 ? (
-          <div className="text-sm text-text-muted">{t('receivers.none')}</div>
+          <div className="text-[15px] text-text-muted">{t('receivers.none')}</div>
         ) : (
-          <div className="flex flex-col gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             {myReceivers.map(r => {
               const st = receiverState(r)
               const ago = secondsSince(r.last_seen_at)
               const agoTxt = ago === null ? '-' : ago < 60 ? `${ago}s` : ago < 3600 ? `${Math.floor(ago / 60)}m` : ago < 86400 ? `${Math.floor(ago / 3600)}h` : `${Math.floor(ago / 86400)}d`
+              const tone = st === 'running' ? 'border-win/40 bg-win/[0.07]' : st === 'idle' ? 'border-cyan/30 bg-cyan/[0.05]' : 'border-white/[0.1] bg-surface-2'
               return (
-                <div key={`${r.product}-${r.executor_id}`} className="flex flex-wrap items-center gap-x-4 gap-y-1 text-sm">
-                  <span className={`px-1.5 py-0.5 rounded text-[10px] font-mono ${PRODUCT_CLASS[r.product] || ''}`}>{PRODUCT_LABEL[r.product] || r.product}</span>
-                  <span className={st === 'running' ? 'text-win font-semibold' : st === 'idle' ? 'text-cyan' : 'text-text-muted'}>
-                    {st === 'running' ? t('receivers.running') : st === 'idle' ? t('receivers.idle') : t('receivers.offline')}
-                  </span>
-                  {r.table_name && <span className="text-text-muted">{t('receivers.table')}: {r.table_name}</span>}
-                  {r.bets_today !== null && <span className="text-text-muted">{t('receivers.betsToday')}: {r.bets_today} ({r.wins_today ?? 0}-{r.losses_today ?? 0}-{r.ties_today ?? 0})</span>}
-                  <span className="text-text-dim text-xs">{t('receivers.lastSeen')}: {agoTxt}</span>
+                <div key={`${r.product}-${r.executor_id}`} className={`rounded-xl border p-4 ${tone}`}>
+                  <div className="flex items-center justify-between gap-2">
+                    <div className="flex items-center gap-2">
+                      <span className={`w-2.5 h-2.5 rounded-full ${st === 'running' ? 'bg-win animate-pulse' : st === 'idle' ? 'bg-cyan' : 'bg-text-dim'}`} />
+                      <span className={`text-[16px] font-semibold ${st === 'running' ? 'text-win' : st === 'idle' ? 'text-cyan' : 'text-text-muted'}`}>
+                        {st === 'running' ? t('receivers.running') : st === 'idle' ? t('receivers.idle') : t('receivers.offline')}
+                      </span>
+                    </div>
+                    <span className={`px-2 py-0.5 rounded text-[11px] font-mono ${PRODUCT_CLASS[r.product] || ''}`}>{PRODUCT_LABEL[r.product] || r.product}</span>
+                  </div>
+                  <div className="mt-2 text-[14px] text-text-muted flex flex-col gap-0.5">
+                    {r.table_name && <span>{t('receivers.table')}: <span className="text-text">{r.table_name}</span></span>}
+                    {r.bets_today !== null && <span>{t('receivers.betsToday')}: <span className="text-text">{r.bets_today}</span> ({r.wins_today ?? 0}-{r.losses_today ?? 0}-{r.ties_today ?? 0})</span>}
+                    <span className="text-[12px] text-text-dim">{t('receivers.lastSeen')}: {agoTxt}</span>
+                  </div>
                 </div>
               )
             })}
+          </div>
+        )}
+      </div>
+
+      {/* 今日の成績 (受け子アプリの BET・日本時間) */}
+      <div className="bg-surface border border-white/[0.07] rounded-2xl p-5 sm:p-6">
+        <div className="text-[17px] font-semibold mb-4">{t('todayResultTitle')}</div>
+        {todayBets.length === 0 ? (
+          <div className="text-[15px] text-text-muted">{t('todayNoBets')}</div>
+        ) : (
+          <div className="grid grid-cols-3 gap-4">
+            <div>
+              <div className="text-[13px] text-text-muted">{t('todayPnl')}</div>
+              <div className="mt-1"><Money value={todayPnl} sign size="2xl" weight="bold" tone={todayPnl >= 0 ? 'win' : 'lose'} /></div>
+            </div>
+            <div>
+              <div className="text-[13px] text-text-muted">{t('todayBets')}</div>
+              <div className="text-[28px] font-bold font-mono mt-1">{todayBets.length}</div>
+            </div>
+            <div>
+              <div className="text-[13px] text-text-muted">{t('todayRecord')}</div>
+              <div className="text-[28px] font-bold font-mono mt-1">{todayW}-{todayL}-{todayP}</div>
+            </div>
           </div>
         )}
       </div>
