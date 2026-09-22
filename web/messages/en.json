@@ -546,6 +546,17 @@
       "download": "Download GUI",
       "referral": "Referral program",
       "support": "Support"
+    },
+    "receivers": {
+      "title": "Your receivers",
+      "running": "Running",
+      "idle": "GUI only (engine stopped)",
+      "offline": "Offline",
+      "table": "Table",
+      "betsToday": "Bets today",
+      "record": "W-L-T",
+      "lastSeen": "Last report",
+      "none": "No reports yet. Sign in to the receiver app and start it to see it here."
     }
   },
   "walletPage": {

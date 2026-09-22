@@ -8,6 +8,8 @@
 import Link from 'next/link'
 import { getTranslations } from 'next-intl/server'
 import { createClient } from '@/lib/supabase-server'
+import { createAdminClient } from '@/lib/supabase-admin'
+import { type ReceiverStatus, receiverState, secondsSince, PRODUCT_LABEL, PRODUCT_CLASS } from '@/lib/receiver-status'
 import { Money } from '@/components/ui/Money'
 import InvoicesCard from './InvoicesCard'
 import OnboardingChecklist from '@/components/dashboard/OnboardingChecklist'
@@ -55,8 +57,14 @@ export default async function MePage() {
   // GUI 稼働判定(実データ): session_state.last_balance_at が 90 秒以内なら稼働中
   const ss = (billing?.session_state || {}) as Record<string, unknown>
   const lastBalanceAt = typeof ss.last_balance_at === 'string' ? new Date(ss.last_balance_at).getTime() : NaN
-  const guiLive = Number.isFinite(lastBalanceAt) && Date.now() - lastBalanceAt < 90_000
-  const guiEverConnected = Number.isFinite(lastBalanceAt)
+  // ★2026-09-22: 今の受け子は session_state を送らないので、受け子 GUI の生存報告 (receiver_status) も見る。
+  //   receiver_status はブラウザから直接読めない (RLS) ので、サーバーで本人の行だけを取る。
+  const { data: rsData } = await createAdminClient()
+    .from('receiver_status').select('*').eq('user_id', user.id).order('last_seen_at', { ascending: false })
+  const myReceivers = (rsData || []) as ReceiverStatus[]
+  const guiLive = (Number.isFinite(lastBalanceAt) && Date.now() - lastBalanceAt < 90_000)
+    || myReceivers.some(r => receiverState(r) === 'running')
+  const guiEverConnected = Number.isFinite(lastBalanceAt) || myReceivers.length > 0
 
   const lastPnl = lastDeduction?.daily_profit != null ? Number(lastDeduction.daily_profit) : null
   const carryLoss = Math.max(0, Number(billing?.carry_loss ?? 0))
@@ -121,6 +129,33 @@ export default async function MePage() {
           <div className="flex items-center gap-2 bg-white/[0.03] border border-white/[0.1] text-text-muted rounded-full px-4 py-2 text-sm font-semibold">
             <span className="w-2 h-2 rounded-full bg-text-dim" />
             {t('statusIdle')}
+          </div>
+        )}
+      </div>
+
+      {/* あなたの受け子 (受け子 GUI の生存報告・2026-09-22) */}
+      <div className="rounded-2xl border border-white/[0.08] bg-white/[0.02] p-4 sm:p-5">
+        <div className="text-[13px] text-text-muted mb-3">{t('receivers.title')}</div>
+        {myReceivers.length === 0 ? (
+          <div className="text-sm text-text-muted">{t('receivers.none')}</div>
+        ) : (
+          <div className="flex flex-col gap-3">
+            {myReceivers.map(r => {
+              const st = receiverState(r)
+              const ago = secondsSince(r.last_seen_at)
+              const agoTxt = ago === null ? '-' : ago < 60 ? `${ago}s` : ago < 3600 ? `${Math.floor(ago / 60)}m` : ago < 86400 ? `${Math.floor(ago / 3600)}h` : `${Math.floor(ago / 86400)}d`
+              return (
+                <div key={`${r.product}-${r.executor_id}`} className="flex flex-wrap items-center gap-x-4 gap-y-1 text-sm">
+                  <span className={`px-1.5 py-0.5 rounded text-[10px] font-mono ${PRODUCT_CLASS[r.product] || ''}`}>{PRODUCT_LABEL[r.product] || r.product}</span>
+                  <span className={st === 'running' ? 'text-win font-semibold' : st === 'idle' ? 'text-cyan' : 'text-text-muted'}>
+                    {st === 'running' ? t('receivers.running') : st === 'idle' ? t('receivers.idle') : t('receivers.offline')}
+                  </span>
+                  {r.table_name && <span className="text-text-muted">{t('receivers.table')}: {r.table_name}</span>}
+                  {r.bets_today !== null && <span className="text-text-muted">{t('receivers.betsToday')}: {r.bets_today} ({r.wins_today ?? 0}-{r.losses_today ?? 0}-{r.ties_today ?? 0})</span>}
+                  <span className="text-text-dim text-xs">{t('receivers.lastSeen')}: {agoTxt}</span>
+                </div>
+              )
+            })}
           </div>
         )}
       </div>

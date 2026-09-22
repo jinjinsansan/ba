@@ -5,6 +5,7 @@ import { PageHeader } from '@/components/ui/PageHeader'
 import { Pill } from '@/components/ui/Pill'
 import { Money } from '@/components/ui/Money'
 import { Dot } from '@/components/ui/Dot'
+import { isOnline, type ReceiverStatus } from '@/lib/receiver-status'
 
 export const dynamic = 'force-dynamic'
 
@@ -72,6 +73,13 @@ export default async function AdminUsersPage() {
 
   const rows = (users || []) as ProfileWithBilling[]
 
+  // 受け子 GUI の生存報告 (2026-09-22)。session_state を送らなくなった今の受け子は、こちらで稼働を判定する。
+  const { data: rs } = await admin.from('receiver_status').select('user_id, last_seen_at, engine_running')
+  const onlineUsers = new Set(
+    ((rs || []) as Pick<ReceiverStatus, 'user_id' | 'last_seen_at' | 'engine_running'>[])
+      .filter(r => isOnline(r) && r.engine_running).map(r => r.user_id)
+  )
+
   return (
     <div>
       <PageHeader
@@ -102,7 +110,7 @@ export default async function AdminUsersPage() {
             {rows.map((u, i) => {
               const b = bill(u)
               const pnl = todayPnl(b)
-              const live = isLive(b)
+              const live = isLive(b) || onlineUsers.has(u.id)
               return (
                 <tr key={u.id} className={i ? 'border-t border-white/[0.07]' : ''}>
                   <td className="px-5 py-3">

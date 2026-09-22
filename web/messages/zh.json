@@ -546,6 +546,17 @@
       "download": "GUI 下载",
       "referral": "推荐计划",
       "support": "支持"
+    },
+    "receivers": {
+      "title": "你的接收端",
+      "running": "运行中",
+      "idle": "仅 GUI（引擎已停止）",
+      "offline": "离线",
+      "table": "桌台",
+      "betsToday": "今日下注",
+      "record": "胜-负-和",
+      "lastSeen": "最后报告",
+      "none": "尚无报告。登录接收端应用并启动后会显示在这里。"
     }
   },
   "walletPage": {

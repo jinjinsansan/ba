@@ -546,6 +546,17 @@
       "download": "GUI 다운로드",
       "referral": "추천 프로그램",
       "support": "지원"
+    },
+    "receivers": {
+      "title": "내 수신기",
+      "running": "가동 중",
+      "idle": "GUI만 (엔진 정지)",
+      "offline": "오프라인",
+      "table": "테이블",
+      "betsToday": "오늘 BET",
+      "record": "승-패-타이",
+      "lastSeen": "마지막 보고",
+      "none": "아직 보고가 없습니다. 수신기 앱에 로그인해 실행하면 여기에 표시됩니다."
     }
   },
   "walletPage": {

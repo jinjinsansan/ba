@@ -12,6 +12,7 @@ import { createClient } from '@/lib/supabase-browser'
 const ADMIN_MENU = [
   { href: '/admin',             label: 'Dashboard', glyph: '◆' },
   { href: '/admin/users',       label: 'Users',     glyph: '◇' },
+  { href: '/admin/receivers',   label: 'Receivers', glyph: '●' },
   { href: '/admin/orders',      label: 'Orders',    glyph: '$' },
   { href: '/admin/billing',     label: 'Billing',   glyph: '¥' },
   { href: '/admin/promos',      label: 'Promos',    glyph: '%' },

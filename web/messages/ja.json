@@ -546,6 +546,17 @@
       "download": "GUI ダウンロード",
       "referral": "紹介プログラム",
       "support": "サポート"
+    },
+    "receivers": {
+      "title": "あなたの受け子",
+      "running": "稼働中",
+      "idle": "GUIのみ (エンジン停止)",
+      "offline": "オフライン",
+      "table": "卓",
+      "betsToday": "今日のBET",
+      "record": "勝-負-タイ",
+      "lastSeen": "最終報告",
+      "none": "まだ報告がありません。受け子アプリにログインして起動すると表示されます。"
     }
   },
   "walletPage": {
