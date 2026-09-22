@@ -60,8 +60,13 @@ export default async function MePage() {
   const lastBalanceAt = typeof ss.last_balance_at === 'string' ? new Date(ss.last_balance_at).getTime() : NaN
   // ★2026-09-22: 今の受け子は session_state を送らないので、受け子 GUI の生存報告 (receiver_status) も見る。
   //   receiver_status はブラウザから直接読めない (RLS) ので、サーバーで本人の行だけを取る。
-  const { data: rsData } = await createAdminClient()
-    .from('receiver_status').select('*').eq('user_id', user.id).order('last_seen_at', { ascending: false })
+  // ★2026-09-23: 受け子の状態と今日の BET は同時に取る (順番に待つと往復が2回分かかる)
+  const jstMidnightUtc = new Date(Math.floor((Date.now() + 9 * 3600_000) / 86_400_000) * 86_400_000 - 9 * 3600_000).toISOString()
+  const adminDb = createAdminClient()
+  const [{ data: rsData }, { data: todayBetRows }] = await Promise.all([
+    adminDb.from('receiver_status').select('*').eq('user_id', user.id).order('last_seen_at', { ascending: false }),
+    adminDb.from('receiver_bets').select('outcome, pnl').eq('user_id', user.id).gte('occurred_at', jstMidnightUtc).limit(5000),
+  ])
   const myReceivers = (rsData || []) as ReceiverStatus[]
   const guiLive = (Number.isFinite(lastBalanceAt) && Date.now() - lastBalanceAt < 90_000)
     || myReceivers.some(r => receiverState(r) === 'running')
@@ -69,9 +74,6 @@ export default async function MePage() {
 
   // ★2026-09-23: 「今日の成績」= 受け子アプリが送った今日 (日本時間) の BET。
   //   以前の「今日の純損益」は前日までに精算された1日分 (deductions) で、今日の数字ではなかった。
-  const jstMidnightUtc = new Date(Math.floor((Date.now() + 9 * 3600_000) / 86_400_000) * 86_400_000 - 9 * 3600_000).toISOString()
-  const { data: todayBetRows } = await createAdminClient()
-    .from('receiver_bets').select('outcome, pnl').eq('user_id', user.id).gte('occurred_at', jstMidnightUtc).limit(5000)
   const todayBets = (todayBetRows || []) as { outcome: string; pnl: number | null }[]
   const todayW = todayBets.filter(b => b.outcome === 'win').length
   const todayL = todayBets.filter(b => b.outcome === 'lose').length
