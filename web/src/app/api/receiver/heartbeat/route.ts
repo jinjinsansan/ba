@@ -22,6 +22,8 @@ function str(v: unknown, max = 120): string | null {
   return s ? s.slice(0, max) : null
 }
 function num(v: unknown): number | null {
+  // null / 未送信 / 空文字は「不明」。Number(null) = 0 なので先に弾く (残高が $0.00 と誤表示されていた)
+  if (v === null || v === undefined || v === '') return null
   const n = typeof v === 'number' ? v : Number(v)
   return Number.isFinite(n) ? n : null
 }
