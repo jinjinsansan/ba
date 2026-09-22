@@ -609,5 +609,34 @@
     "currencyValue": "USDT (TRC-20)",
     "period": "유효 기간",
     "note": "표시된 정확한 금액을 송금하면 1~2분 내에 자동으로 활성화됩니다."
+  },
+  "betHistory": {
+    "title": "BET 기록",
+    "sub": "수신기 앱을 통해 Stake가 접수·정산한 BET. 날짜는 일본 시간.",
+    "monthly": "월별 합계",
+    "daily": "일별 합계 (최근 31일)",
+    "recent": "최근 BET",
+    "month": "월",
+    "date": "날짜",
+    "time": "시각",
+    "bets": "횟수",
+    "record": "승-패-무",
+    "pnl": "손익",
+    "table": "테이블",
+    "side": "베팅 쪽",
+    "amount": "금액",
+    "result": "결과",
+    "none": "아직 BET 기록이 없습니다. 수신기 앱을 최신 버전으로 하면 이후의 BET부터 기록됩니다.",
+    "sides": {
+      "player": "플레이어",
+      "banker": "뱅커",
+      "tie": "타이"
+    },
+    "outcomes": {
+      "win": "승",
+      "lose": "패",
+      "push": "무승부 (반환)"
+    },
+    "link": "BET 기록 보기"
   }
 }

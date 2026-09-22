@@ -1,4 +1,5 @@
 import { createAdminClient } from '@/lib/supabase-admin'
+import BetHistory from '@/components/receivers/BetHistory'
 import { revalidatePath } from 'next/cache'
 import Link from 'next/link'
 import { notFound } from 'next/navigation'
@@ -20,6 +21,7 @@ const TABS = [
   { key: 'overview', label: '概要' },
   { key: 'billing', label: 'Billing & Bot' },
   { key: 'history', label: '履歴' },
+  { key: 'bets', label: 'BET' },
   { key: 'referral', label: '紹介' },
   { key: 'assets', label: '配布物' },
 ] as const
@@ -690,6 +692,22 @@ export default async function AdminUserDetailPage({
             ) : (
               <div className="text-xs text-text-muted">このユーザを紹介した人は登録されていません (referred_by 無し)。</div>
             )}
+          </div>
+        </Card>
+      )}
+
+      {/* ===== BET タブ (受け子の BET 履歴・2026-09-22) ===== */}
+      {tab === 'bets' && (
+        <Card padded={false}>
+          <CardHead>BET 履歴 (受け子アプリが送った、Stake が受理・決済した BET・日本時間)</CardHead>
+          <div className="px-5 py-4">
+            <BetHistory userId={id} labels={{
+              monthly: '月ごとの合計', daily: '日ごとの合計 (直近31日)', recent: '直近の BET', month: '月', date: '日付',
+              time: '時刻', bets: '回数', record: '勝-負-引分', pnl: '損益', table: '卓', side: '賭けた側', amount: '額',
+              result: '結果', none: 'まだ BET 履歴がありません (最新の受け子アプリから届き始めます)',
+              sides: { player: 'プレイヤー', banker: 'バンカー', tie: 'タイ' },
+              outcomes: { win: '勝ち', lose: '負け', push: '引分 (返却)' },
+            }} />
           </div>
         </Card>
       )}

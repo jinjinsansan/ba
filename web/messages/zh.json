@@ -609,5 +609,34 @@
     "currencyValue": "USDT (TRC-20)",
     "period": "有效期间",
     "note": "汇出显示的准确金额后,1~2分钟内自动生效。"
+  },
+  "betHistory": {
+    "title": "下注记录",
+    "sub": "通过接收端应用由 Stake 接受并结算的下注。日期为日本时间。",
+    "monthly": "每月合计",
+    "daily": "每日合计（最近31天）",
+    "recent": "最近下注",
+    "month": "月份",
+    "date": "日期",
+    "time": "时间",
+    "bets": "次数",
+    "record": "胜-负-和",
+    "pnl": "盈亏",
+    "table": "桌台",
+    "side": "下注方",
+    "amount": "金额",
+    "result": "结果",
+    "none": "尚无下注记录。更新接收端应用后，之后的下注会被记录。",
+    "sides": {
+      "player": "闲",
+      "banker": "庄",
+      "tie": "和"
+    },
+    "outcomes": {
+      "win": "赢",
+      "lose": "输",
+      "push": "和局（退回）"
+    },
+    "link": "查看下注记录"
   }
 }

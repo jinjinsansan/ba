@@ -23,6 +23,7 @@ export default async function MePage() {
   if (!user) return null
 
   const t = await getTranslations('dashboardV2')
+  const tBets = await getTranslations('betHistory')
   const tSub = await getTranslations('widgets.subscription')
 
   // 今週(JST・月〜土)の日付レンジ
@@ -135,7 +136,10 @@ export default async function MePage() {
 
       {/* あなたの受け子 (受け子 GUI の生存報告・2026-09-22) */}
       <div className="rounded-2xl border border-white/[0.08] bg-white/[0.02] p-4 sm:p-5">
-        <div className="text-[13px] text-text-muted mb-3">{t('receivers.title')}</div>
+        <div className="flex justify-between items-center mb-3">
+          <div className="text-[13px] text-text-muted">{t('receivers.title')}</div>
+          <Link href="/me/bets" className="text-[13px] text-cyan hover:underline">{tBets('link')} →</Link>
+        </div>
         {myReceivers.length === 0 ? (
           <div className="text-sm text-text-muted">{t('receivers.none')}</div>
         ) : (

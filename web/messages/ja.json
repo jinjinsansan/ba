@@ -609,5 +609,34 @@
     "currencyValue": "USDT (TRC-20)",
     "period": "有効期間",
     "note": "表示された正確な金額を送金すると、1〜2分で自動的に有効化されます。"
+  },
+  "betHistory": {
+    "title": "BET 履歴",
+    "sub": "受け子アプリで Stake が受理・決済した BET。日付は日本時間。",
+    "monthly": "月ごとの合計",
+    "daily": "日ごとの合計 (直近31日)",
+    "recent": "直近の BET",
+    "month": "月",
+    "date": "日付",
+    "time": "時刻",
+    "bets": "回数",
+    "record": "勝-負-引分",
+    "pnl": "損益",
+    "table": "卓",
+    "side": "賭けた側",
+    "amount": "額",
+    "result": "結果",
+    "none": "まだ BET 履歴がありません。受け子アプリを最新版にすると、この後の BET から記録されます。",
+    "sides": {
+      "player": "プレイヤー",
+      "banker": "バンカー",
+      "tie": "タイ"
+    },
+    "outcomes": {
+      "win": "勝ち",
+      "lose": "負け",
+      "push": "引分 (返却)"
+    },
+    "link": "BET 履歴を見る"
   }
 }

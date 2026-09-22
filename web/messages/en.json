@@ -609,5 +609,34 @@
     "currencyValue": "USDT (TRC-20)",
     "period": "Valid period",
     "note": "Send the exact amount shown and your subscription activates automatically within 1–2 minutes."
+  },
+  "betHistory": {
+    "title": "Bet history",
+    "sub": "Bets accepted and settled by Stake through the receiver app. Dates are JST.",
+    "monthly": "Monthly totals",
+    "daily": "Daily totals (last 31 days)",
+    "recent": "Recent bets",
+    "month": "Month",
+    "date": "Date",
+    "time": "Time",
+    "bets": "Bets",
+    "record": "W-L-P",
+    "pnl": "P&L",
+    "table": "Table",
+    "side": "Side",
+    "amount": "Amount",
+    "result": "Result",
+    "none": "No bet history yet. After updating the receiver app, new bets are recorded from then on.",
+    "sides": {
+      "player": "Player",
+      "banker": "Banker",
+      "tie": "Tie"
+    },
+    "outcomes": {
+      "win": "Win",
+      "lose": "Lose",
+      "push": "Push (returned)"
+    },
+    "link": "View bet history"
   }
 }
