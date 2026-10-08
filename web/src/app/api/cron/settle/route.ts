@@ -2,7 +2,7 @@ import { createAdminClient } from '@/lib/supabase-admin'
 import { sendCustomerTelegramMessage } from '@/lib/customer-telegram'
 import { NextRequest, NextResponse } from 'next/server'
 
-type PnlSource = 'daily_bet_pnl' | 'master_executor_daily_pnl' | 'session_state' | 'manual_api'
+type PnlSource = 'mirror_master' | 'daily_bet_pnl' | 'master_executor_daily_pnl' | 'session_state' | 'manual_api'
 
 function getJstDateString(date = new Date()) {
   return date.toLocaleDateString('en-CA', { timeZone: 'Asia/Tokyo' })
@@ -29,6 +29,38 @@ async function sendTelegram(message: string) {
       body: JSON.stringify({ chat_id: chatId, text: message, parse_mode: 'HTML' }),
     })
   } catch {}
+}
+
+// ★2026-10-09: 田辺チーム (田辺版ミラー) の受け子ごとの 1 日の損益を、マスターの記録から取る。
+//   マスターは受け子ごとに「実際に賭けた額」と「Stake が受け付けて決済されたか」を持っているので、
+//   受け子が送る daily_bet_pnl (自分の段の額で数えていてずれる) より正しい。受け子に鍵を配らずに済む。
+async function fetchMirrorDailyPnlByEmail(dateStr: string) {
+  const base = (process.env.BACOPY_MASTER_API_URL || process.env.BACOPY_BAFATHER_URL || '').trim().replace(/\/+$/, '')
+  const apiKey = (process.env.BACOPY_API_KEY || process.env.LAPLACE_API_KEY || '').trim()
+  if (!base || !apiKey) {
+    return { enabled: false, map: new Map<string, number>(), error: '' }
+  }
+  try {
+    const res = await fetch(`${base}/api/mirror/daily-pnl?date=${encodeURIComponent(dateStr)}`, {
+      headers: { Authorization: `Bearer ${apiKey}` },
+      cache: 'no-store',
+    })
+    if (!res.ok) {
+      return { enabled: true, map: new Map<string, number>(), error: `mirror_api_http_${res.status}` }
+    }
+    const data = await res.json()
+    const rows = Array.isArray(data?.receivers) ? data.receivers : []
+    const map = new Map<string, number>()
+    for (const row of rows) {
+      const email = String(row?.user_email || '').trim().toLowerCase()
+      const pnl = Number(row?.pnl)
+      if (!email || !Number.isFinite(pnl)) continue
+      map.set(email, roundMoney((map.get(email) || 0) + pnl))
+    }
+    return { enabled: true, map, error: '' }
+  } catch (e: any) {
+    return { enabled: true, map: new Map<string, number>(), error: e?.message || 'mirror_api_fetch_failed' }
+  }
 }
 
 async function fetchMasterDailyPnlByEmail(dateStr: string) {
@@ -331,6 +363,7 @@ export async function GET(req: NextRequest) {
   }
 
   const masterPnl = await fetchMasterDailyPnlByEmail(dateStr)
+  const mirrorPnl = await fetchMirrorDailyPnlByEmail(dateStr)
   const pnlSourceCounts: Record<string, number> = {}
 
   // ── 入金差引(2026-06-13): 残高差分フォールバックで課金する場合に限り、その日に
@@ -365,6 +398,12 @@ export async function GET(req: NextRequest) {
     let pnlSource: PnlSource = 'session_state'
 
     const ss = b.session_state as Record<string, unknown> | null
+
+    // ── 優先度0: 田辺チーム = マスターが数えた受け子の損益 (★2026-10-09) ──────────
+    if (dailyProfit === null && userEmail && mirrorPnl.map.has(userEmail.toLowerCase())) {
+      dailyProfit = Number(mirrorPnl.map.get(userEmail.toLowerCase()) || 0)
+      pnlSource = 'mirror_master'
+    }
 
     // ── 優先度1: daily_bet_pnl (出金汚染を受けないベット結果累積値) ──────────
     if (dailyProfit === null && ss && typeof ss === 'object') {
@@ -424,7 +463,7 @@ export async function GET(req: NextRequest) {
 
     // 残高差分系ソース(master_executor_daily_pnl / session_state)で課金する場合のみ
     // 当日の記録済み入金を差し引く。daily_bet_pnl は入金を含まないので対象外。
-    if (pnlSource !== 'daily_bet_pnl' && dailyProfit !== null) {
+    if (pnlSource !== 'daily_bet_pnl' && pnlSource !== 'mirror_master' && dailyProfit !== null) {
       const dep = depositsByUser.get(String(b.user_id)) || 0
       if (dep > 0) {
         const beforeAdj = dailyProfit
@@ -509,6 +548,8 @@ export async function GET(req: NextRequest) {
     `Sources: ${compactSources || 'none'}\n` +
     `Skip: ${compactSkipReasons || 'none'}\n` +
     `${reconciliationMessage}\n` +
+    `MirrorPnL: enabled=${mirrorPnl.enabled ? 1 : 0}, matched=${mirrorPnl.map.size}` +
+    (mirrorPnl.error ? `, err=${mirrorPnl.error}` : '') + ' / ' +
     `MasterPnL: enabled=${masterPnl.enabled ? 1 : 0}, matched=${masterPnl.map.size}` +
     (masterPnl.error ? `, err=${masterPnl.error}` : '') +
     (compactErrors ? `\nErrors: ${compactErrors}` : '')
@@ -521,6 +562,11 @@ export async function GET(req: NextRequest) {
     skipped,
     skipReasons,
     pnlSourceCounts,
+    mirrorPnl: {
+      enabled: mirrorPnl.enabled,
+      matchedUsers: mirrorPnl.map.size,
+      error: mirrorPnl.error || null,
+    },
     masterPnl: {
       enabled: masterPnl.enabled,
       matchedUsers: masterPnl.map.size,
