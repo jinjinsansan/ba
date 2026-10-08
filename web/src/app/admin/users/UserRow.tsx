@@ -13,7 +13,7 @@ const DEFAULT_BOT_CONFIG = {
 }
 
 export default function UserRow({ user, billing }: { user: any; billing: any }) {
-  const [rate, setRate] = useState(billing?.profit_share_rate ? (billing.profit_share_rate * 100).toString() : '20')
+  const [rate, setRate] = useState(billing?.profit_share_rate != null ? (billing.profit_share_rate * 100).toString() : '20')
   const [loading, setLoading] = useState(false)
   const [showConfig, setShowConfig] = useState(false)
   const [uploading, setUploading] = useState(false)
