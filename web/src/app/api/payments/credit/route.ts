@@ -75,7 +75,24 @@ export async function POST(req: NextRequest) {
     .eq('user_id', order.user_id)
     .maybeSingle()
 
-  if (order.kind === 'license') {
+  if (order.kind === 'rg_charge') {
+    // ★2026-10-09 Rengoku (田辺チームの会員サイト) のチャージ。bafather の残高には入れない。
+    //   この注文で払うチャージ (rg_payment_items) を全部「支払い済み」にし、紹介報酬を確定し、会員に知らせる。
+    const nowIso = new Date().toISOString()
+    const { data: items } = await admin.from('rg_payment_items').select('charge_id').eq('order_id', orderId)
+    const ids = (items || []).map((i: { charge_id: string }) => i.charge_id)
+    if (ids.length) {
+      const { error } = await admin.from('rg_daily_charges')
+        .update({ status: 'paid', paid_at: nowIso, payment_ref: txHash, note: 'auto: crypto ' + orderId })
+        .in('id', ids).eq('status', 'due')
+      if (error) return NextResponse.json({ error: 'rg_charge credit failed: ' + error.message }, { status: 500 })
+      await admin.from('rg_referral_rewards').update({ status: 'confirmed' }).in('charge_id', ids).eq('status', 'pending')
+    }
+    await admin.from('rg_notifications').insert({
+      user_id: order.user_id, kind: 'charge_paid', ref_id: null,
+      title: `精算 ${amount} USDT を受け取りました`, body: 'ご送金ありがとうございました。',
+    })
+  } else if (order.kind === 'license') {
     const { error } = await admin.from('billing').upsert(
       { user_id: order.user_id, bot_paid: true, suspended: false, updated_at: new Date().toISOString() },
       { onConflict: 'user_id' },
@@ -153,7 +170,8 @@ export async function POST(req: NextRequest) {
   try {
     const { data: prof } = await admin.from('profiles').select('email').eq('id', order.user_id).maybeSingle()
     const who = prof?.email || order.user_id
-    const label = order.kind === 'license' ? 'ライセンス ($2000)'
+    const label = order.kind === 'rg_charge' ? `Rengoku 精算 $${amount}`
+      : order.kind === 'license' ? 'ライセンス ($2000)'
       : order.kind === 'subscription' ? `サブスク更新 ($${Math.floor(amount)} / 30日)`
       : `チャージ $${amount}`
     await notifyDeposit(
